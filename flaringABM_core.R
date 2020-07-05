@@ -31,10 +31,13 @@ distribute_pressure <- function(agents, method="even", focus=1) {
 #*
 #*** MARKETS ***#
 #*
-calc_market_quantity <- function(qd, qg) {
+calc_market_quantity <- function(time) {
     #determine the number of agents in each of the green/dirty markets
     #assume a constant size
     #qg <- qg * time / Params$tf / 100
+    qg <- Params$green_size_rate * time
+    qd <- Params$market_size - qg
+
     return(list("dirty"=qd, "green"=qg))
 }###--------------------    END OF FUNCTION calc_market_quantity    --------------------###
 
@@ -65,11 +68,11 @@ calc_cost <- function(agents, time, switch_time) {
     return(cost)
 }###--------------------    END OF FUNCTION calc_cost               --------------------###
 
-calc_revenue <- function(agents) {
+calc_revenue <- function(agents, time) {
     #determine the revenues for firms in each market
     #assume all firms sell the same quantity
     prices      <- calc_market_price(Params$market_price_dirty, Params$market_price_green)
-    total_units <- calc_market_quantity(Params$market_size_dirty, Params$market_size_green)
+    total_units <- calc_market_quantity(time)
     nunits <- list("dirty"=total_units$dirty / sum(agents$mitigation==0),
                    "green"=total_units$green / sum(agents$mitigation==1))
 
@@ -83,7 +86,7 @@ calc_market_value <- function(agents, SRoR, time) {
 
     cost        <- calc_cost(agents, time, NA)                              #baseline cost
     add_cost    <- calc_cost(agents, time) - calc_cost(agents, time, NA)    #additional cost of mitigation
-    revenue     <- calc_revenue(agents)                                     #revenue
+    revenue     <- calc_revenue(agents, time)                                     #revenue
 
     # market_value = profit + dprofit - Ai/SRoR - cost*xi + cost*xi*SRoR
     # (profit in this formulation does not capture the additional cost of mitigating the externality [cost*xi])
@@ -110,8 +113,8 @@ optimize_strategy <- function(agents, SRoR, time) {
                                 calc_cost(agents[z,], y, time) - calc_cost(agents[z,], y, NA))))
     #offset a portion of the cost with possible additional revenue
     #revenue if this agent starts mitigating - current revenues
-    revenue <- sapply(1:nrow(agents), function(z) calc_revenue(within(agents, mitigation[z] <- 1))[z]) -
-                    calc_revenue(agents)
+    revenue <- sapply(1:nrow(agents), function(z) calc_revenue(within(agents, mitigation[z] <- 1), time)[z]) -
+                    calc_revenue(agents, time)
     cost <- (cost * (1-SRoR)) - (revenue * agents[,"t_horizon"])
 
     #consider the possible harm from social pressure over "t_horizon"
