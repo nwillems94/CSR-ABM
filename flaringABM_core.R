@@ -31,19 +31,30 @@ dist_social_pressure <- function(agents, method="even", focus=1) {
 #*
 #*** MARKETS ***#
 #*
+calc_market_price <- function(pd, pg) {
+    #determine the prices in the green/dirty markets
+    #assume a constant price with a premium in the green market
+
+    return(list("dirty"=pd, "green"=pg))
+}###--------------------    END OF FUNCTION calc_market_price       --------------------###
+
 calc_market_quantity <- function(time) {
     #determine the number of agents in each of the green/dirty markets
     #assume a constant size
-    #qg <- qg * time / Params$tf / 100
-    qg <- Params$green_size_rate * time
+    #qg <- Params$green_size_rate * time
+    qg <- Params$market_size * 0.02
     qd <- Params$market_size - qg
 
     return(list("dirty"=qd, "green"=qg))
 }###--------------------    END OF FUNCTION calc_market_quantity    --------------------###
 
 dist_market_quantity <- function(agents, total_units) {
-    distribution <- data.frame("nunits"=0,"max_units"=agents[,"units"])
+    distribution <- data.frame("nunits"=0,"max_units"=agents[,"capacity"])
     excess <- total_units
+
+    if (sum(distribution[,"max_units"]) < total_units) {
+        distribution[,"nunits"] <- distribution[,"max_units"]
+    }
 
     while (excess>0 & any(with(distribution, nunits < max_units))) {
         distribution[,"nunits"] <- with(distribution,
@@ -55,13 +66,6 @@ dist_market_quantity <- function(agents, total_units) {
 
     return(distribution[,"nunits"])
 }###--------------------    END OF FUNCTION dist_market_quantity    --------------------###
-
-calc_market_price <- function(pd, pg) {
-    #determine the prices in the green/dirty markets
-    #assume a constant price with a premium in the green market
-
-    return(list("dirty"=pd, "green"=pg))
-}###--------------------    END OF FUNCTION calc_market_price       --------------------###
 
 
 
@@ -90,9 +94,6 @@ calc_revenue <- function(agents, time) {
     total_units <- calc_market_quantity(time)
 
     green_units <- dist_market_quantity(within(agents, units[mitigation==0] <- 0),  total_units$green)
-    if (sum(agents$units < green_units) > 0) {
-        print("WARNING")
-    }
     dirty_units <- dist_market_quantity(transform(agents, units=units-green_units), total_units$dirty)
 
     revenues <- prices$green * green_units + prices$dirty * dirty_units
@@ -105,7 +106,7 @@ calc_market_value <- function(agents, SRoR, time) {
 
     cost        <- calc_cost(agents, time, NA)                              #baseline cost
     add_cost    <- calc_cost(agents, time) - calc_cost(agents, time, NA)    #additional cost of mitigation
-    revenue     <- calc_revenue(agents, time)                                     #revenue
+    revenue     <- calc_revenue(agents, time)                               #revenue
 
     # market_value = profit + dprofit - Ai/SRoR - cost*xi + cost*xi*SRoR
     # (profit in this formulation does not capture the additional cost of mitigating the externality [cost*xi])

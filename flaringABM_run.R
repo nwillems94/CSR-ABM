@@ -12,11 +12,11 @@ Params <<- list(
     "market_price_green" = 10 * 1.05
 )
 
-for (Run in 1) {
+for (Run in 1:20) {
     print(Run)
     # Initialize agents, save their initial state
     source("flaringABM_init.R")
-    Params$market_size <- sum(firms[,"units"])
+    Params$market_size <- sum(firms[,"capacity"])
     Params$green_size_rate <- with(Params, market_size / (1 + nrow(firms)/5) / (tf-t0))
 
     firms[,"RunID"] <- Run
@@ -32,6 +32,7 @@ for (Run in 1) {
         if (t>0) {
             firms <- dist_social_pressure(firms)
         }
+
         # run the markets and update firm capital
         firms[,"capital"] <- firms[,"capital"] + calc_revenue(firms, t) - calc_cost(firms, t)
         firms[,"market_value"] <- calc_market_value(firms, Params$SRoR, t)
@@ -52,13 +53,8 @@ for (Run in 1) {
 library(ggplot2)
 
 agent_states <- read.csv("outputs/agent_states.csv")
-agent_states$mitigation <- as.factor(agent_states$mitigation)
-#summary(agent_states)
-#nrow(agent_states)
+agent_states$RunID <- as.factor(agent_states$RunID)
 
-
-mitigators <- aggregate(id~RunID+time+mitigation, data=agent_states, length, drop=FALSE)
-mitigators <- transform(mitigators, "num"=replace(id, is.na(id), 0), RunID=as.factor(RunID))
-progress <- ggplot(subset(mitigators, mitigation==1), aes(x=time, y=num, color=RunID)) +
-                geom_step(alpha=0.4)
+progress <- ggplot(agent_states, aes(x=time, color=RunID)) +
+                geom_step(aes(y=mitigation), stat="summary", fun.y="sum")
 print(progress)
