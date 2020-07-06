@@ -3,6 +3,8 @@
 # initialize firms, none of whom are under social pressure or mitigating
 firms <- data.frame("id"=1:100, "mitigation"=0, "sPressure"=0, "capital"=0, "market_value"=NA)
 
+firms[,"units"] <- sample.int(90, size=nrow(firms), replace=TRUE) + 10
+
 ## COSTS
 # standard operating cost without mitigation
 firms[,"baseline_oCost"] <- pmax(rnorm(nrow(firms), mean=50, sd=2), 10)

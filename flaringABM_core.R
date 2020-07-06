@@ -11,7 +11,7 @@ calc_total_pressure <- function() {
     return(Params$Activism)
 }###--------------------    END OF FUNCTION calc_total_pressure     --------------------###
 
-distribute_pressure <- function(agents, method="even", focus=1) {
+dist_social_pressure <- function(agents, method="even", focus=1) {
     # Determine what proportion of the total social pressure is allocated to each agent
     A <- calc_total_pressure()
     Ai <- rep(0L, nrow(agents))
@@ -24,7 +24,7 @@ distribute_pressure <- function(agents, method="even", focus=1) {
     agents[,"sPressure"] <- Ai
 
     return(agents)
-}###--------------------    END OF FUNCTION distribute_pressure     --------------------###
+}###--------------------    END OF FUNCTION dist_social_pressure    --------------------###
 
 
 
@@ -40,6 +40,20 @@ calc_market_quantity <- function(time) {
 
     return(list("dirty"=qd, "green"=qg))
 }###--------------------    END OF FUNCTION calc_market_quantity    --------------------###
+
+dist_market_quantity <- function(agents, total_units) {
+    distribution <- with(agents, data.frame(id,"nunits"=0,"max_units"=units))
+    distribution <- data.frame("nunits"=0, "max_units"= c(1,3,1,4))
+    excess <- total_units
+
+    while (excess>0 & any(with(distribution, nunits < max_units))) {
+        distribution[,"nunits"] <- with(distribution,
+                                        nunits + (excess / sum(nunits < max_units) * (nunits < max_units)))
+        distribution[,"nunits"] <- pmin(distribution[,"nunits"], distribution[,"max_units"])
+
+        excess <- total_units - sum(distribution[,"nunits"])
+    }
+}###--------------------    END OF FUNCTION dist_market_quantity    --------------------###
 
 calc_market_price <- function(pd, pg) {
     #determine the prices in the green/dirty markets
@@ -73,10 +87,14 @@ calc_revenue <- function(agents, time) {
     #assume all firms sell the same quantity
     prices      <- calc_market_price(Params$market_price_dirty, Params$market_price_green)
     total_units <- calc_market_quantity(time)
-    nunits <- list("dirty"=total_units$dirty / sum(agents$mitigation==0),
-                   "green"=total_units$green / sum(agents$mitigation==1))
 
-    revenues <- ifelse(agents$mitigation==1, prices$green*nunits$green, prices$dirty*nunits$dirty)
+    green_units <- dist_market_quantity(within(agents, units[mitigation==0] <- 0),  total_units$green)
+    if (sum(agents$units < green_units) > 0) {
+        print("WARNING")
+    }
+    dirty_units <- dist_market_quantity(transform(agents, units=units-green_units), total_units$dirty)
+
+    revenues <- prices$green * green_units + prices$dirty * dirty_units
 
     return(revenues)
 }###--------------------    END OF FUNCTION calc_revenue            --------------------###
