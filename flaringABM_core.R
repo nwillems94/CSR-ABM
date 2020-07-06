@@ -42,8 +42,7 @@ calc_market_quantity <- function(time) {
 }###--------------------    END OF FUNCTION calc_market_quantity    --------------------###
 
 dist_market_quantity <- function(agents, total_units) {
-    distribution <- with(agents, data.frame(id,"nunits"=0,"max_units"=units))
-    distribution <- data.frame("nunits"=0, "max_units"= c(1,3,1,4))
+    distribution <- data.frame("nunits"=0,"max_units"=agents[,"units"])
     excess <- total_units
 
     while (excess>0 & any(with(distribution, nunits < max_units))) {
@@ -53,6 +52,8 @@ dist_market_quantity <- function(agents, total_units) {
 
         excess <- total_units - sum(distribution[,"nunits"])
     }
+
+    return(distribution[,"nunits"])
 }###--------------------    END OF FUNCTION dist_market_quantity    --------------------###
 
 calc_market_price <- function(pd, pg) {
