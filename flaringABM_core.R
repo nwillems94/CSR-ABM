@@ -19,7 +19,10 @@ dist_social_pressure <- function(agents, method="even", focus=1) {
     if (method=="even") {
         Ai[agents[,"mitigation"]!=1] <- A / sum(agents[,"mitigation"]!=1)
     } else if (method=="focused") {
-       Ai[focus] <- A/length(focus)
+        focus <- intersect(focus, which(agents[,"mitigation"]!=1))
+        Ai[focus] <- A/length(focus)
+    } else if (method=="capacity") {
+        Ai[agents[,"mitigation"]!=1] <- A * with(subset(agents, mitigation!=1), capacity / sum(capacity))
     }
     agents[,"sPressure"] <- Ai
 
@@ -93,8 +96,8 @@ calc_revenue <- function(agents, time) {
     prices      <- calc_market_price(Params$market_price_dirty, Params$market_price_green)
     total_units <- calc_market_quantity(time)
 
-    green_units <- dist_market_quantity(within(agents, units[mitigation==0] <- 0),  total_units$green)
-    dirty_units <- dist_market_quantity(transform(agents, units=units-green_units), total_units$dirty)
+    green_units <- dist_market_quantity(within(agents, capacity[mitigation==0] <- 0),  total_units$green)
+    dirty_units <- dist_market_quantity(transform(agents, capacity=capacity-green_units), total_units$dirty)
 
     revenues <- prices$green * green_units + prices$dirty * dirty_units
 
