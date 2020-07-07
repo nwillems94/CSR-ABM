@@ -1,43 +1,47 @@
 library(ggplot2)
 
-agent_states <- read.csv("code/outputs/agent_states.csv")
-agent_states$mitigation <- as.factor(agent_states$mitigation)
+agent_states <- read.csv("outputs/agent_states-var.csv")
+
+agent_states <- merge(agent_states,
+                    with(subset(agent_states, time==max(time)), cbind(RunID, id, "switcher"=!is.na(t_switch))),
+                    by=c("RunID","id"))
+
+#agent_states$mitigation <- as.factor(agent_states$mitigation)
+agent_states$switcher <- as.factor(agent_states$switcher)
+agent_states$RunID <- as.factor(agent_states$RunID)
+
+
 #summary(agent_states)
 #nrow(agent_states)
 
-
-mitigators <- aggregate(id~time+mitigation, data=agent_states, length, drop=FALSE)
-mitigators <- transform(mitigators, "num"=replace(id, is.na(id), 0))
-progress <- ggplot(subset(mitigators, mitigation==1), aes(x=time, y=num)) +
-                geom_line()
-print(progress)
+# Number of mitigators over time
+ggplot(agent_states, aes(x=time, color=RunID)) +
+    geom_step(aes(y=mitigation), stat="summary", fun.y="sum")
 
 
-capital <- ggplot(agent_states, aes(x=time, y=capital, fill=mitigation)) +
-            geom_bar(stat="summary", fun.y="mean", position="dodge")
-print(capital)
-
-ggplot(agent_states, aes(x=time, y=capital, color=is.na(t_switch))) +
-            geom_line()
-
-ggplot(agent_states, aes(x=time, y=market_value, color=is.na(t_switch))) +
-            geom_line()
-
-
-distr <- with(subset(agent_states, time==max(agent_states$time)),
-                cbind(mitigation, stack(data.frame(dCost,fCost,oCost))))
-
-ggplot(distr, aes(x=ind, y=values, fill=mitigation)) +
+#Attributes of mitigators and non mitigators
+ggplot(agent_states, aes(x=time, y=capital, fill=switcher)) +
+    geom_bar(stat="summary", fun.y="mean", position="dodge")
+ggplot(agent_states, aes(x=time, y=market_value, fill=switcher)) +
     geom_bar(stat="summary", fun.y="mean", position="dodge")
 
-# dCost <- ggplot(agent_states, aes(x=time, y=dCost, color=mitigation)) +
-#             geom_bar(stat="summary", fun.y="mean", position="dodge")
+ggplot(agent_states, aes(x=RunID, y=market_value, fill=switcher)) +
+    geom_bar(stat="summary", fun.y="mean", position="dodge")
+
+ggplot(agent_states, aes(x=RunID, y=baseline_oCost, fill=switcher)) +
+    geom_bar(stat="summary", fun.y="mean", position="dodge")
+ggplot(agent_states, aes(x=RunID, y=green_add_oCost, fill=switcher)) +
+    geom_bar(stat="summary", fun.y="mean", position="dodge")
+ggplot(agent_states, aes(x=RunID, y=green_fCost, fill=switcher)) +
+    geom_bar(stat="summary", fun.y="mean", position="dodge")
+
+ggplot(agent_states, aes(x=RunID, y=units, fill=switcher)) +
+    geom_bar(stat="summary", fun.y="mean", position="dodge")
 
 
-# oCost <- ggplot(agent_states, aes(x=time, y=oCost, color=mitigation)) +
-#             geom_bar(stat="summary", fun.y="mean", position="dodge")
 
-# fCost <- ggplot(agent_states, aes(x=time, y=fCost, color=mitigation)) +
-#             geom_bar(stat="summary", fun.y="mean", position="dodge")
-
-# print(grid.arrange(dCost, oCost, fCost, ncol=1))
+costs <- with(aggregate(cbind(baseline_oCost, green_add_oCost, green_fCost) ~ RunID+switcher, data=agent_states, mean),
+                cbind(RunID, switcher, stack(data.frame(baseline_oCost, green_add_oCost, green_fCost))))
+ggplot(costs, aes(x=RunID, y=values, fill=switcher)) +
+    geom_bar(stat="identity", position="dodge") +
+    facet_wrap(~ind, ncol=1, scale="free_y")
