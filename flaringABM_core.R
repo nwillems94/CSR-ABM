@@ -2,6 +2,7 @@
 #
 #
 #
+library(Rcpp)
 
 #*
 #*** SOCIAL PRESSURE ***#
@@ -51,6 +52,29 @@ calc_market_quantity <- function(time) {
     return(list("dirty"=qd, "green"=qg))
 }###--------------------    END OF FUNCTION calc_market_quantity    --------------------###
 
+cppFunction(
+    'NumericVector dist_market_quantityC(NumericVector max_units, double total_units) {
+        NumericVector distribution(max_units.size());
+        NumericVector nunits(max_units.size());
+        double excess = total_units;
+
+        if (std::accumulate(max_units.begin(), max_units.end(), 0) < total_units) {
+            nunits = max_units;
+        }
+
+        while (excess>0 && is_true(any(nunits<max_units))) {
+            NumericVector remn = ifelse(nunits<max_units, 1.0, 0.0);
+            nunits = nunits + remn*(excess / sum(remn));
+            nunits = pmin(nunits, max_units);
+
+            excess = total_units - sum(nunits);
+        }
+
+        return nunits;
+    }'
+)###--------------------   END OF FUNCTION dist_market_quantityC    --------------------###
+
+
 dist_market_quantity <- function(agents, total_units) {
     distribution <- data.frame("nunits"=0,"max_units"=agents[,"capacity"])
     excess <- total_units
@@ -69,7 +93,6 @@ dist_market_quantity <- function(agents, total_units) {
 
     return(distribution[,"nunits"])
 }###--------------------    END OF FUNCTION dist_market_quantity    --------------------###
-
 
 
 #*
@@ -96,8 +119,10 @@ calc_revenue <- function(agents, time) {
     prices      <- calc_market_price(Params$market_price_dirty, Params$market_price_green)
     total_units <- calc_market_quantity(time)
 
-    green_units <- dist_market_quantity(within(agents, capacity[mitigation==0] <- 0),  total_units$green)
-    dirty_units <- dist_market_quantity(transform(agents, capacity=capacity-green_units), total_units$dirty)
+    #green_units <- dist_market_quantity(within(agents, capacity[mitigation==0] <- 0),  total_units$green)
+    green_units <- dist_market_quantityC(with(agents, replace(capacity, mitigation==0, 0)),  total_units$green)
+    #dirty_units <- dist_market_quantity(transform(agents, capacity=capacity-green_units), total_units$dirty)
+    dirty_units <- dist_market_quantityC(with(agents, capacity-green_units), total_units$dirty)
 
     revenues <- prices$green * green_units + prices$dirty * dirty_units
 
