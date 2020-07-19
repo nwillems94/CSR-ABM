@@ -34,7 +34,7 @@ for (Run in 1:20) {
         }
 
         # run the markets and update firm capital
-        firms[,"capital"] <- firms[,"capital"] + calc_revenue(firms, t) - calc_cost(firms, t)
+        firms[,"capital"] <- firms[,"capital"] + calc_revenueC(firms, t) - calc_costC(firms, t)
         firms[,"market_value"] <- calc_market_value(firms, Params$SRoR, t)
 
         #optimize market value
