@@ -1,6 +1,6 @@
-# THIS SCRIPT CONTAINS ALL THE RUN-TIME FUNCTIONALITY OF THE flaringABM
-#
-#
+# THIS SCRIPT CONTAINS THE DECISION MAKING FUNCTIONALITY OF THE flaringABM
+# THE FUNCTIONS WHICH INFORM THESE ARE WRITTEN IN C++ & CONTAINED IN flaringABM_core.cpp
+# 
 #
 library(Rcpp)
 sourceCpp("flaringABM_core.cpp")
@@ -36,7 +36,7 @@ dist_social_pressure <- function(agents, method="even", focus=1) {
 #*** FIRM VALUATION ***#
 #*
 calc_market_value <- function(agents, SRoR, time) {
-    #determines if the possible harm of social pressure outweighs the cost of mitigating the externality
+    # calculates the market value based on Baron's formulation
 
     cost        <- calc_costC(agents, time, NA)                              #baseline cost
     add_cost    <- calc_costC(agents, time) - calc_costC(agents, time, NA)   #additional cost of mitigation

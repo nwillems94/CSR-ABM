@@ -1,7 +1,9 @@
 #include <Rcpp.h>
 
 using namespace Rcpp;
-
+//
+// *** SOCIAL PRESSURE ***
+//
 // double calc_total_pressureC () {
 //     List params = Environment::global_env()["Params"];
     
@@ -10,7 +12,7 @@ using namespace Rcpp;
 
 
 //
-// MARKETS
+// *** MARKETS ***
 //
 
 List calc_market_priceC (double pd, double pg) {
@@ -47,7 +49,7 @@ NumericVector dist_market_quantityC(NumericVector max_units, double total_units)
 }// --------------------    END OF FUNCTION dist_market_quantityC   --------------------###
 
 //
-// FIRM VALUATION
+// *** FIRM VALUATION ***
 //
 
 // [[Rcpp::export]]
