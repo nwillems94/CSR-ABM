@@ -23,8 +23,8 @@ dist_social_pressure <- function(agents, method="even", focus=1) {
     } else if (method=="focused") {
         focus <- intersect(focus, which(agents[,"mitigation"]!=1))
         Ai[focus] <- A/length(focus)
-    } else if (method=="capacity") {
-        Ai[agents[,"mitigation"]!=1] <- A * with(subset(agents, mitigation!=1), capacity / sum(capacity))
+    } else if (method=="gas_output") {
+        Ai[agents[,"mitigation"]!=1] <- A * with(subset(agents, mitigation!=1), gas_output / sum(gas_output))
     }
     agents[,"sPressure"] <- Ai
 

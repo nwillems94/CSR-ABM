@@ -9,14 +9,16 @@ Params <<- list(
     "SRoR" = 0.8,
     #Market conditions
     "market_price_dirty" = 10,
-    "market_price_green" = 10 * 1.05
+    "market_price_green" = 10 * 1.05,
+    "oil_price" = 20,
+    "capital_assets" = "upstream"
 )
 
 for (Run in 1:20) {
     print(Run)
     # Initialize agents, save their initial state
     source("flaringABM_init.R")
-    Params$market_size <- sum(firms[,"capacity"])
+    Params$market_size <- sum(firms[,"gas_output"])
     Params$green_size_rate <- with(Params, market_size / (1 + nrow(firms)/5) / (tf-t0))
 
     firms[,"RunID"] <- Run
@@ -34,7 +36,7 @@ for (Run in 1:20) {
         }
 
         # run the markets and update firm capital
-        firms[,"capital"] <- firms[,"capital"] + calc_revenueC(firms, t) - calc_costC(firms, t)
+        firms[,"cash"] <- firms[,"cash"] + calc_revenueC(firms, t) - calc_costC(firms, t)
         firms[,"market_value"] <- calc_market_value(firms, Params$SRoR, t)
 
         #optimize market value

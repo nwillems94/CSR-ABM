@@ -52,6 +52,26 @@ NumericVector dist_market_quantityC(NumericVector max_units, double total_units)
 // *** FIRM VALUATION ***
 //
 
+NumericVector calc_capital_equivC (DataFrame agents) {
+    List params = Environment::global_env()["Params"];
+    String capital_assets = params["capital_assets"];
+    NumericVector gas_reserves = agents["gas_reserves"], oil_reserves = agents["oil_reserves"], downstream_capital = agents["ref_capacity"];
+    NumericVector upstream_capital = (gas_reserves * as<double>(params["market_price_dirty"])) + (oil_reserves * as<double>(params["oil_price"]));
+    NumericVector capital;
+
+    if (capital_assets=="upstream") {
+        capital = upstream_capital;
+    }
+    else if (capital_assets=="downstream") {
+        capital = downstream_capital;
+    }
+    else
+    {
+        capital = upstream_capital + downstream_capital;
+    }
+    return (capital + as<NumericVector>(agents["cash"]));
+}
+
 // [[Rcpp::export]]
 NumericVector calc_costC (DataFrame agents, double time, NumericVector t_switch=NumericVector()) {
     //Determine the cost at "time", assuming the firm transitions to the green market at "switch_time"
@@ -73,13 +93,13 @@ NumericVector calc_costC (DataFrame agents, double time, NumericVector t_switch=
 
 // [[Rcpp::export]]
 NumericVector calc_revenueC (DataFrame agents, double time) {
-    NumericVector capacity = agents["capacity"], mitigation = agents["mitigation"];
+    NumericVector gas_output = agents["gas_output"], mitigation = agents["mitigation"];
     List params = Environment::global_env()["Params"];
 
     List prices = calc_market_priceC(params["market_price_dirty"], params["market_price_green"]);
     List total_units = calc_market_quantityC(time);
-    NumericVector green_units = dist_market_quantityC(capacity * floor(mitigation),  total_units["green"]);
-    NumericVector dirty_units = dist_market_quantityC(capacity - green_units, total_units["dirty"]);
+    NumericVector green_units = dist_market_quantityC(gas_output * floor(mitigation),  total_units["green"]);
+    NumericVector dirty_units = dist_market_quantityC(gas_output - green_units, total_units["dirty"]);
 
     return (as<double>(prices["green"]) * green_units) + (as<double>(prices["dirty"]) * dirty_units);
     
@@ -89,7 +109,8 @@ NumericVector calc_revenueC (DataFrame agents, double time) {
 LogicalVector check_affordabilityC (DataFrame buyers) {
     //check if each agent can afford the fixed cost of mitigation
     //naively assume there is no borrowing available and the cost is paid as a lump sum
-    NumericVector green_fCost = buyers["green_fCost"], capital = buyers["capital"];
+    NumericVector green_fCost = buyers["green_fCost"];
+    NumericVector capital = calc_capital_equivC(buyers);
 
     return green_fCost < capital;
 }// --------------------    END OF FUNCTION check_affordabilityC    --------------------###

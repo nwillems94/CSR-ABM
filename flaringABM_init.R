@@ -1,9 +1,18 @@
 # Assign agent attributes
 
 # initialize firms, none of whom are under social pressure or mitigating
-firms <- data.frame("id"=1:100, "mitigation"=0, "sPressure"=0, "capital"=0, "market_value"=NA)
+firms <- data.frame("id"=1:100, "mitigation"=0, "sPressure"=0, "cash"=0, "market_value"=NA)
 
-firms[,"capacity"] <- sample.int(40, size=nrow(firms), replace=TRUE) + 10
+# Attributes from Hartley 2013: zotero://select/items/1_IKQGEEBK
+# oil & gas reserves as a proxy for     upstream capital 
+firms[,"oil_reserves"] <- 1
+firms[,"gas_reserves"] <- 1
+
+# refining capacity as a proxy for      downstream capital
+firms[,"ref_capacity"] <- sample.int(40, size=nrow(firms), replace=TRUE) + 10
+
+
+firms[,"gas_output"] <- sample.int(40, size=nrow(firms), replace=TRUE) + 10
 
 ## COSTS
 # standard operating cost without mitigation
