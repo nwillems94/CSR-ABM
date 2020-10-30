@@ -1,4 +1,5 @@
 source("flaringABM_core.R")
+source("flaringABM_init.R")
 
 
 Params <<- list(
@@ -9,7 +10,7 @@ Params <<- list(
     "SRoR" = 0.8,
     #Market conditions
     "market_price_dirty" = 10,
-    "market_price_green" = 10 * 1.05,
+    "market_price_green" = 10 * 1.16, # from Kitzmueller & Shimshack [5,16,20]% zotero://select/items/0_PGHV5RK7
     "oil_price" = 20,
     "capital_assets" = "upstream"
 )
@@ -17,7 +18,8 @@ Params <<- list(
 for (Run in 1:20) {
     print(Run)
     # Initialize agents, save their initial state
-    source("flaringABM_init.R")
+    wells <- generate_wells()
+    firms <- generate_firms(wells)
     Params$market_size <- sum(firms[,"gas_output"])
     Params$green_size_rate <- with(Params, market_size / (1 + nrow(firms)/5) / (tf-t0))
 
