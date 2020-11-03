@@ -2,6 +2,7 @@
 # THE FUNCTIONS WHICH INFORM THESE ARE WRITTEN IN C++ & CONTAINED IN flaringABM_core.cpp
 # 
 #
+library(data.table)
 library(Rcpp)
 sourceCpp("flaringABM_core.cpp")
 
@@ -16,21 +17,17 @@ calc_total_pressure <- function() {
 dist_social_pressure <- function(agents, method="even", focus=1) {
     # Determine what proportion of the total social pressure is allocated to each agent
     A <- calc_total_pressure()
-    Ai <- rep(0L, nrow(agents))
 
     if (method=="even") {
-        Ai[agents[,"mitigation"]!=1] <- A / sum(agents[,"mitigation"]!=1)
+        agents[mitigation!=1, "sPressure":= A / .N]
     } else if (method=="focused") {
-        focus <- intersect(focus, which(agents[,"mitigation"]!=1))
-        Ai[focus] <- A/length(focus)
+        focus <- intersect(focus, which(agents$mitigation!=1))
+        agents[focus, "sPressure":= A / length(focus)]
     } else if (method=="gas_output") {
-        Ai[agents[,"mitigation"]!=1] <- A * with(subset(agents, mitigation!=1), gas_output / sum(gas_output))
+        agents[mitigation!=1, "sPressure":= A * gas_output / sum(gas_output)]
     }
-    agents[,"sPressure"] <- Ai
 
-    return(agents)
 }###--------------------    END OF FUNCTION dist_social_pressure    --------------------###
-
 
 #*
 #*** FIRM VALUATION ***#
@@ -56,21 +53,20 @@ optimize_strategy <- function(agents, SRoR, time) {
 
     #consider the additional cost starting mitigation at "time" over "t_horizon"
     cost <- sapply(1:nrow(agents), function(z)
-                    sum(sapply(time + 1:agents[z,"t_horizon"], function(y)
+                    sum(sapply(time + 1:agents$t_horizon[z], function(y)
                                 calc_costC(agents[z,], y, time) - calc_costC(agents[z,], y, NA))))
     #offset a portion of the cost with possible additional revenue
     #revenue if this agent starts mitigating - current revenues
     revenue <- sapply(1:nrow(agents), function(z) calc_revenueC(within(agents, mitigation[z] <- 1), time)[z]) -
                     calc_revenueC(agents, time)
-    cost <- (cost * (1-SRoR)) - (revenue * agents[,"t_horizon"])
+    cost <- (cost * (1-SRoR)) - (revenue * agents$t_horizon)
 
     #consider the possible harm from social pressure over "t_horizon"
-    harm <- (agents[,"sPressure"] / SRoR) * agents[,"t_horizon"]
+    harm <- (agents[,"sPressure"] / SRoR) * agents$t_horizon
 
     #if the cost outweighs the possible harm and the agent has sufficient capital, they start mitigating
-    new_mitigators <- (cost < harm) & check_affordabilityC(agents) & (agents[,"mitigation"]==0)
-    agents[new_mitigators, "mitigation"] <- 1
-    agents[new_mitigators, "t_switch"] <- time + 1
+    new_mitigators <- c((cost < harm) & check_affordabilityC(agents) & (agents[,"mitigation"]==0))
 
-    return(agents)
+    agents[new_mitigators, "mitigation":= 1]
+    agents[new_mitigators, "t_switch":= time + 1]
 }###--------------------    END OF FUNCTION optimize_strategy       --------------------###
