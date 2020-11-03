@@ -64,6 +64,7 @@ generate_firms <- function(n, wells) {
     firms[,"i_horizon":= 4] #time horizon over which investments are paid off
 
     firms[,"t_switch"] <- NA_integer_ #time at which agent switches into the green market
+    firms[,"do_e"] <- NA
 
     return(firms)
 }

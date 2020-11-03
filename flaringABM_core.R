@@ -67,6 +67,5 @@ optimize_strategy <- function(agents, SRoR, time) {
     #if the cost outweighs the possible harm and the agent has sufficient capital, they start mitigating
     new_mitigators <- c((cost < harm) & check_affordabilityC(agents) & (agents[,"mitigation"]==0))
 
-    agents[new_mitigators, "mitigation":= 1]
-    agents[new_mitigators, "t_switch":= time + 1]
+    return(new_mitigators)
 }###--------------------    END OF FUNCTION optimize_strategy       --------------------###
