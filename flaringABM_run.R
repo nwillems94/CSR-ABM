@@ -1,10 +1,10 @@
 library(data.table)
 
 source("flaringABM_core.R")
-source("flaringABM_init.R")
-
 
 Params <<- list(
+    "nagents" = 100,
+    "nwells" = 1000,
     "t0" = -5,
     "tf" = 20,
     # Environmental Variables
@@ -20,8 +20,7 @@ Params <<- list(
 for (Run in 1:20) {
     cat(Run,":  ")
     # Initialize agents, save their initial state
-    wells <- generate_wells(1000)
-    firms <- generate_firms(100, wells)
+    source("flaringABM_init.R")
     Params$market_size <- sum(firms$gas_output)
     Params$green_size_rate <- with(Params, market_size / (1 + nrow(firms)/5) / (tf-t0))
 
