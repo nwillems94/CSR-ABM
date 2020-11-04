@@ -42,19 +42,26 @@ for (Run in 1:20) {
         firms[, "cash":= cash + calc_revenueC(firms, t) - calc_costC(firms, t)]
         firms[, "market_value":= calc_market_value(firms, Params$SRoR, t)]
 
-        # randomly assign either exploration or development activities
+        # randomly assign either development or exploration activities
         firms[,"do_e":= runif(nrow(firms)) > 0.5]
+
+        ## development
+        # start production at newly developed wells
+        wells[class=="developed" & status=="stopped", "status":= .("producing")]
+        #optimize market value
+        firms[firmID %in% firms[(!do_e)][optimize_strategy(firms[(!do_e)], Params$SRoR, t)]$firmID,
+                c("mitigation","t_switch"):= .(1, t + 1)]
+        ## exploration
+        #progress undeveloped wells from previous time step
+        wells[class=="undeveloped", c("class","status"):= .(ifelse(gas_MCF>0,"underdeveloped","developed"), "stopped")]
+
         # 10% chance a firm finds a new well
-        done_e <- sort(firms[do_e==TRUE & runif(.N)>0.9]$firmID)
-        wells[sample(which(is.na(firmID)), length(done_e)), "firmID":= done_e]
+        done_e <- sort(firms[(do_e) & runif(.N)>0.9]$firmID)
+        wells[sample(which(is.na(firmID)), length(done_e)), c("firmID","class"):= .(done_e,"undeveloped")]
         # update cost figures based on new acquisition
         firms[firmID %in% done_e, grep("Cost", names(wells), value=TRUE):=
             wells[firmID %in% done_e, lapply(.SD, sum), keyby=firmID, .SDcols=grep("Cost",names(wells))][,-"firmID"]]
         firms[firmID %in% done_e, "oCost":= baseline_oCost]
-
-        #optimize market value
-        firms[firmID %in% firms[do_e==FALSE][optimize_strategy(firms[do_e==FALSE], Params$SRoR, t)]$firmID,
-                c("mitigation","t_switch"):= .(1, t + 1)]
 
         #output states
         fwrite(firms[, "time":=t], file="outputs/agent_states.csv", append=TRUE)
