@@ -1,7 +1,8 @@
 library(data.table)
 
 ### ASSIGN WELL ATTRIBUTES ###
-wells <- data.table("wellID"=1:Params$nwells, "firmID"=NA_integer_, "class"=NA_character_, "status"=NA_character_)
+wells <- data.table("wellID"=1:Params$nwells, key="wellID",
+                    "firmID"=NA_integer_, "class"=NA_character_, "status"=NA_character_)
 
 ## RESOURCE
 wells[,"oil_BBL":= sample.int(40, size=.N, replace=TRUE) + 10]
@@ -21,7 +22,8 @@ wells[,"green_add_oCost":= pmax(rnorm(.N, mean=15, sd=5), 1)]
 
 ### ASSIGN AGENT ATTRIBUTES ###
 # initialize firms, none of whom are under social pressure or mitigating
-firms <- data.table("firmID"=1:Params$nagents, "mitigation"=0, "sPressure"=0, "cash"=0, "market_value"=NA_real_)
+firms <- data.table("firmID"=1:Params$nagents, key="firmID",
+                    "mitigation"=0, "sPressure"=0, "cash"=0, "market_value"=NA_real_)
 
 # randomly assign firms to wells
 wells[sample(.N, 4*nrow(firms), replace=FALSE), "firmID":= sample(nrow(firms), 4*nrow(firms), replace=TRUE)]
