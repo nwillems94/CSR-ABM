@@ -52,6 +52,7 @@ NumericVector dist_market_quantityC(NumericVector max_units, double total_units)
 // *** FIRM VALUATION ***
 //
 
+// [[Rcpp::export]]
 NumericVector calc_capital_equivC (DataFrame agents) {
     List params = Environment::global_env()["Params"];
     String capital_assets = params["capital_assets"];
@@ -92,7 +93,7 @@ NumericVector calc_costC (DataFrame agents, double time, NumericVector t_switch=
 }// --------------------    END OF FUNCTION calc_costC              --------------------###
 
 // [[Rcpp::export]]
-NumericVector calc_revenueC (DataFrame agents, double time) {
+List calc_revenueC (DataFrame agents, double time) {
     NumericVector gas_output = agents["gas_output"], mitigation = agents["mitigation"];
     List params = Environment::global_env()["Params"];
 
@@ -101,16 +102,5 @@ NumericVector calc_revenueC (DataFrame agents, double time) {
     NumericVector green_units = dist_market_quantityC(gas_output * floor(mitigation),  total_units["green"]);
     NumericVector dirty_units = dist_market_quantityC(gas_output - green_units, total_units["dirty"]);
 
-    return (as<double>(prices["green"]) * green_units) + (as<double>(prices["dirty"]) * dirty_units);
-    
+    return List::create(_["gas_revenue"] = (as<double>(prices["green"]) * green_units) + (as<double>(prices["dirty"]) * dirty_units) , _["prices"] = prices);
 }// --------------------    END OF FUNCTION calc_revenueC           --------------------###
-
-// [[Rcpp::export]]
-LogicalVector check_affordabilityC (DataFrame buyers) {
-    //check if each agent can afford the fixed cost of mitigation
-    //naively assume there is no borrowing available and the cost is paid as a lump sum
-    NumericVector green_fCost = buyers["green_fCost"];
-    NumericVector capital = calc_capital_equivC(buyers);
-
-    return green_fCost < capital;
-}// --------------------    END OF FUNCTION check_affordabilityC    --------------------###

@@ -47,25 +47,63 @@ calc_market_value <- function(agents, SRoR, time) {
     return(market_value)
 }###--------------------    END OF FUNCTION calc_market_value       --------------------###
 
+build_permutations <- function(firmIDs) {
+    portfolio_permutations <- wells[firmID %in% firmIDs][,
+                                        .("wellIDs"= .(wellID),
+                                        "class"= .(ifelse(class=="developed", 1, 0)),
+                                        "perm"= transpose(as.list(do.call(CJ, rep(list(0:1), .N))))),
+                                    keyby=firmID]
+    # add firm attributes
+    portfolio_permutations[firms[.(firmIDs)], on="firmID", c("i_horizon","t_horizon","sPressure","free_capital"):=
+                                                                .(i_horizon, t_horizon, sPressure, capital-cost)]
 
-optimize_strategy <- function(agents, SRoR, time) {
+    # a well's class can only increase (ie underdeveloped --> developed, developed -/-> underdeveloped)
+    #    a 1 represents an additonal cost (ie developing an underdeveloped well),
+    #    a 0 represents status-quo (ie an underdeveloped well that stays that way)
+    portfolio_permutations[, "perm":= .(Map("-", perm, class))]
+    portfolio_permutations <- portfolio_permutations[!sapply(Map("<", perm, 0), any)]
+
+    # calculate the additional cost associated with excercizing each option
+    portfolio_permutations[, "cost":=
+            wells[unique(wellIDs), sapply(Map("*", .(green_add_oCost + green_fCost / unique(i_horizon)), perm), sum)],
+        by=firmID]
+    #    eliminate those which are out of budget
+    portfolio_permutations <- portfolio_permutations[cost < free_capital]
+
+    # determine which configurations meet the green threshold
+    #    by calculating proportion of gas (that would be) flared to the total gas production
+    portfolio_permutations[, "per_flared":= sapply(Map("-", 1, Map("+", class, perm)), weighted.mean,
+                                                    wells[unique(wellIDs), gas_MCF]), by=firmID]
+    #    and checking if it meets the green market threshold
+    portfolio_permutations[, "meets_thresh":= per_flared < Params$threshold]
+
+    # calculate revenue at given by exercising each option
+    #portfolio_permutations[lengths(costs)>0,]
+    # base revenue
+    portfolio_permutations[, "gas_MCF":= sapply(lapply(Map("+", class, perm), "*",
+                                                        wells[unique(wellIDs), gas_MCF]), sum), by=firmID]
+    portfolio_permutations[, "add_gas_MCF":= .SD[,"gas_MCF"] - .SD[1]$gas_MCF, by=firmID]
+
+    portfolio_permutations[, c("revenue", "best", "add_cost", "cost_harm"):= .(NA_real_, NA, NA_real_, NA)]
+
+    return(portfolio_permutations)
+
+}###--------------------    END OF FUNCTION build_permutations      --------------------###
+
+optimize_strategy <- function(portfolio_permutations, SRoR) {
     #determines if the possible harm of social pressure outweighs the cost of mitigating the externality
+    # minimum cost configuration
+    # MIN GREEN CONFIG, MIN CONFIG
+    # GREEN CONFIG AVOIDS HARM, OTHER CHEAPEST
+    # choose between max profit portfolios with and without mitigation
+    # best_options <- portfolio_permutations[, .SD[which.max(revenue - cost)],
+    #                                         keyby=.(firmID, meets_thresh), .SDcols=c("wellIDs","revenue","cost")]
+    portfolio_permutations[, "best":= (revenue-cost)==max(revenue - cost), keyby=.(firmID, meets_thresh)]
+    # if the possible harm outweighs the cost, exercise the mitigation option
+    #    change in cost less change in revenue
+    #    possible harm from social pressure over "t_horizon"
+    portfolio_permutations[(best), "add_cost":= ifelse(.N>1, diff(cost), 0), by=firmID]
+    portfolio_permutations[(best), "cost_harm":= ifelse(.N>1, ((add_cost * (1-SRoR)) - (diff(revenue) * t_horizon)) <
+                                                                ((sPressure / SRoR) * t_horizon), TRUE), by=firmID]
 
-    #consider the additional cost starting mitigation at "time" over "t_horizon"
-    cost <- sapply(1:nrow(agents), function(z)
-                    sum(sapply(time + 1:agents$t_horizon[z], function(y)
-                                calc_costC(agents[z,], y, time) - calc_costC(agents[z,], y, NA))))
-    #offset a portion of the cost with possible additional revenue
-    #revenue if this agent starts mitigating - current revenues
-    revenue <- sapply(1:nrow(agents), function(z) calc_revenueC(within(agents, mitigation[z] <- 1), time)[z]) -
-                    calc_revenueC(agents, time)
-    cost <- (cost * (1-SRoR)) - (revenue * agents$t_horizon)
-
-    #consider the possible harm from social pressure over "t_horizon"
-    harm <- (agents[,"sPressure"] / SRoR) * agents$t_horizon
-
-    #if the cost outweighs the possible harm and the agent has sufficient capital, they start mitigating
-    new_mitigators <- c((cost < harm) & check_affordabilityC(agents) & (agents[,"mitigation"]==0))
-
-    return(new_mitigators)
 }###--------------------    END OF FUNCTION optimize_strategy       --------------------###
