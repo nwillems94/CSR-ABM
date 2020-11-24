@@ -11,7 +11,7 @@ Params <<- list(
     "Activism" = 200,
     "SRoR" = 0.8,
     # Market conditions
-    "threshold" = 0.1, # maximum percent of gas which "green" firms can flare
+    "threshold" = 0.1, # max units of gas "green" firms can flare per unit of oil produce
     "market_price_dirty" = 1,
     "market_price_green" = 1 * 1.16, # from Kitzmueller & Shimshack 16[5,20]% zotero://select/items/0_PGHV5RK7
     "oil_price" = 16,

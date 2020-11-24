@@ -36,13 +36,13 @@ calc_market_value <- function(agents, SRoR, time) {
     # calculates the market value based on Baron's formulation
 
     cost        <- calc_costC(agents, time, NA)                              #baseline cost
-    add_cost    <- calc_costC(agents, time) - calc_costC(agents, time, NA)   #additional cost of mitigation
-    revenue     <- calc_revenueC(agents, time)                               #revenue
+    add_cost    <- calc_costC(agents, time) - cost                           #additional cost of mitigation
+    gas_revenue <- calc_revenueC(agents, time)$gas_revenue                   #revenue
 
     # market_value = profit + dprofit - Ai/SRoR - cost*xi + cost*xi*SRoR
     # (profit in this formulation does not capture the additional cost of mitigating the externality [cost*xi])
-    market_value <- (revenue - cost - add_cost) +                   #Net cash flow
-                    (add_cost*SRoR - (agents[,"sPressure"] / SRoR)) #Net social value
+    market_value <- agents$oil_output * Params$oil_price + (gas_revenue - cost - add_cost) +    #Net cash flow
+                    (add_cost*SRoR - (agents[, "sPressure"] / SRoR))                            #Net social value
 
     return(market_value)
 }###--------------------    END OF FUNCTION calc_market_value       --------------------###
@@ -54,7 +54,7 @@ build_permutations <- function(firmIDs) {
                                         "perm"= transpose(as.list(do.call(CJ, rep(list(0:1), .N))))),
                                     keyby=firmID]
     # add firm attributes
-    portfolio_permutations[firms[.(firmIDs)], on="firmID", c("i_horizon","t_horizon","sPressure","free_capital"):=
+    portfolio_permutations[firms[.(firmIDs)], on="firmID", c("i_horizon", "t_horizon", "sPressure", "free_capital"):=
                                                                 .(i_horizon, t_horizon, sPressure, capital-cost)]
 
     # a well's class can only increase (ie underdeveloped --> developed, developed -/-> underdeveloped)
@@ -70,21 +70,20 @@ build_permutations <- function(firmIDs) {
     #    eliminate those which are out of budget
     portfolio_permutations <- portfolio_permutations[cost < free_capital]
 
-    # determine which configurations meet the green threshold
-    #    by calculating proportion of gas (that would be) flared to the total gas production
-    portfolio_permutations[, "per_flared":= sapply(Map("-", 1, Map("+", class, perm)), weighted.mean,
-                                                    wells[unique(wellIDs), gas_MCF]), by=firmID]
-    #    and checking if it meets the green market threshold
-    portfolio_permutations[, "meets_thresh":= per_flared < Params$threshold]
-
-    # calculate revenue at given by exercising each option
-    #portfolio_permutations[lengths(costs)>0,]
+    # calculate revenue given by exercising each option
     # base revenue
     portfolio_permutations[, "gas_MCF":= sapply(lapply(Map("+", class, perm), "*",
                                                         wells[unique(wellIDs), gas_MCF]), sum), by=firmID]
-    portfolio_permutations[, "add_gas_MCF":= .SD[,"gas_MCF"] - .SD[1]$gas_MCF, by=firmID]
+    portfolio_permutations[, "add_gas_MCF":= .SD[, "gas_MCF"] - .SD[1]$gas_MCF, by=firmID]
 
-    portfolio_permutations[, c("revenue", "best", "add_cost", "cost_harm"):= .(NA_real_, NA, NA_real_, NA)]
+    # determine which configurations meet the green threshold
+    #    by calculating proportion of gas (that would be) flared per unit of oil production
+    portfolio_permutations[, "flaring_intensity":= (wells[unique(wellIDs), sum(gas_MCF)] - gas_MCF) /
+                                                        wells[unique(wellIDs), sum(oil_BBL)], by=firmID]
+    #    and checking if it meets the green market threshold
+    portfolio_permutations[, "meets_thresh":= flaring_intensity < Params$threshold]
+
+    portfolio_permutations[, c("revenue", "best", "cost_harm"):= .(NA_real_, NA, NA)]
 
     return(portfolio_permutations)
 
@@ -96,14 +95,11 @@ optimize_strategy <- function(portfolio_permutations, SRoR) {
     # MIN GREEN CONFIG, MIN CONFIG
     # GREEN CONFIG AVOIDS HARM, OTHER CHEAPEST
     # choose between max profit portfolios with and without mitigation
-    # best_options <- portfolio_permutations[, .SD[which.max(revenue - cost)],
-    #                                         keyby=.(firmID, meets_thresh), .SDcols=c("wellIDs","revenue","cost")]
     portfolio_permutations[, "best":= (revenue-cost)==max(revenue - cost), keyby=.(firmID, meets_thresh)]
     # if the possible harm outweighs the cost, exercise the mitigation option
     #    change in cost less change in revenue
     #    possible harm from social pressure over "t_horizon"
-    portfolio_permutations[(best), "add_cost":= ifelse(.N>1, diff(cost), 0), by=firmID]
-    portfolio_permutations[(best), "cost_harm":= ifelse(.N>1, ((add_cost * (1-SRoR)) - (diff(revenue) * t_horizon)) <
+    portfolio_permutations[(best), "cost_harm":= ifelse(.N>1, ((diff(cost) * (1-SRoR)) - (diff(revenue) * t_horizon)) <
                                                                 ((sPressure / SRoR) * t_horizon), TRUE), by=firmID]
 
 }###--------------------    END OF FUNCTION optimize_strategy       --------------------###
