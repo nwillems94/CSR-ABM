@@ -15,7 +15,10 @@ Params <<- list(
     "market_price_dirty" = 1,
     "market_price_green" = 1 * 1.16, # from Kitzmueller & Shimshack 16[5,20]% zotero://select/items/0_PGHV5RK7
     "oil_price" = 16,
-    "capital_assets" = "upstream"
+    "capital_assets" = "upstream",
+    # Activities
+    "prop_e" = 0.5, #what proportion of firms engage in exploration activities in a given time step
+    "prob_e" = 0.1  #with what probability to exploring firms discover a new asset
 )
 
 for (Run in 1:20) {
@@ -72,7 +75,7 @@ for (Run in 1:20) {
 
         #### FIRM ACTIVITIES ####
         # randomly assign either development or exploration activities
-        firms[, "do_e":= runif(nrow(firms)) > 0.5]
+        firms[, "do_e":= runif(nrow(firms)) < Params$prop_e]
         developers <- firms[!(do_e)]$firmID
         # update from previous turns
         wells[class=="developed" & status=="stopped", "status":= .("producing")]
@@ -93,7 +96,7 @@ for (Run in 1:20) {
                 .(ifelse(gas_MCF>0, "underdeveloped", "developed"), "stopped")]
 
         # 10% chance a firm finds a new well
-        done_e <- sort(firms[(do_e) & runif(.N)>0.9]$firmID)
+        done_e <- sort(firms[(do_e) & (runif(.N) < Params$prob_e)]$firmID)
         wells[sample(which(is.na(firmID)), length(done_e)), c("firmID", "class"):= .(done_e, "undeveloped")]
 
         #### UPDATE ATTRIBUTES ####
