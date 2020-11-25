@@ -9,14 +9,15 @@ sourceCpp("flaringABM_core.cpp")
 #*
 #*** SOCIAL PRESSURE ***#
 #*
-calc_total_pressure <- function() {
+calc_total_pressure <- function(Ai) {
     # Calculate the total social pressure
-    return(Params$Activism)
+
+    return(Ai)
 }###--------------------    END OF FUNCTION calc_total_pressure     --------------------###
 
 dist_social_pressure <- function(agents, method="even", focus=1) {
     # Determine what proportion of the total social pressure is allocated to each agent
-    A <- calc_total_pressure()
+    A <- calc_total_pressure(Params$Activism)
 
     if (method=="even") {
         agents[mitigation!=1, "sPressure":= A / .N]
@@ -32,20 +33,36 @@ dist_social_pressure <- function(agents, method="even", focus=1) {
 #*
 #*** FIRM VALUATION ***#
 #*
-calc_market_value <- function(agents, SRoR, time) {
-    # calculates the market value based on Baron's formulation
+calc_debits <- function(dt_f, dt_w, t) {
+    # join firm and well attributes
+    dt_e <- dt_f[dt_w, on="firmID"]
 
-    cost        <- calc_costC(agents, time, NA)                              #baseline cost
-    add_cost    <- calc_costC(agents, time) - cost                           #additional cost of mitigation
-    gas_revenue <- calc_revenueC(agents, time)$gas_revenue                   #revenue
+    # baseline operating costs
+    dt_f[dt_e[,sum(baseline_oCost), by=firmID], on="firmID", "cost":= V1]
 
-    # market_value = profit + dprofit - Ai/SRoR - cost*xi + cost*xi*SRoR
-    # (profit in this formulation does not capture the additional cost of mitigating the externality [cost*xi])
-    market_value <- agents$oil_output * Params$oil_price + (gas_revenue - cost - add_cost) +    #Net cash flow
-                    (add_cost*SRoR - (agents[, "sPressure"] / SRoR))                            #Net social value
+    # additional mitigating operating costs
+    dt_f[dt_e[(!is.na(t_switch)),
+        sum(green_add_oCost), by=firmID], on="firmID", "add_cost":= V1]
 
-    return(market_value)
-}###--------------------    END OF FUNCTION calc_market_value       --------------------###
+    # additional costs from paying off fixed mitigation expenses
+    dt_f[dt_e[(t_switch + i_horizon > t),
+            sum(green_fCost / i_horizon), by=firmID], on="firmID", "add_cost":= add_cost + V1]
+
+}###--------------------    END OF FUNCTION calc_debits             --------------------###
+
+calc_credits <- function(dt_f, dt_p, t) {
+    # capital based on cash and reserves
+    dt_f[, "capital":= calc_capital_equivC(dt_f)]
+
+    # determine industry revenues
+    industry_revenue <- calc_revenueC(dt_f, t)
+    dt_f[, c("gas_revenue"):= industry_revenue$gas_revenue]
+
+    # options projections based on current markets
+    dt_p[dt_f, on="firmID", "revenue":=
+            gas_revenue + (add_gas_MCF * with(industry_revenue, ifelse(meets_thresh, prices$green, prices$dirty)))]
+
+}###--------------------    END OF FUNCTION calc_credits            --------------------###
 
 build_permutations <- function(firmIDs) {
     portfolio_permutations <- wells[firmID %in% firmIDs][,
@@ -89,17 +106,17 @@ build_permutations <- function(firmIDs) {
 
 }###--------------------    END OF FUNCTION build_permutations      --------------------###
 
-optimize_strategy <- function(portfolio_permutations, SRoR) {
+optimize_strategy <- function(dt_p) {
     #determines if the possible harm of social pressure outweighs the cost of mitigating the externality
     # minimum cost configuration
     # MIN GREEN CONFIG, MIN CONFIG
     # GREEN CONFIG AVOIDS HARM, OTHER CHEAPEST
     # choose between max profit portfolios with and without mitigation
-    portfolio_permutations[, "best":= (revenue-cost)==max(revenue - cost), keyby=.(firmID, meets_thresh)]
+    dt_p[, "best":= (revenue-cost)==max(revenue - cost), keyby=.(firmID, meets_thresh)]
     # if the possible harm outweighs the cost, exercise the mitigation option
     #    change in cost less change in revenue
     #    possible harm from social pressure over "t_horizon"
-    portfolio_permutations[(best), "cost_harm":= ifelse(.N>1, ((diff(cost) * (1-SRoR)) - (diff(revenue) * t_horizon)) <
-                                                                ((sPressure / SRoR) * t_horizon), TRUE), by=firmID]
+    dt_p[(best), "cost_harm":= ifelse(.N>1, ((diff(cost) * (1-Params$SRoR)) - (diff(revenue) * t_horizon)) <
+                                            ((sPressure / Params$SRoR) * t_horizon), TRUE), by=firmID]
 
 }###--------------------    END OF FUNCTION optimize_strategy       --------------------###

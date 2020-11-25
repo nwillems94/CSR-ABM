@@ -47,31 +47,20 @@ for (Run in 1:20) {
         }
 
         ## Expenses
-        # baseline operating costs
-        firms[firms[wells, on="firmID"][,
-                sum(baseline_oCost), by=firmID], on="firmID", "cost":= V1]
-        # additional mitigating operating costs
-        firms[firms[wells, on="firmID"][(!is.na(t_switch)),
-                sum(green_add_oCost), by=firmID], on="firmID", "add_cost":= V1]
-        # additional costs from paying off fixed mitigation expenses
-        firms[firms[wells, on="firmID"][(t_switch + i_horizon > t),
-                sum(green_fCost / i_horizon), by=firmID], on="firmID", "add_cost":= add_cost + V1]
-        firms[, "cost":= cost + add_cost]
+        calc_debits(firms, wells, t)
 
-        ## Income
-        firms[, "capital":= calc_capital_equivC(firms)]
-        industry_revenue <- calc_revenueC(firms, t)
-        firms[, c("gas_revenue"):= industry_revenue$gas_revenue]
+        ## Revenues
+        calc_credits(firms, portfolio_permutations, t)
 
         ## Net
-        firms[, "cash":= cash + gas_revenue + oil_output*Params$oil_price - cost]
+        # baseline cost + additional cost spent on mitigation
+        firms[, "cost":= cost + add_cost]
+        # net cashflow from oil and gas operations
+        firms[, "cash":= cash + oil_output*Params$oil_price + gas_revenue - cost]
+        # calculates the market value based on Baron's formulation zotero://select/items/0_I7NL6RPA
         # market_value = profit + dprofit - Ai/SRoR - cost*xi + cost*xi*SRoR
-        firms[, "market_value":= ((oil_output * Params$oil_price) + gas_revenue - cost) +       # Net cash flow
-                                 ((add_cost * Params$SRoR) - (sPressure / Params$SRoR))]          # social value
-
-        # options projections based on current markets
-        portfolio_permutations[firms, on="firmID", "revenue":=
-                gas_revenue + (add_gas_MCF * with(industry_revenue, ifelse(meets_thresh, prices$green, prices$dirty)))]
+        firms[, "market_value":= ((oil_output * Params$oil_price) + gas_revenue - cost) +    # Net cash flow
+                                ((add_cost * Params$SRoR) - (sPressure / Params$SRoR))]      # Net social value
 
         #### FIRM ACTIVITIES ####
         # randomly assign either development or exploration activities
@@ -83,7 +72,7 @@ for (Run in 1:20) {
         ## development
         # optimize market value by executing the best portfolio option
         #    compare profit maximizing options with and without mitigation by comparing cost to possible harm
-        optimize_strategy(portfolio_permutations, Params$SRoR)
+        optimize_strategy(portfolio_permutations)
         # update well classes to reflect new development
         wells[(portfolio_permutations[.(developers)][(best), unlist(Map("[", wellIDs, lapply(perm, as.logical)))]),
                 c("class", "t_switch"):= .("developed", t)]
