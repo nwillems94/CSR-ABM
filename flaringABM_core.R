@@ -6,14 +6,18 @@ library(data.table)
 library(Rcpp)
 sourceCpp("flaringABM_core.cpp")
 
+
+
 #*
 #*** SOCIAL PRESSURE ***#
 #*
+
 calc_total_pressure <- function(Ai) {
     # Calculate the total social pressure
 
     return(Ai)
 }###--------------------    END OF FUNCTION calc_total_pressure     --------------------###
+
 
 dist_social_pressure <- function(agents, method="even", focus=1) {
     # Determine what proportion of the total social pressure is allocated to each agent
@@ -30,9 +34,12 @@ dist_social_pressure <- function(agents, method="even", focus=1) {
 
 }###--------------------    END OF FUNCTION dist_social_pressure    --------------------###
 
+
+
 #*
 #*** FIRM VALUATION ***#
 #*
+
 calc_debits <- function(dt_f, dt_w, t) {
     # join firm and well attributes
     dt_e <- dt_f[dt_w, on="firmID"]
@@ -50,6 +57,7 @@ calc_debits <- function(dt_f, dt_w, t) {
 
 }###--------------------    END OF FUNCTION calc_debits             --------------------###
 
+
 calc_credits <- function(dt_f, dt_p, t) {
     # capital based on cash and reserves
     dt_f[, "capital":= calc_capital_equivC(dt_f)]
@@ -63,6 +71,7 @@ calc_credits <- function(dt_f, dt_p, t) {
             gas_revenue + (add_gas_MCF * with(industry_revenue, ifelse(meets_thresh, prices$green, prices$dirty)))]
 
 }###--------------------    END OF FUNCTION calc_credits            --------------------###
+
 
 build_permutations <- function(firmIDs) {
     portfolio_permutations <- wells[firmID %in% firmIDs][,
@@ -100,11 +109,17 @@ build_permutations <- function(firmIDs) {
     #    and checking if it meets the green market threshold
     portfolio_permutations[, "meets_thresh":= flaring_intensity < Params$threshold]
 
-    portfolio_permutations[, c("revenue", "best", "cost_harm"):= .(NA_real_, NA, NA)]
+    portfolio_permutations[, c("revenue", "best"):= .(NA_real_, NA)]
 
     return(portfolio_permutations)
 
 }###--------------------    END OF FUNCTION build_permutations      --------------------###
+
+
+
+#*
+#*** FIRM ACTIVITIES ***#
+#*
 
 optimize_strategy <- function(dt_p) {
     #determines if the possible harm of social pressure outweighs the cost of mitigating the externality
@@ -116,7 +131,7 @@ optimize_strategy <- function(dt_p) {
     # if the possible harm outweighs the cost, exercise the mitigation option
     #    change in cost less change in revenue
     #    possible harm from social pressure over "t_horizon"
-    dt_p[(best), "cost_harm":= ifelse(.N>1, ((diff(cost) * (1-Params$SRoR)) - (diff(revenue) * t_horizon)) <
+    dt_p[(best), "best":= ifelse(.N>1, ((diff(cost) * (1-Params$SRoR)) - (diff(revenue) * t_horizon)) <
                                             ((sPressure / Params$SRoR) * t_horizon), TRUE), by=firmID]
 
 }###--------------------    END OF FUNCTION optimize_strategy       --------------------###
