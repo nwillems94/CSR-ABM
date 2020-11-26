@@ -22,7 +22,7 @@ Params <<- list(
 )
 
 for (Run in 1:20) {
-    cat(Run, ":  ")
+    cat(Run, ":\t")
     # Initialize agents, save their initial state
     source("flaringABM_init.R")
     Params$market_size <- sum(firms$gas_output)
@@ -69,35 +69,21 @@ for (Run in 1:20) {
         # update from previous turns
         wells[class=="developed" & status=="stopped", "status":= .("producing")]
 
-        ## development
+        ## Development
         # optimize market value by executing the best portfolio option
         #    compare profit maximizing options with and without mitigation by comparing cost to possible harm
         optimize_strategy(portfolio_permutations)
-        # update well classes to reflect new development
-        wells[(portfolio_permutations[.(developers)][(best), unlist(Map("[", wellIDs, lapply(perm, as.logical)))]),
-                c("class", "t_switch"):= .("developed", t)]
-        firms[.(portfolio_permutations[.(developers)][(best & meets_thresh)]$firmID), "mitigation":= 1]
-        firms[.(portfolio_permutations[.(developers)][(best & !meets_thresh)]$firmID), "mitigation":= 0]
+        developers <- firms[!(do_e)]$firmID
+        do_development(firms, wells, portfolio_permutations, developers)
 
-        ## exploration
-        #progress undeveloped wells from previous time step
-        wells[class=="undeveloped", c("class", "status"):=
-                .(ifelse(gas_MCF>0, "underdeveloped", "developed"), "stopped")]
+        ## Exploration
+        discoverers <- sort(firms[(do_e) & (runif(.N) < Params$prob_e)]$firmID)
+        do_exploration(firms, wells, discoverers)
 
-        # 10% chance a firm finds a new well
-        done_e <- sort(firms[(do_e) & (runif(.N) < Params$prob_e)]$firmID)
-        wells[sample(which(is.na(firmID)), length(done_e)), c("firmID", "class"):= .(done_e, "undeveloped")]
-
-        #### UPDATE ATTRIBUTES ####
-        # gas output from development and exploration
-        firms[wells[firmID %in% c(developers, done_e) & class=="developed", .(sum(gas_MCF)), by=.(firmID)],
-                on="firmID", "gas_output":= .(V1)]
-        # oil output from exploration
-        firms[wells[firmID %in% done_e, .(sum(oil_BBL)), by=.(firmID)],
-                on="firmID", "oil_output":= .(V1)]
+        # Update portfolio options based on new aquisitions and developments
         # portfolio options based on new aquisitions and developments
-        portfolio_permutations <- setkey(rbind(portfolio_permutations[!(firmID %in% c(developers, done_e))],
-                                                build_permutations(c(developers, done_e))), "firmID")
+        portfolio_permutations <- setkey(rbind(portfolio_permutations[!(firmID %in% c(developers, discoverers))],
+                                                build_permutations(c(developers, discoverers))), "firmID")
     }
     cat("\n")
 }

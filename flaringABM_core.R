@@ -135,3 +135,37 @@ optimize_strategy <- function(dt_p) {
                                             ((sPressure / Params$SRoR) * t_horizon), TRUE), by=firmID]
 
 }###--------------------    END OF FUNCTION optimize_strategy       --------------------###
+
+
+do_development <- function(dt_f, dt_w, dt_p, devs) {
+    ## Update well attributes
+    # update well classes to reflect new development
+    dt_w[(dt_p[.(devs)][(best), unlist(Map("[", wellIDs, lapply(perm, as.logical)))]),
+            c("class", "t_switch"):= .("developed", t)]
+    ## Update firm attributes
+    # update firms to reflect whether they are mitigating
+    dt_f[.(dt_p[.(devs)][(best & meets_thresh)]$firmID),  "mitigation":= 1]
+    dt_f[.(dt_p[.(devs)][(best & !meets_thresh)]$firmID), "mitigation":= 0]
+    # gas output from development
+    dt_f[dt_w[firmID %in% devs & class=="developed", .(sum(gas_MCF)), by=.(firmID)],
+        on="firmID", "gas_output":= .(V1)]
+
+}###--------------------    END OF FUNCTION do_development          --------------------###
+
+
+do_exploration <- function(dt_f, dt_w, discs) {
+    # progress undeveloped wells from previous time step
+    dt_w[class=="undeveloped", c("class", "status"):=
+            .(ifelse(gas_MCF>0, "underdeveloped", "developed"), "stopped")]
+    # 10% chance a firm finds a new well
+    dt_w[sample(which(is.na(firmID)), length(discs)), c("firmID", "class"):= .(discs, "undeveloped")]
+
+    ## Update firm attributes
+    # gas output from exploration
+    dt_f[dt_w[firmID %in% discs & class=="developed", .(sum(gas_MCF)), by=.(firmID)],
+            on="firmID", "gas_output":= .(V1)]
+    # additional oil output from exploration
+    dt_f[dt_w[firmID %in% discs, .(sum(oil_BBL)), by=.(firmID)],
+            on="firmID", "oil_output":= .(V1)]
+
+}###--------------------    END OF FUNCTION do_exploration          --------------------###
