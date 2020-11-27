@@ -65,25 +65,31 @@ for (Run in 1:20) {
         #### FIRM ACTIVITIES ####
         # randomly assign either development or exploration activities
         firms[, "do_e":= runif(nrow(firms)) < Params$prop_e]
-        developers <- firms[!(do_e)]$firmID
-        # update from previous turns
+
+        # TOTDO: decide whether start production at newly developed wells
+        # progress wells from previous turns
         wells[class=="developed" & status=="stopped", "status":= .("producing")]
 
         ## Development
         # optimize market value by executing the best portfolio option
         #    compare profit maximizing options with and without mitigation by comparing cost to possible harm
-        optimize_strategy(portfolio_permutations)
-        developers <- firms[!(do_e)]$firmID
+        optimize_strategy(portfolio_permutations, firms)
+        developers <- portfolio_permutations[(best)][sapply(Map("==", perm, 1), any)]$firmID
         do_development(firms, wells, portfolio_permutations, developers)
 
         ## Exploration
         discoverers <- sort(firms[(do_e) & (runif(.N) < Params$prob_e)]$firmID)
         do_exploration(firms, wells, discoverers)
 
-        # Update portfolio options based on new aquisitions and developments
-        # portfolio options based on new aquisitions and developments
-        portfolio_permutations <- setkey(rbind(portfolio_permutations[!(firmID %in% c(developers, discoverers))],
-                                                build_permutations(c(developers, discoverers))), "firmID")
+        ## Update portfolio options
+        if (length(c(discoverers, developers)) == 0) { next }
+        # update credit parameters
+        portfolio_permutations[firms[!(firmID %in% c(discoverers, developers))],
+            on="firmID", "free_capital":= capital-cost]
+        # update based on new aquisitions and developments
+        portfolio_permutations <- rbind(portfolio_permutations[!(firmID %in% c(discoverers, developers))],
+                                                build_permutations(c(developers, discoverers)))
+        setkey(portfolio_permutations, firmID, meets_thresh)
     }
     cat("\n")
 }

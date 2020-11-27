@@ -93,8 +93,6 @@ build_permutations <- function(firmIDs) {
     portfolio_permutations[, "cost":=
             wells[unique(wellIDs), sapply(Map("*", .(green_add_oCost + green_fCost / unique(i_horizon)), perm), sum)],
         by=firmID]
-    #    eliminate those which are out of budget
-    portfolio_permutations <- portfolio_permutations[cost < free_capital]
 
     # calculate revenue given by exercising each option
     # base revenue
@@ -111,6 +109,8 @@ build_permutations <- function(firmIDs) {
 
     portfolio_permutations[, c("revenue", "best"):= .(NA_real_, NA)]
 
+    setkey(portfolio_permutations, firmID, meets_thresh)
+
     return(portfolio_permutations)
 
 }###--------------------    END OF FUNCTION build_permutations      --------------------###
@@ -121,31 +121,29 @@ build_permutations <- function(firmIDs) {
 #*** FIRM ACTIVITIES ***#
 #*
 
-optimize_strategy <- function(dt_p) {
-    #determines if the possible harm of social pressure outweighs the cost of mitigating the externality
-    # minimum cost configuration
-    # MIN GREEN CONFIG, MIN CONFIG
-    # GREEN CONFIG AVOIDS HARM, OTHER CHEAPEST
-    # choose between max profit portfolios with and without mitigation
-    dt_p[, "best":= (revenue-cost)==max(revenue - cost), keyby=.(firmID, meets_thresh)]
+optimize_strategy <- function(dt_p, dt_f) {
+    # determine the max profit portfolios with and without mitigation
+    #    of those which are in budget
+    dt_p[(cost < free_capital), "best":= (revenue-cost)==max(revenue - cost), by=.(firmID, meets_thresh)]
     # if the possible harm outweighs the cost, exercise the mitigation option
     #    change in cost less change in revenue
     #    possible harm from social pressure over "t_horizon"
     dt_p[(best), "best":= ifelse(.N>1, ((diff(cost) * (1-Params$SRoR)) - (diff(revenue) * t_horizon)) <
                                             ((sPressure / Params$SRoR) * t_horizon), TRUE), by=firmID]
-
+    dt_p[firmID %in% dt_f[(do_e)]$firmID, "best":= FALSE]
 }###--------------------    END OF FUNCTION optimize_strategy       --------------------###
 
 
 do_development <- function(dt_f, dt_w, dt_p, devs) {
     ## Update well attributes
     # update well classes to reflect new development
-    dt_w[(dt_p[.(devs)][(best), unlist(Map("[", wellIDs, lapply(perm, as.logical)))]),
+    dt_w[.(dt_p[(best), unlist(Map("[", wellIDs, lapply(perm, as.logical)))]),
             c("class", "t_switch"):= .("developed", t)]
     ## Update firm attributes
     # update firms to reflect whether they are mitigating
-    dt_f[.(dt_p[.(devs)][(best & meets_thresh)]$firmID),  "mitigation":= 1]
-    dt_f[.(dt_p[.(devs)][(best & !meets_thresh)]$firmID), "mitigation":= 0]
+    dt_f[.(dt_p[(best & meets_thresh)]$firmID),  "mitigation":= 1]
+    dt_f[.(dt_p[(best & !meets_thresh)]$firmID),  "mitigation":= 0]
+
     # gas output from development
     dt_f[dt_w[firmID %in% devs & class=="developed", .(sum(gas_MCF)), by=.(firmID)],
         on="firmID", "gas_output":= .(V1)]
