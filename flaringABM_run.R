@@ -2,6 +2,11 @@ library(data.table)
 
 source("flaringABM_core.R")
 
+jobID <- format(Sys.time(), "%m%d%H%M")
+logOuts <- sprintf("logs/param_log_%s.csv", jobID)
+agentOuts <- sprintf("outputs/agent_states_%s.csv", jobID)
+wellOuts <- sprintf("outputs/well_states_%s.csv", jobID)
+
 Params <<- list(
     "nagents" = 100,
     "nwells" = 1000,
@@ -30,16 +35,19 @@ for (Run in 1:20) {
     Params$green_size_rate <- with(Params, market_size / (1 + nrow(firms)/5) / (tf-t0))
 
     firms[, "RunID":=Run]
+    wells[, "RunID":=Run]
     if (Run==1) {
-        fwrite(Params, file="logs/param_log.csv")
-        fwrite(firms[, "time":=NA_integer_], file="outputs/agent_states.csv")
+        fwrite(Params, file=logOuts)
+        fwrite(firms[, "time":=NA_integer_], file=agentOuts)
+        fwrite(wells[, "time":=NA_integer_], file=wellOuts)
     }
 
     # step through time
     for (t in Params$t0:Params$tf) {
         cat(t, ", ")
         #### OUTPUT STATES ####
-        fwrite(firms[, "time":=t], file="outputs/agent_states.csv", append=TRUE)
+        fwrite(firms[, "time":=t], file=agentOuts, append=TRUE)
+        fwrite(wells[, "time":=t], file=wellOuts, append=TRUE)
 
         #### MARKETS ####
         # calculate the social pressure on each firm (begins at t=0)
@@ -99,7 +107,7 @@ for (Run in 1:20) {
 # analytics
 library(ggplot2)
 
-agent_states <- fread("outputs/agent_states.csv")
+agent_states <- fread(agentOuts)
 agent_states$RunID <- as.factor(agent_states$RunID)
 
 progress <- ggplot(agent_states, aes(x=time, color=RunID)) +
