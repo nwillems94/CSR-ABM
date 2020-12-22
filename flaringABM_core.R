@@ -47,6 +47,10 @@ calc_debits <- function(dt_f, dt_w, t) {
     # baseline operating costs
     dt_f[dt_e[,sum(baseline_oCost), by=firmID], on="firmID", "cost":= V1]
 
+    # baseline fixed cost yet to be paid off
+    dt_f[dt_e[(t_found + i_horizon > t),
+            sum(baseline_fCost) / i_horizon, by=firmID], on="firmID", "cost":= cost + V1]
+
     # additional mitigating operating costs
     dt_f[dt_e[(!is.na(t_switch)),
         sum(green_add_oCost), by=firmID], on="firmID", "add_cost":= V1]
@@ -173,12 +177,12 @@ do_development <- function(dt_f, dt_w, dt_p, devs) {
 }###--------------------    END OF FUNCTION do_development          --------------------###
 
 
-do_exploration <- function(dt_f, dt_w, discs) {
+do_exploration <- function(dt_f, dt_w, discs, time) {
     # progress undeveloped wells from previous time step
     dt_w[class=="undeveloped", c("class", "status"):=
             .(ifelse(gas_MCF>0, "underdeveloped", "developed"), "stopped")]
-    # 10% chance a firm finds a new well
-    dt_w[sample(which(is.na(firmID)), length(discs)), c("firmID", "class"):= .(discs, "undeveloped")]
+
+    dt_w[sample(which(is.na(firmID)), length(discs)), c("firmID", "class", "t_found"):= .(discs, "undeveloped", time)]
 
     ## Update firm attributes
     # gas output from exploration

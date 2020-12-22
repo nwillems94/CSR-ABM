@@ -88,7 +88,7 @@ for (Run in 1:20) {
 
         ## Exploration
         discoverers <- sort(firms[(do_e) & (runif(.N) < Params$prob_e)]$firmID)
-        do_exploration(firms, wells, discoverers)
+        do_exploration(firms, wells, discoverers, t)
 
         ## Update portfolio options
         if (length(c(discoverers, developers)) == 0) { next }

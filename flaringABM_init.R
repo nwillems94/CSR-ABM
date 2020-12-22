@@ -9,11 +9,14 @@ wells[, "oil_BBL":= sample.int(40, size=.N, replace=TRUE) + 10]
 wells[, "gas_MCF":= sample.int(40, size=.N, replace=TRUE) + 10]
 
 ## COSTS
+# standard fixed cost without mitigation
+wells[, "baseline_fCost":= pmax(rnorm(.N, mean=500, sd=100), 100)]
+
 # standard operating cost without mitigation
 wells[, "baseline_oCost":= pmax(rnorm(.N, mean=50, sd=2), 10)]
 
 # addtional fixed cost of mitigation
-wells[, "green_fCost":= pmax(rnorm(.N, mean=500, sd=100), 100)]
+wells[, "green_fCost":= pmax(rnorm(.N, mean=300, sd=100), 100)]
 
 # addtional operating cost with mitigation
 wells[, "green_add_oCost":= pmax(rnorm(.N, mean=15, sd=5), 1)]
@@ -25,6 +28,12 @@ wells[, "t_switch"] <- NA_integer_
 # initialize firms, none of whom are under social pressure or mitigating
 firms <- data.table("firmID"=1:Params$nagents, key="firmID",
                     "mitigation"=0, "sPressure"=0, "capital"=NA_real_, "market_value"=NA_real_)
+
+## TIME SCALES
+firms[, "t_horizon":= 5] #time horizon for decision making
+firms[, "i_horizon":= 4] #time horizon over which investments are paid off
+
+firms[, "do_e"] <- NA #are agents conducting exploration in this time step?
 
 # randomly assign firms to wells
 wells[sample(.N, 4*nrow(firms), replace=FALSE), "firmID":= sample(nrow(firms), 4*nrow(firms), replace=TRUE)]
@@ -57,15 +66,12 @@ firms[, "gas_revenue":= NA_real_]
 firms[firms[wells, on="firmID"][, sum(baseline_oCost), by=firmID], on="firmID", "cost":= V1]
 firms[, "add_cost":= 0]
 
+# assume firms have had assets long enough that all baseline fixed costs are paid off
+wells[!is.na(firmID), "t_found":= Params$t0 - max(firms$i_horizon) - 1]
+
 # assume firms have enough cash to cover their baseline operating costs
 firms[, "cash":= 2*cost]
 firms[, "capital":= calc_capital_equivC(firms)]
-
-## TIME SCALES
-firms[, "t_horizon":= 5] #time horizon for decision making
-firms[, "i_horizon":= 4] #time horizon over which investments are paid off
-
-firms[, "do_e"] <- NA #are agents conducting exploration in this time step?
 
 
 ### BUILD INITIAL TABLE OF POSSIBLE PERMUATIONS OF PORTFOLIO DEVELOPMENTS ###
