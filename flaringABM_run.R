@@ -18,7 +18,8 @@ Params <<- list(
     "capital_assets" = "upstream",
     # Activities
     "prop_e" = 0.5, #what proportion of firms engage in exploration activities in a given time step
-    "prob_e" = 0.1  #with what probability to exploring firms discover a new asset
+    "prob_e" = 0.1, #with what probability to exploring firms discover a new asset
+    "prob_m" = 0  #probability that a follower will mimic a leader if they observe them mitigating
 )
 
 for (Run in 1:20) {

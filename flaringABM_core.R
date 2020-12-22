@@ -121,15 +121,37 @@ build_permutations <- function(firmIDs) {
 #*** FIRM ACTIVITIES ***#
 #*
 
+find_imitators <- function(dt_f) {
+    # determine who is an imitator
+    imitators <- dt_f[, cut(market_value, breaks=quantile(market_value, probs=seq(0,1,1/3)),
+                            labels=c("follower", NA_character_, "leader"), include.lowest=TRUE)]
+    if (length(which(imitators=="leader")) != length(which(imitators=="follower"))) {
+        imitators[dt_f[which(imitators=="follower")][which.max(market_value)]$firmID] <- NA_character_
+    }
+    imitators <- dt_f[sample(which(imitators=="follower"))][
+                    (dt_f[sample(which(imitators=="leader"))]$mitigation==1)]$firmID
+
+    return(imitators[runif(length(imitators)) < Params$prob_m])
+
+}###--------------------    END OF FUNCTION find_imitators          --------------------###
+
+
 optimize_strategy <- function(dt_p, dt_f) {
     # determine the max profit portfolios with and without mitigation
     #    of those which are in budget
-    dt_p[(cost < free_capital), "best":= (revenue-cost)==max(revenue - cost), by=.(firmID, meets_thresh)]
+    dt_p[(cost < free_capital), "best":= (revenue - cost)==max(revenue - cost), by=.(firmID, meets_thresh)]
+    # imitators will mitigate even if it is not strictly more economical
+    imitators <- find_imitators(dt_f)
+    #    (as long as they can afford it)
+    imitators <- dt_p[(best)][firmID %in% imitators, .N, by=firmID][N>1]$firmID
+    dt_p[firmID %in% imitators & !meets_thresh, "best":= FALSE]
+
     # if the possible harm outweighs the cost, exercise the mitigation option
     #    change in cost less change in revenue
     #    possible harm from social pressure over "t_horizon"
     dt_p[(best), "best":= ifelse(.N>1, ((diff(cost) * (1-Params$SRoR)) - (diff(revenue) * t_horizon)) <
                                             ((sPressure / Params$SRoR) * t_horizon), TRUE), by=firmID]
+    # firms participating in exploration activities do not optimize development
     dt_p[firmID %in% dt_f[(do_e)]$firmID, "best":= FALSE]
 }###--------------------    END OF FUNCTION optimize_strategy       --------------------###
 
