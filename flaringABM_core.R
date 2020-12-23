@@ -160,15 +160,15 @@ optimize_strategy <- function(dt_p, dt_f) {
 }###--------------------    END OF FUNCTION optimize_strategy       --------------------###
 
 
-do_development <- function(dt_f, dt_w, dt_p, devs) {
+do_development <- function(dt_f, dt_w, dt_p, devs, time) {
     ## Update well attributes
     # update well classes to reflect new development
     dt_w[.(dt_p[(best), unlist(Map("[", wellIDs, lapply(perm, as.logical)))]),
-            c("class", "t_switch"):= .("developed", t)]
+            c("class", "t_switch"):= .("developed", time)]
     ## Update firm attributes
     # update firms to reflect whether they are mitigating
-    dt_f[.(dt_p[(best & meets_thresh)]$firmID),  "mitigation":= 1]
-    dt_f[.(dt_p[(best & !meets_thresh)]$firmID),  "mitigation":= 0]
+    dt_f[.(dt_p[(best &  meets_thresh)]$firmID), "mitigation":= 1]
+    dt_f[.(dt_p[(best & !meets_thresh)]$firmID), "mitigation":= 0]
 
     # gas output from development
     dt_f[dt_w[firmID %in% devs & class=="developed", .(sum(gas_MCF)), by=.(firmID)],

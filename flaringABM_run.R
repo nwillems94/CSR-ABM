@@ -84,7 +84,7 @@ for (Run in 1:20) {
         #    compare profit maximizing options with and without mitigation by comparing cost to possible harm
         optimize_strategy(portfolio_permutations, firms)
         developers <- portfolio_permutations[(best)][sapply(Map("==", perm, 1), any)]$firmID
-        do_development(firms, wells, portfolio_permutations, developers)
+        do_development(firms, wells, portfolio_permutations, developers, t)
 
         ## Exploration
         discoverers <- sort(firms[(do_e) & (runif(.N) < Params$prob_e)]$firmID)
