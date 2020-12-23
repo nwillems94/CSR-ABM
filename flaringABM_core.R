@@ -141,7 +141,8 @@ find_imitators <- function(dt_f) {
 optimize_strategy <- function(dt_p, dt_f) {
     # determine the max profit portfolios with and without mitigation
     #    of those which are in budget
-    dt_p[(cost < free_capital), "best":= (gas_revenue - cost)==max(gas_revenue - cost), by=.(firmID, meets_thresh)]
+    dt_p[, "best":= FALSE]
+    dt_p[(cost < free_capital), "best":= replace(best, which.max(gas_revenue - cost), TRUE), by=.(firmID, meets_thresh)]
     # imitators will mitigate even if it is not strictly more economical
     imitators <- find_imitators(dt_f)
     #    (as long as they can afford it)
@@ -151,8 +152,9 @@ optimize_strategy <- function(dt_p, dt_f) {
     # if the possible harm outweighs the cost, exercise the mitigation option
     #    change in cost less change in revenue
     #    possible harm from social pressure over "t_horizon"
-    dt_p[(best), "best":= ifelse(.N>1, ((diff(cost) * (1-Params$SRoR)) - (diff(gas_revenue) * t_horizon)) <
-                                            ((sPressure / Params$SRoR) * t_horizon), TRUE), by=firmID]
+    dt_p[(best), "best":= if(.N>1)
+        ifelse(((diff(cost)*(1-Params$SRoR)) - (diff(gas_revenue)*t_horizon)) < ((sPressure/Params$SRoR)*t_horizon),
+                meets_thresh, !meets_thresh), by=firmID]
     # firms participating in exploration activities do not optimize development
     dt_p[firmID %in% dt_f[(do_e)]$firmID, "best":= FALSE]
 
