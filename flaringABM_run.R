@@ -34,23 +34,24 @@ for (Run in 1:20) {
     Params$market_size <- sum(firms$gas_output)
     Params$green_size_rate <- with(Params, market_size / (1 + nrow(firms)/5) / (tf-t0))
 
-    firms[, "RunID":=Run]
-    wells[, "RunID":=Run]
+    firms[, "RunID":= Run]
+    wells[, "RunID":= Run]
     if (Run==1) {
         fwrite(Params, file=logOuts)
-        fwrite(firms[, "time":=NA_integer_], file=agentOuts)
-        fwrite(wells[, "time":=NA_integer_], file=wellOuts)
+        fwrite(firms[, "time":= NA_integer_], file=agentOuts)
+        fwrite(wells[, "time":= NA_integer_], file=wellOuts)
     }
 
     # step through time
     for (t in Params$t0:Params$tf) {
         cat(t, ", ")
         #### OUTPUT STATES ####
-        fwrite(firms[, "time":=t], file=agentOuts, append=TRUE)
-        fwrite(wells[, "time":=t], file=wellOuts, append=TRUE)
+        fwrite(firms[, "time":= t], file=agentOuts, append=TRUE)
+        fwrite(wells[, "time":= t], file=wellOuts, append=TRUE)
 
         #### MARKETS ####
-        # calculate the social pressure on each firm (begins at t=0)
+        ## Social Pressure
+        # calculate the pressure on each firm (begins at t=0)
         if (t>0) {
             dist_social_pressure(firms)
         }
@@ -61,23 +62,20 @@ for (Run in 1:20) {
         ## Revenues
         calc_credits(firms, portfolio_permutations, t)
 
-        ## Net
-        # baseline cost + additional cost spent on mitigation
-        firms[, "cost":= cost + add_cost]
+        ## Assess value
         # net cashflow from oil and gas operations
-        firms[, "cash":= cash + oil_output*Params$oil_price + gas_revenue - cost]
+        #    (revenue from oil + gas operations) - (baseline costs + additional costs spent on mitigation)
+        firms[, "cash":= cash + (oil_output*Params$oil_price + gas_revenue) - (cost + add_cost)]
         # calculates the market value based on Baron's formulation zotero://select/items/0_I7NL6RPA
         # market_value = profit + dprofit - Ai/SRoR - cost*xi + cost*xi*SRoR
-        firms[, "market_value":= ((oil_output * Params$oil_price) + gas_revenue - cost) +    # Net cash flow
-                                ((add_cost * Params$SRoR) - (sPressure / Params$SRoR))]      # Net social value
+        firms[, "market_value":= ((oil_output * Params$oil_price) + gas_revenue - cost - add_cost) +  # Net cash flow
+                                ((add_cost * Params$SRoR) - (sPressure / Params$SRoR))]               # Net social value
 
         #### FIRM ACTIVITIES ####
         # randomly assign either development or exploration activities
-        firms[, "do_e":= runif(nrow(firms)) < Params$prop_e]
+        firms[, "do_e":= runif(.N) < Params$prop_e]
 
         # TOTDO: decide whether start production at newly developed wells
-        # progress wells from previous turns
-        wells[class=="developed" & status=="stopped", "status":= .("producing")]
 
         ## Development
         # optimize market value by executing the best portfolio option
@@ -94,10 +92,10 @@ for (Run in 1:20) {
         if (length(c(discoverers, developers)) == 0) { next }
         # update credit parameters
         portfolio_permutations[firms[!(firmID %in% c(discoverers, developers))],
-            on="firmID", "free_capital":= capital-cost]
+            on="firmID", "free_capital":= capital- cost - add_cost]
         # update based on new aquisitions and developments
         portfolio_permutations <- rbind(portfolio_permutations[!(firmID %in% c(discoverers, developers))],
-                                                build_permutations(c(developers, discoverers)))
+                                        build_permutations(c(developers, discoverers)))
         setkey(portfolio_permutations, firmID, meets_thresh)
     }
     cat("\n")
