@@ -81,21 +81,22 @@ for (Run in 1:20) {
         # optimize market value by executing the best portfolio option
         #    compare profit maximizing options with and without mitigation by comparing cost to possible harm
         optimize_strategy(portfolio_permutations, firms)
-        developers <- portfolio_permutations[(best)][sapply(Map("==", perm, 1), any)]$firmID
-        do_development(firms, wells, portfolio_permutations, developers, t)
+        new_options <- portfolio_permutations[(best)][sapply(Map("==", perm, 1), any)]$firmID
+        do_development(firms, wells, portfolio_permutations, new_options, t)
 
         ## Exploration
-        discoverers <- sort(firms[(do_e) & (runif(.N) < Params$prob_e)]$firmID)
-        do_exploration(firms, wells, discoverers, t)
+        do_exploration(firms, wells, t)
+        # also revise the options of firms who's previous discoveries will enter their portfolio in the next turn
+        new_options <- sort(c(new_options, unique(wells[status=="stopped"]$firmID)))
 
         ## Update portfolio options
-        if (length(c(discoverers, developers)) == 0) { next }
+        if (length(new_options) == 0) { next }
         # update credit parameters
-        portfolio_permutations[firms[!(firmID %in% c(discoverers, developers))],
+        portfolio_permutations[firms[!(firmID %in% new_options)],
             on="firmID", "free_capital":= capital- cost - add_cost]
         # update based on new aquisitions and developments
-        portfolio_permutations <- rbind(portfolio_permutations[!(firmID %in% c(discoverers, developers))],
-                                        build_permutations(c(developers, discoverers)))
+        portfolio_permutations <- rbind(portfolio_permutations[!(firmID %in% new_options)],
+                                        build_permutations(new_options))
         setkey(portfolio_permutations, firmID, meets_thresh)
     }
     cat("\n")

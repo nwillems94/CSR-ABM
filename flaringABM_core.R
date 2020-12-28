@@ -155,8 +155,8 @@ optimize_strategy <- function(dt_p, dt_f) {
     dt_p[(best), "best":= if(.N>1)
         ifelse(((diff(cost)*(1-Params$SRoR)) - (diff(gas_revenue)*t_horizon)) < ((sPressure/Params$SRoR)*t_horizon),
                 meets_thresh, !meets_thresh), by=firmID]
-    # firms participating in exploration activities do not optimize development
-    dt_p[firmID %in% dt_f[(do_e)]$firmID, "best":= FALSE]
+    # firms participating in exploration activities do no new development
+    dt_p[firmID %in% dt_f[(do_e)]$firmID, "best":= sapply(Map("==", perm, 0), all)]
 
 }###--------------------    END OF FUNCTION optimize_strategy       --------------------###
 
@@ -164,7 +164,7 @@ optimize_strategy <- function(dt_p, dt_f) {
 do_development <- function(dt_f, dt_w, dt_p, devs, time) {
     ## Update well attributes
     # update well classes to reflect new development
-    dt_w[.(dt_p[(best), unlist(Map("[", wellIDs, lapply(perm, as.logical)))]),
+    dt_w[.(dt_p[(best)][firmID %in% devs, unlist(Map("[", wellIDs, lapply(perm, as.logical)))]),
             c("class", "t_switch"):= .("developed", time)]
     ## Update firm attributes
     # update firms to reflect whether they are mitigating
@@ -172,26 +172,35 @@ do_development <- function(dt_f, dt_w, dt_p, devs, time) {
     dt_f[.(dt_p[(best & !meets_thresh)]$firmID), "mitigation":= 0]
 
     # gas output from development
-    dt_f[dt_w[firmID %in% devs & class=="developed", .(sum(gas_MCF)), by=.(firmID)],
+    dt_f[dt_w[firmID %in% devs & class=="developed" & status=="producing", .(sum(gas_MCF)), by=.(firmID)],
         on="firmID", "gas_output":= .(V1)]
 
 }###--------------------    END OF FUNCTION do_development          --------------------###
 
 
-do_exploration <- function(dt_f, dt_w, discs, time) {
-    # progress wells from previous turns
-    dt_w[t_found==time-2, "status":= .("producing")]
-    dt_w[t_found==time-1, c("class", "status"):= .("underdeveloped", "stopped")]
-    dt_w[t_found==time-1 & gas_MCF==0, "class":= .("developed")]
+do_exploration <- function(dt_f, dt_w, time) {
+    new_discs <- dt_f[(do_e) & (runif(.N) < Params$prob_e)]$firmID
+    prev_discs <- unique(dt_w[status=="stopped"]$firmID)
 
-    dt_w[sample(which(is.na(firmID)), length(discs)), c("firmID", "class", "t_found"):= .(discs, "undeveloped", time)]
+    # progress wells from previous turns
+    #    newly discovered wells are undeveloped
+    #    in the following time step, they progress to underdeveloped with stopped production
+    #    at this point, firms can decide whether to fully develop them
+    #    in the following time step, the wells begin production
+    dt_w[status=="stopped", "status":= .("producing")]
+    dt_w[class=="undeveloped", c("class", "status"):= .("underdeveloped", "stopped")]
+    dt_w[class=="undeveloped" & gas_MCF==0, "class":= .("developed")]
+
+    # probabilistically discover new wells
+    dt_w[sample(which(is.na(firmID)), length(new_discs)),
+        c("firmID", "class", "t_found"):= .(new_discs, "undeveloped", time)]
 
     ## Update firm attributes
     # gas output from exploration
-    dt_f[dt_w[firmID %in% discs & class=="developed", .(sum(gas_MCF)), by=.(firmID)],
+    dt_f[dt_w[firmID %in% prev_discs & status=="producing" & class=="developed", .(sum(gas_MCF)), by=.(firmID)],
             on="firmID", "gas_output":= .(V1)]
     # additional oil output from exploration
-    dt_f[dt_w[firmID %in% discs, .(sum(oil_BBL)), by=.(firmID)],
+    dt_f[dt_w[firmID %in% prev_discs & status=="producing" & class!="undeveloped", .(sum(oil_BBL)), by=.(firmID)],
             on="firmID", "oil_output":= .(V1)]
 
 }###--------------------    END OF FUNCTION do_exploration          --------------------###
