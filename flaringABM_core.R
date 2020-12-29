@@ -75,7 +75,8 @@ calc_credits <- function(dt_f, dt_p, t) {
 
     # options projections based on current markets
     dt_p[dt_f, on="firmID", "gas_revenue":=
-            i.gas_revenue + (add_gas_MCF * with(industry_revenue, ifelse(meets_thresh, prices$green, prices$dirty)))]
+            i.gas_revenue + (add_gas_MCF *
+            with(industry_revenue, prices$dirty + ifelse(meets_thresh, (prices$green - prices$dirty) * prop, 0)))]
 
 }###--------------------    END OF FUNCTION calc_credits            --------------------###
 

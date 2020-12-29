@@ -22,7 +22,8 @@ List calc_market_priceC (double pd, double pg) {
 
 List calc_market_quantityC (double time) {
     List params = Environment::global_env()["Params"];
-    double qg = as<double>(params["market_size"]) * 0.02;
+    double qg = as<double>(params["market_size"]) * as<double>(params["market_prop_green"]);
+    qg += qg * as<double>(params["market_rate_green"]) * (time - as<double>(params["t0"]));
     double qd = as<double>(params["market_size"]) - qg;
     
     return List::create(_["dirty"] = qd , _["green"] = qg);
@@ -101,6 +102,8 @@ List calc_revenueC (DataFrame agents, double time) {
     List total_units = calc_market_quantityC(time);
     NumericVector green_units = dist_market_quantityC(gas_output * floor(mitigation),  total_units["green"]);
     NumericVector dirty_units = dist_market_quantityC(gas_output - green_units, total_units["dirty"]);
+    double green_prop = (as<double>(total_units["green"]) - sum(green_units)) / (as<double>(total_units["dirty"]) + as<double>(total_units["green"]));
 
-    return List::create(_["gas_revenue"] = (as<double>(prices["green"]) * green_units) + (as<double>(prices["dirty"]) * dirty_units) , _["prices"] = prices);
+    return List::create(_["gas_revenue"] = (as<double>(prices["green"]) * green_units) + (as<double>(prices["dirty"]) * dirty_units) , 
+                        _["prices"] = prices , _["prop"] = green_prop);
 }// --------------------    END OF FUNCTION calc_revenueC           --------------------###

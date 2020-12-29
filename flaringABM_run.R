@@ -19,6 +19,7 @@ Params <<- list(
     "threshold" = 0.1, # max units of gas "green" firms can flare per unit of oil produce
     "market_price_dirty" = 1,
     "market_price_green" = 1 * 1.16, # from Kitzmueller & Shimshack 16[5,20]% zotero://select/items/0_PGHV5RK7
+    "market_prop_green" = 0.02,
     "oil_price" = 16,
     "capital_assets" = "upstream",
     # Activities
@@ -31,8 +32,8 @@ for (Run in 1:20) {
     cat(Run, ":\t")
     # Initialize agents, save their initial state
     source("flaringABM_init.R")
-    Params$market_size <- sum(firms$gas_output)
-    Params$green_size_rate <- with(Params, market_size / (1 + nrow(firms)/5) / (tf-t0))
+    Params$market_size <- wells[status=="producing", sum(gas_MCF)] # sum(firms$gas_output)
+    Params$market_rate_green <- 0 #with(Params, market_size / (1 + nrow(firms)/5) / (tf-t0))
 
     firms[, "RunID":= Run]
     wells[, "RunID":= Run]
