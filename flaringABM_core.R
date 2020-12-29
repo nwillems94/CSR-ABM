@@ -48,14 +48,14 @@ calc_debits <- function(dt_f, dt_w, t) {
     dt_e <- dt_f[dt_w, on="firmID"]
 
     # baseline operating costs
-    dt_f[dt_e[,sum(baseline_oCost), by=firmID], on="firmID", "cost":= V1]
+    dt_f[dt_e[status=="producing", sum(baseline_oCost), by=firmID], on="firmID", "cost":= V1]
 
     # baseline fixed cost yet to be paid off
     dt_f[dt_e[(t_found + i_horizon > t),
             sum(baseline_fCost) / i_horizon, by=firmID], on="firmID", "cost":= cost + V1]
 
     # additional mitigating operating costs
-    dt_f[dt_e[(!is.na(t_switch)),
+    dt_f[dt_e[(!is.na(t_switch)) & status=="producing",
         sum(green_add_oCost), by=firmID], on="firmID", "add_cost":= V1]
 
     # additional costs from paying off fixed mitigation expenses
@@ -109,8 +109,8 @@ build_permutations <- function(firmIDs) {
 
     # determine which configurations meet the green threshold
     #    by calculating proportion of gas (that would be) flared per unit of oil production
-    dt_p[, "flaring_intensity":= (wells[unique(wellIDs), sum(gas_MCF)] - gas_MCF) /
-                                    wells[unique(wellIDs), sum(oil_BBL)], by=firmID]
+    dt_p[, "flaring_intensity":= (wells[unique(wellIDs)][status=="producing", sum(gas_MCF)] - gas_MCF) /
+                                    wells[unique(wellIDs)][status=="producing", sum(oil_BBL)], by=firmID]
     #    and checking if it meets the green market threshold
     dt_p[, "meets_thresh":= flaring_intensity < Params$threshold]
 
@@ -152,7 +152,7 @@ optimize_strategy <- function(dt_p, dt_f) {
     imitators <- find_imitators(dt_f)
     #    (as long as they can afford it)
     imitators <- dt_p[(best)][firmID %in% imitators, .N, by=firmID][N>1]$firmID
-    dt_p[firmID %in% imitators & !meets_thresh, "best":= FALSE]
+    dt_p[(firmID %in% imitators) & !meets_thresh, "best":= FALSE]
 
     # if the possible harm outweighs the cost, exercise the mitigation option
     #    change in cost less change in revenue
