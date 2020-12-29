@@ -19,7 +19,7 @@ Params <<- list(
     "threshold" = 0.1, # max units of gas "green" firms can flare per unit of oil produce
     "market_price_dirty" = 1,
     "market_price_green" = 1 * 1.16, # from Kitzmueller & Shimshack 16[5,20]% zotero://select/items/0_PGHV5RK7
-    "market_prop_green" = 0.02,
+    "market_prop_green" = 0.03, # from OShaughnessy et al. % of green electricity sales zotero://select/items/0_HW2MXA38
     "oil_price" = 16,
     "capital_assets" = "upstream",
     # Activities

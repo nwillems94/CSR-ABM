@@ -10,16 +10,16 @@ wells[, "gas_MCF":= sample.int(40, size=.N, replace=TRUE) + 10]
 
 ## COSTS
 # standard fixed cost without mitigation
-wells[, "baseline_fCost":= pmax(rnorm(.N, mean=500, sd=100), 100)]
+wells[, "baseline_fCost":= pmax(rnorm(.N, mean=5000, sd=1000), 1000)]
 
 # standard operating cost without mitigation
-wells[, "baseline_oCost":= pmax(rnorm(.N, mean=50, sd=2), 10)]
+wells[, "baseline_oCost":= pmax(rnorm(.N, mean=500, sd=20), 100)]
 
 # addtional fixed cost of mitigation
-wells[, "green_fCost":= pmax(rnorm(.N, mean=300, sd=100), 100)]
+wells[, "green_fCost":= pmax(rnorm(.N, mean=3000, sd=1000), 1000)]
 
 # addtional operating cost with mitigation
-wells[, "green_add_oCost":= pmax(rnorm(.N, mean=15, sd=5), 1)]
+wells[, "green_add_oCost":= pmax(rnorm(.N, mean=400, sd=200), 100)]
 
 # time at which well switches from underdeveloped to developed
 wells[, "t_switch"] <- NA_integer_
