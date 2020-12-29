@@ -30,6 +30,10 @@ dist_social_pressure <- function(dt_f, method="even", focus=1) {
     } else if (method=="gas_output") {
         dt_f[mitigation!=1, "sPressure":= A * gas_output / sum(gas_output)]
     }
+    # pressure on leader firms
+    else if (method=="leaders") {
+        dt_f[market_value > quantile(market_value, 2/3), "sPressure":= A / .N]
+    }
 
 }###--------------------    END OF FUNCTION dist_social_pressure    --------------------###
 
@@ -131,9 +135,9 @@ find_imitators <- function(dt_f) {
         imitators[dt_f[which(imitators=="follower")][which.max(market_value)]$firmID] <- NA_character_
     }
     imitators <- dt_f[sample(which(imitators=="follower"))][
-                    (dt_f[sample(which(imitators=="leader"))]$mitigation==1)]$firmID
-
-    return(imitators[runif(length(imitators)) < Params$prob_m])
+                        (dt_f[sample(which(imitators=="leader"))]$mitigation==1)][
+                            runif(.N) < Params$prob_m]$firmID
+    return(imitators)
 
 }###--------------------    END OF FUNCTION find_imitators          --------------------###
 
