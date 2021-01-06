@@ -114,7 +114,7 @@ build_permutations <- function(firmIDs) {
     #    and checking if it meets the green market threshold
     dt_p[, "meets_thresh":= flaring_intensity < Params$threshold]
 
-    dt_p[, c("gas_revenue", "best"):= .(NA_real_, NA)]
+    dt_p[, c("gas_revenue", "best", "economical"):= .(NA_real_, NA, NA)]
 
     setkey(dt_p, firmID, meets_thresh)
 
@@ -148,6 +148,10 @@ optimize_strategy <- function(dt_p, dt_f) {
     #    of those which are in budget
     dt_p[, "best":= FALSE]
     dt_p[(cost < free_capital), "best":= replace(best, which.max(gas_revenue - cost), TRUE), by=.(firmID, meets_thresh)]
+
+    # is gas capture economical even without social pressure?
+    dt_p[best==TRUE, "economical":= ifelse(.N>1, diff(cost) < diff(gas_revenue)*t_horizon, NA), by=firmID]
+
     # imitators will mitigate even if it is not strictly more economical
     imitators <- find_imitators(dt_f)
     #    (as long as they can afford it)
@@ -172,9 +176,10 @@ do_development <- function(dt_f, dt_w, dt_p, devs, time) {
     dt_w[.(dt_p[(best)][firmID %in% devs, unlist(Map("[", wellIDs, lapply(perm, as.logical)))]),
             c("class", "t_switch"):= .("developed", time)]
     ## Update firm attributes
-    # update firms to reflect whether they are mitigating
-    dt_f[.(dt_p[(best &  meets_thresh)]$firmID), "mitigation":= 1]
-    dt_f[.(dt_p[(best & !meets_thresh)]$firmID), "mitigation":= 0]
+    # whether they are mitigating and if
+    #    they are doing so because of simple economics (besides social pressure)
+    dt_f[dt_p[best==TRUE], on="firmID", c("mitigation","economizer"):=
+        .(as.numeric(meets_thresh), meets_thresh & ifelse(is.na(economical), economizer, economical))]
 
     # gas output from development
     dt_f[dt_w[firmID %in% devs & class=="developed" & status=="producing", .(sum(gas_MCF)), by=.(firmID)],

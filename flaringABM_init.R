@@ -27,7 +27,8 @@ wells[, "t_switch"] <- NA_integer_
 ### ASSIGN AGENT ATTRIBUTES ###
 # initialize firms, none of whom are under social pressure or mitigating
 firms <- data.table("firmID"=1:Params$nagents, key="firmID",
-                    "mitigation"=0, "sPressure"=0, "capital"=NA_real_, "market_value"=NA_real_)
+                    "mitigation"=0, "economizer"=NA, "sPressure"=0,
+                    "capital"=NA_real_, "market_value"=NA_real_)
 
 ## TIME SCALES
 firms[, "t_horizon":= 5] #time horizon for decision making
