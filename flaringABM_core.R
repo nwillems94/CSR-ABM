@@ -93,7 +93,7 @@ build_permutations <- function(firmIDs) {
 
     # a well's class can only increase (ie underdeveloped --> developed, developed -/-> underdeveloped)
     #    a 1 represents an additonal cost (ie developing an underdeveloped well),
-    #    a 0 represents status-quo (ie an underdeveloped well that stays that way)
+    #    a 0 represents status-quo (ie an [under]developed well that stays that way)
     dt_p[, "perm":= .(Map("-", perm, class))]
     dt_p <- dt_p[!sapply(Map("<", perm, 0), any)]
 
@@ -155,17 +155,17 @@ optimize_strategy <- function(dt_p, dt_f) {
     # imitators will mitigate even if it is not strictly more economical
     imitators <- find_imitators(dt_f)
     #    (as long as they can afford it)
-    imitators <- dt_p[(best)][firmID %in% imitators, .N, by=firmID][N>1]$firmID
-    dt_p[(firmID %in% imitators) & !meets_thresh, "best":= FALSE]
+    imitators <- dt_p[best==TRUE][firmID %in% imitators, .N, by=firmID][N>1]$firmID
+    dt_p[(firmID %in% imitators) & meets_thresh==FALSE, "best":= FALSE]
 
     # if the possible harm outweighs the cost, exercise the mitigation option
     #    change in cost less change in revenue
     #    possible harm from social pressure over "t_horizon"
-    dt_p[(best), "best":= if(.N>1)
+    dt_p[best==TRUE, "best":= if(.N>1)
         ifelse(((diff(cost)*(1-Params$SRoR)) - (diff(gas_revenue)*t_horizon)) < ((sPressure/Params$SRoR)*t_horizon),
                 meets_thresh, !meets_thresh), by=firmID]
     # firms participating in exploration activities do no new development
-    dt_p[firmID %in% dt_f[(do_e)]$firmID, "best":= sapply(Map("==", perm, 0), all)]
+    dt_p[firmID %in% dt_f[do_e==TRUE]$firmID, "best":= sapply(Map("==", perm, 0), all)]
 
 }###--------------------    END OF FUNCTION optimize_strategy       --------------------###
 
@@ -173,7 +173,7 @@ optimize_strategy <- function(dt_p, dt_f) {
 do_development <- function(dt_f, dt_w, dt_p, devs, time) {
     ## Update well attributes
     # update well classes to reflect new development
-    dt_w[.(dt_p[(best)][firmID %in% devs, unlist(Map("[", wellIDs, lapply(perm, as.logical)))]),
+    dt_w[.(dt_p[best==TRUE][firmID %in% devs, unlist(Map("[", wellIDs, lapply(perm, as.logical)))]),
             c("class", "t_switch"):= .("developed", time)]
     ## Update firm attributes
     # whether they are mitigating and if
@@ -189,7 +189,7 @@ do_development <- function(dt_f, dt_w, dt_p, devs, time) {
 
 
 do_exploration <- function(dt_f, dt_w, time) {
-    new_discs <- dt_f[(do_e) & (runif(.N) < Params$prob_e)]$firmID
+    new_discs <- dt_f[(do_e==TRUE) & (runif(.N) < Params$prob_e)]$firmID
     prev_discs <- unique(dt_w[status=="stopped"]$firmID)
 
     # progress wells from previous turns

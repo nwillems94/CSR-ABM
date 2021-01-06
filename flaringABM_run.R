@@ -82,7 +82,7 @@ for (Run in 1:20) {
         # optimize market value by executing the best portfolio option
         #    compare profit maximizing options with and without mitigation by comparing cost to possible harm
         optimize_strategy(portfolio_permutations, firms)
-        new_options <- portfolio_permutations[(best)][sapply(Map("==", perm, 1), any)]$firmID
+        new_options <- portfolio_permutations[best==TRUE][sapply(Map("==", perm, 1), any)]$firmID
         do_development(firms, wells, portfolio_permutations, new_options, t)
 
         ## Exploration
