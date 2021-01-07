@@ -44,24 +44,26 @@ for (Run in 1:20) {
     }
 
     # step through time
-    for (t in Params$t0:Params$tf) {
-        cat(t, ", ")
+    for (ti in Params$t0:Params$tf) {
+        cat(ti, ", ")
+        wells[, "time":= ti]
+        firms[, "time":= ti]
         #### OUTPUT STATES ####
-        fwrite(firms[, "time":= t], file=agentOuts, append=TRUE)
-        fwrite(wells[, "time":= t], file=wellOuts, append=TRUE)
+        fwrite(firms, file=agentOuts, append=TRUE)
+        fwrite(wells, file=wellOuts, append=TRUE)
 
         #### MARKETS ####
         ## Social Pressure
-        # calculate the pressure on each firm (begins at t=0)
-        if (t>0) {
+        # calculate the pressure on each firm (begins at time 0)
+        if (ti>0) {
             dist_social_pressure(firms)
         }
 
         ## Expenses
-        calc_debits(firms, wells, t)
+        calc_debits(firms, wells, ti)
 
         ## Revenues
-        calc_credits(firms, portfolio_permutations, t)
+        calc_credits(firms, portfolio_permutations, ti)
 
         ## Assess value
         # net cashflow from oil and gas operations
@@ -83,10 +85,10 @@ for (Run in 1:20) {
         #    compare profit maximizing options with and without mitigation by comparing cost to possible harm
         optimize_strategy(portfolio_permutations, firms)
         new_options <- portfolio_permutations[best==TRUE][sapply(Map("==", perm, 1), any)]$firmID
-        do_development(firms, wells, portfolio_permutations, new_options, t)
+        do_development(firms, wells, portfolio_permutations, new_options, ti)
 
         ## Exploration
-        do_exploration(firms, wells, t)
+        do_exploration(firms, wells, ti)
         # also revise the options of firms who's previous discoveries will enter their portfolio in the next turn
         new_options <- sort(c(new_options, unique(wells[status=="stopped"]$firmID)))
 

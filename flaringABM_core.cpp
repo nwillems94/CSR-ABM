@@ -20,10 +20,10 @@ List calc_market_priceC (double pd, double pg) {
     return List::create(_["dirty"] = pd , _["green"] = pg);
 }// --------------------    END OF FUNCTION calc_market_priceC      --------------------###
 
-List calc_market_quantityC (double time) {
+List calc_market_quantityC (double ti) {
     List params = Environment::global_env()["Params"];
     double qg = as<double>(params["market_size"]) * as<double>(params["market_prop_green"]);
-    qg += qg * as<double>(params["market_rate_green"]) * (time - as<double>(params["t0"]));
+    qg += qg * as<double>(params["market_rate_green"]) * (ti - as<double>(params["t0"]));
     double qd = as<double>(params["market_size"]) - qg;
     
     return List::create(_["dirty"] = qd , _["green"] = qg);
@@ -75,7 +75,7 @@ NumericVector calc_capital_equivC (DataFrame agents) {
 }
 
 // [[Rcpp::export]]
-NumericVector calc_costC (DataFrame agents, double time, NumericVector t_switch=NumericVector()) {
+NumericVector calc_costC (DataFrame agents, double ti, NumericVector t_switch=NumericVector()) {
     //Determine the cost at "time", assuming the firm transitions to the green market at "switch_time"
     NumericVector switch_time;
     if (t_switch.size()==0) {
@@ -86,20 +86,19 @@ NumericVector calc_costC (DataFrame agents, double time, NumericVector t_switch=
 
     NumericVector green_fCost = agents["green_fCost"], oCost = agents["oCost"], i_horizon = agents["i_horizon"];
     NumericVector green_add_oCost = ifelse(is_na(switch_time), 0.0, as<NumericVector>(agents["green_add_oCost"]));
-    //LogicalVector cost_binary = ifelse(is_na(switch_time), 0.0, switch_time < i_horizon - time);
-    LogicalVector cost_binary = ifelse(is_na(switch_time), 0.0, switch_time + i_horizon > time);
+    LogicalVector cost_binary = ifelse(is_na(switch_time), 0.0, switch_time + i_horizon > ti);
     
     //assume the fixed cost is paid off equally over i_horizon years
     return (as<NumericVector>(cost_binary) * green_fCost / i_horizon) + oCost + green_add_oCost;
 }// --------------------    END OF FUNCTION calc_costC              --------------------###
 
 // [[Rcpp::export]]
-List calc_revenueC (DataFrame agents, double time) {
+List calc_revenueC (DataFrame agents, double ti) {
     NumericVector gas_output = agents["gas_output"], mitigation = agents["mitigation"];
     List params = Environment::global_env()["Params"];
 
     List prices = calc_market_priceC(params["market_price_dirty"], params["market_price_green"]);
-    List total_units = calc_market_quantityC(time);
+    List total_units = calc_market_quantityC(ti);
     NumericVector green_units = dist_market_quantityC(gas_output * floor(mitigation),  total_units["green"]);
     NumericVector dirty_units = dist_market_quantityC(gas_output - green_units, total_units["dirty"]);
     double green_prop = (as<double>(total_units["green"]) - sum(green_units)) / (as<double>(total_units["dirty"]) + as<double>(total_units["green"]));

@@ -43,7 +43,7 @@ dist_social_pressure <- function(dt_f, method="even", focus=1) {
 #*** FIRM VALUATION ***#
 #*
 
-calc_debits <- function(dt_f, dt_w, t) {
+calc_debits <- function(dt_f, dt_w, ti) {
     # join firm and well attributes
     dt_e <- dt_f[dt_w, on="firmID"]
 
@@ -51,7 +51,7 @@ calc_debits <- function(dt_f, dt_w, t) {
     dt_f[dt_e[status=="producing", sum(baseline_oCost), by=firmID], on="firmID", "cost":= V1]
 
     # baseline fixed cost yet to be paid off
-    dt_f[dt_e[(t_found + i_horizon > t),
+    dt_f[dt_e[(t_found + i_horizon > ti),
             sum(baseline_fCost) / i_horizon, by=firmID], on="firmID", "cost":= cost + V1]
 
     # additional mitigating operating costs
@@ -59,18 +59,18 @@ calc_debits <- function(dt_f, dt_w, t) {
         sum(green_add_oCost), by=firmID], on="firmID", "add_cost":= V1]
 
     # additional costs from paying off fixed mitigation expenses
-    dt_f[dt_e[(t_switch + i_horizon > t),
+    dt_f[dt_e[(t_switch + i_horizon > ti),
             sum(green_fCost / i_horizon), by=firmID], on="firmID", "add_cost":= add_cost + V1]
 
 }###--------------------    END OF FUNCTION calc_debits             --------------------###
 
 
-calc_credits <- function(dt_f, dt_p, t) {
+calc_credits <- function(dt_f, dt_p, ti) {
     # capital based on cash and reserves
     dt_f[, "capital":= calc_capital_equivC(dt_f)]
 
     # determine industry revenues
-    industry_revenue <- calc_revenueC(dt_f, t)
+    industry_revenue <- calc_revenueC(dt_f, ti)
     dt_f[, "green_gas_output":= industry_revenue$green_units]
     dt_f[, "gas_revenue":= industry_revenue$gas_revenue]
 
@@ -171,11 +171,11 @@ optimize_strategy <- function(dt_p, dt_f) {
 }###--------------------    END OF FUNCTION optimize_strategy       --------------------###
 
 
-do_development <- function(dt_f, dt_w, dt_p, devs, time) {
+do_development <- function(dt_f, dt_w, dt_p, devs, ti) {
     ## Update well attributes
     # update well classes to reflect new development
     dt_w[.(dt_p[best==TRUE][firmID %in% devs, unlist(Map("[", wellIDs, lapply(perm, as.logical)))]),
-            c("class", "t_switch"):= .("developed", time)]
+            c("class", "t_switch"):= .("developed", ti)]
     ## Update firm attributes
     # whether they are mitigating and if
     #    they are doing so because of simple economics (besides social pressure)
@@ -189,7 +189,7 @@ do_development <- function(dt_f, dt_w, dt_p, devs, time) {
 }###--------------------    END OF FUNCTION do_development          --------------------###
 
 
-do_exploration <- function(dt_f, dt_w, time) {
+do_exploration <- function(dt_f, dt_w, ti) {
     new_discs <- dt_f[(do_e==TRUE) & (runif(.N) < Params$prob_e)]$firmID
     prev_discs <- unique(dt_w[status=="stopped"]$firmID)
 
@@ -204,7 +204,7 @@ do_exploration <- function(dt_f, dt_w, time) {
 
     # probabilistically discover new wells
     dt_w[sample(which(is.na(firmID)), length(new_discs)),
-        c("firmID", "class", "t_found"):= .(new_discs, "undeveloped", time)]
+        c("firmID", "class", "t_found"):= .(new_discs, "undeveloped", ti)]
 
     ## Update firm attributes
     # gas output from exploration
