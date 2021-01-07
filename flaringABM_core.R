@@ -71,6 +71,7 @@ calc_credits <- function(dt_f, dt_p, t) {
 
     # determine industry revenues
     industry_revenue <- calc_revenueC(dt_f, t)
+    dt_f[, "green_gas_output":= industry_revenue$green_units]
     dt_f[, "gas_revenue":= industry_revenue$gas_revenue]
 
     # options projections based on current markets

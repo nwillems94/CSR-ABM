@@ -61,7 +61,7 @@ firms[, "ref_capacity":= sample.int(40, size=.N, replace=TRUE) + 10]
 
 firms[, c("gas_output", "oil_output"):= wells[!is.na(firmID), .(sum(gas_MCF * ifelse(class=="developed",1,0)),
                                                                 sum(oil_BBL)), keyby=.(firmID)][,-"firmID"]]
-firms[, "gas_revenue":= NA_real_]
+firms[, c("green_gas_output", "gas_revenue"):= .(0, NA_real_)]
 
 ## COSTS
 firms[firms[wells, on="firmID"][, sum(baseline_oCost), by=firmID], on="firmID", "cost":= V1]

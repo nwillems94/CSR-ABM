@@ -105,5 +105,5 @@ List calc_revenueC (DataFrame agents, double time) {
     double green_prop = (as<double>(total_units["green"]) - sum(green_units)) / (as<double>(total_units["dirty"]) + as<double>(total_units["green"]));
 
     return List::create(_["gas_revenue"] = (as<double>(prices["green"]) * green_units) + (as<double>(prices["dirty"]) * dirty_units) , 
-                        _["prices"] = prices , _["prop"] = green_prop);
+                        _["green_units"] = green_units, _["prices"] = prices , _["prop"] = green_prop);
 }// --------------------    END OF FUNCTION calc_revenueC           --------------------###
