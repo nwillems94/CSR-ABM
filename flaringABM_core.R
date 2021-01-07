@@ -105,13 +105,13 @@ build_permutations <- function(firmIDs) {
 
     # calculate revenue given by exercising each option
     # base revenue
-    dt_p[, "gas_MCF":= sapply(lapply(Map("+", class, perm), "*", wells[unique(wellIDs), gas_MCF]), sum), by=firmID]
+    dt_p[, "gas_MCF":= sapply(lapply(Map("+", class, perm), "*", wells[first(wellIDs), gas_MCF]), sum), by=firmID]
     dt_p[, "add_gas_MCF":= .SD[, "gas_MCF"] - .SD[1]$gas_MCF, by=firmID]
 
     # determine which configurations meet the green threshold
     #    by calculating proportion of gas (that would be) flared per unit of oil production
-    dt_p[, "flaring_intensity":= (wells[unique(wellIDs)][status=="producing", sum(gas_MCF)] - gas_MCF) /
-                                    wells[unique(wellIDs)][status=="producing", sum(oil_BBL)], by=firmID]
+    dt_p[, "flaring_intensity":= (wells[first(wellIDs), sum(gas_MCF)] - gas_MCF) /
+                                    wells[first(wellIDs), sum(oil_BBL)], by=firmID]
     #    and checking if it meets the green market threshold
     dt_p[, "meets_thresh":= flaring_intensity < Params$threshold]
 
