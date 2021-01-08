@@ -35,35 +35,63 @@ for (Run in 1:20) {
     Params$market_size <- wells[status=="producing", sum(gas_MCF)] # sum(firms$gas_output)
     Params$market_rate_green <- 0 #with(Params, market_size / (1 + nrow(firms)/5) / (tf-t0))
 
-    firms[, "RunID":= Run]
-    wells[, "RunID":= Run]
-    if (Run==1) {
-        fwrite(Params, file=logOuts)
-        fwrite(firms[, "time":= NA_integer_], file=agentOuts)
-        fwrite(wells[, "time":= NA_integer_], file=wellOuts)
-    }
+    firms[, c("RunID", "time"):= .(Run, Params$t0-1)]
+    wells[, c("RunID", "time"):= .(Run, Params$t0-1)]
+    fwrite(Params, file=logOuts, append=(Run!=1))
+    fwrite(firms, file=agentOuts, append=(Run!=1))
+    fwrite(wells, file=wellOuts, append=(Run!=1))
 
     # step through time
     for (ti in Params$t0:Params$tf) {
         cat(ti, ", ")
         wells[, "time":= ti]
         firms[, "time":= ti]
-        #### OUTPUT STATES ####
-        fwrite(firms, file=agentOuts, append=TRUE)
-        fwrite(wells, file=wellOuts, append=TRUE)
-
-        #### MARKETS ####
-        ## Social Pressure
-        # calculate the pressure on each firm (begins at time 0)
+        ## Calculate the Social Pressure on each firm (begins at time 0)
         if (ti>0) {
             dist_social_pressure(firms)
         }
+        ## Update portfolio options
+        if (length(options_changed) > 0) {
+            # update credit parameters
+            portfolio_permutations[firms[!(firmID %in% options_changed)], on="firmID",
+                                    "free_capital":= capital - cost - add_cost]
+            # update based on new aquisitions and developments
+            portfolio_permutations <- rbind(portfolio_permutations[!(firmID %in% options_changed)],
+                                            build_permutations(options_changed))
+            setkey(portfolio_permutations, firmID, meets_thresh)
+        }
+        # project options revenue based on previous market conditions
+        portfolio_permutations[firms, on="firmID", "gas_revenue":=
+                                i.gas_revenue + (add_gas_MCF *
+                                with(industry_revenue, prices$dirty +
+                                    ifelse(meets_thresh, (prices$green - prices$dirty) * prop, 0)))]
 
+        #### FIRM ACTIVITIES ####
+        # randomly assign either development or exploration activities
+        firms[, "do_e":= runif(.N) < Params$prop_e]
+        # compare profit maximizing options with and without mitigation by comparing cost to possible harm
+        optimize_strategy(portfolio_permutations, firms)
+
+        # TOTDO: decide whether start production at newly developed wells
+
+        ## Development
+        # optimize market value by executing the best portfolio option
+        #   firms who's strategy calls for new development
+        options_changed <- portfolio_permutations[best==TRUE][sapply(Map("==", perm, 1), any)]$firmID
+        do_development(firms, wells, portfolio_permutations, options_changed, ti)
+
+        ## Exploration
+        do_exploration(firms, wells, ti)
+        # also revise the options of
+        #   firms who's previous discoveries will enter their portfolio in the next turn
+        options_changed <- sort(unique(c(options_changed, wells[status=="stopped"]$firmID)))
+
+        #### MARKETS ####
         ## Expenses
         calc_debits(firms, wells, ti)
 
         ## Revenues
-        calc_credits(firms, portfolio_permutations, ti)
+        industry_revenue <- calc_credits(firms, ti)
 
         ## Assess value
         # net cashflow from oil and gas operations
@@ -74,37 +102,12 @@ for (Run in 1:20) {
         firms[, "market_value":= ((oil_output * Params$oil_price) + gas_revenue - cost - add_cost) +  # Net cash flow
                                 ((add_cost * Params$SRoR) - (sPressure / Params$SRoR))]               # Net social value
 
-        #### FIRM ACTIVITIES ####
-        # randomly assign either development or exploration activities
-        firms[, "do_e":= runif(.N) < Params$prop_e]
-
-        # TOTDO: decide whether start production at newly developed wells
-
-        ## Development
-        # optimize market value by executing the best portfolio option
-        #    compare profit maximizing options with and without mitigation by comparing cost to possible harm
-        optimize_strategy(portfolio_permutations, firms)
-        new_options <- portfolio_permutations[best==TRUE][sapply(Map("==", perm, 1), any)]$firmID
-        do_development(firms, wells, portfolio_permutations, new_options, ti)
-
-        ## Exploration
-        do_exploration(firms, wells, ti)
-        # also revise the options of firms who's previous discoveries will enter their portfolio in the next turn
-        new_options <- sort(c(new_options, unique(wells[status=="stopped"]$firmID)))
-
-        ## Update portfolio options
-        if (length(new_options) == 0) { next }
-        # update credit parameters
-        portfolio_permutations[firms[!(firmID %in% new_options)],
-            on="firmID", "free_capital":= capital- cost - add_cost]
-        # update based on new aquisitions and developments
-        portfolio_permutations <- rbind(portfolio_permutations[!(firmID %in% new_options)],
-                                        build_permutations(new_options))
-        setkey(portfolio_permutations, firmID, meets_thresh)
+        #### OUTPUT STATES ####
+        fwrite(firms, file=agentOuts, append=TRUE)
+        fwrite(wells, file=wellOuts, append=TRUE)
     }
     cat("\n")
 }
-
 
 # analytics
 library(ggplot2)

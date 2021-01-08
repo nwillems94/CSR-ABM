@@ -70,10 +70,15 @@ firms[, "add_cost":= 0]
 # assume firms have had assets long enough that all baseline fixed costs are paid off
 wells[!is.na(firmID), "t_found":= Params$t0 - max(firms$i_horizon) - 1]
 
+### DETERMINE INTIAL MARKET CONDITIONS ###
 # assume firms have enough cash to cover their baseline operating costs
 firms[, "cash":= 2*cost]
 firms[, "capital":= calc_capital_equivC(firms)]
+# initially there is no social pressure, and no firms are mitigating
+firms[, "market_value":= ((oil_output * Params$oil_price) - cost)]
 
-
-### BUILD INITIAL TABLE OF POSSIBLE PERMUATIONS OF PORTFOLIO DEVELOPMENTS ###
 portfolio_permutations <- build_permutations(firms$firmID)
+
+industry_revenue <- with(Params, list("prices"=list("dirty"=market_price_dirty, "green"=market_price_green),
+                                    "prop"=market_prop_green))
+options_changed <- c()

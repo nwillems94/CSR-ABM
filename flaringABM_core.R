@@ -65,7 +65,7 @@ calc_debits <- function(dt_f, dt_w, ti) {
 }###--------------------    END OF FUNCTION calc_debits             --------------------###
 
 
-calc_credits <- function(dt_f, dt_p, ti) {
+calc_credits <- function(dt_f, ti) {
     # capital based on cash and reserves
     dt_f[, "capital":= calc_capital_equivC(dt_f)]
 
@@ -74,10 +74,7 @@ calc_credits <- function(dt_f, dt_p, ti) {
     dt_f[, "green_gas_output":= industry_revenue$green_units]
     dt_f[, "gas_revenue":= industry_revenue$gas_revenue]
 
-    # options projections based on current markets
-    dt_p[dt_f, on="firmID", "gas_revenue":=
-            i.gas_revenue + (add_gas_MCF *
-            with(industry_revenue, prices$dirty + ifelse(meets_thresh, (prices$green - prices$dirty) * prop, 0)))]
+    return(industry_revenue)
 
 }###--------------------    END OF FUNCTION calc_credits            --------------------###
 
