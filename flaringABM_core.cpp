@@ -101,8 +101,8 @@ List calc_revenueC (DataFrame agents, double ti) {
     List total_units = calc_market_quantityC(ti);
     NumericVector green_units = dist_market_quantityC(gas_output * floor(mitigation),  total_units["green"]);
     NumericVector dirty_units = dist_market_quantityC(gas_output - green_units, total_units["dirty"]);
-    double green_prop = (as<double>(total_units["green"]) - sum(green_units)) / (as<double>(total_units["dirty"]) + as<double>(total_units["green"]));
-
+    double green_coeff = (as<double>(total_units["green"]) - sum(green_units)) / (as<double>(total_units["dirty"]) + as<double>(total_units["green"]));
+    green_coeff *= as<double>(prices["green"]) - as<double>(prices["dirty"]);
     return List::create(_["gas_revenue"] = (as<double>(prices["green"]) * green_units) + (as<double>(prices["dirty"]) * dirty_units) , 
-                        _["green_units"] = green_units, _["prices"] = prices , _["prop"] = green_prop);
+                        _["green_units"] = green_units, _["prices"] = prices  , _["green_coeff"] = green_coeff);
 }// --------------------    END OF FUNCTION calc_revenueC           --------------------###

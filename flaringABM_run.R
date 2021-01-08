@@ -61,10 +61,8 @@ for (Run in 1:20) {
             setkey(portfolio_permutations, firmID, meets_thresh)
         }
         # project options revenue based on previous market conditions
-        portfolio_permutations[firms, on="firmID", "gas_revenue":=
-                                i.gas_revenue + (add_gas_MCF *
-                                with(industry_revenue, prices$dirty +
-                                    ifelse(meets_thresh, (prices$green - prices$dirty) * prop, 0)))]
+        portfolio_permutations[firms, on="firmID", "gas_revenue":= i.gas_revenue +
+                            (add_gas_MCF * with(industry_revenue, prices$dirty + ifelse(meets_thresh, green_coeff, 0)))]
 
         #### FIRM ACTIVITIES ####
         # randomly assign either development or exploration activities

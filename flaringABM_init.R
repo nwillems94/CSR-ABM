@@ -79,6 +79,6 @@ firms[, "market_value":= ((oil_output * Params$oil_price) - cost)]
 
 portfolio_permutations <- build_permutations(firms$firmID)
 
-industry_revenue <- with(Params, list("prices"=list("dirty"=market_price_dirty, "green"=market_price_green),
-                                    "prop"=market_prop_green))
+industry_revenue <- with(Params, list("prices"= list("dirty"= market_price_dirty),
+                                    "green_coeff"= (market_price_green - market_price_dirty) * market_prop_green))
 options_changed <- c()
