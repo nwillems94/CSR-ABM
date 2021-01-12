@@ -22,6 +22,7 @@ calc_total_pressure <- function(Ai) {
 dist_social_pressure <- function(dt_f, method="even", focus=1) {
     # Determine what proportion of the total social pressure is allocated to each agent
     A <- calc_total_pressure(Params$Activism)
+    dt_f[, "sPressure":= 0]
 
     if (method=="even") {
         dt_f[mitigation!=1, "sPressure":= A / .N]
@@ -128,8 +129,8 @@ build_permutations <- function(firmIDs) {
 
 find_imitators <- function(dt_f) {
     # determine who is an imitator
-    imitators <- dt_f[, cut(market_value, breaks=quantile(market_value, probs=seq(0,1,1/3)),
-                            labels=c("follower", NA_character_, "leader"), include.lowest=TRUE)]
+    imitators <- dt_f[, cut(rank(market_value, ties.method="first"),
+                        breaks=3, labels=c("follower", NA_character_, "leader"))]
     if (length(which(imitators=="leader")) != length(which(imitators=="follower"))) {
         imitators[dt_f[which(imitators=="follower")][which.max(market_value)]$firmID] <- NA_character_
     }
@@ -145,7 +146,8 @@ optimize_strategy <- function(dt_p, dt_f) {
     # determine the max profit portfolios with and without mitigation
     #    of those which are in budget
     dt_p[, "best":= FALSE]
-    dt_p[(cost < free_capital), "best":= replace(best, which.max(gas_revenue - cost), TRUE), by=.(firmID, meets_thresh)]
+    dt_p[(cost < free_capital | cost==0),
+            "best":= replace(best, which.max(gas_revenue - cost), TRUE), by=.(firmID, meets_thresh)]
 
     # is gas capture economical even without social pressure?
     dt_p[best==TRUE, "economical":= ifelse(.N>1, diff(cost) < diff(gas_revenue)*t_horizon, NA), by=firmID]
@@ -196,8 +198,7 @@ do_exploration <- function(dt_f, dt_w, ti) {
     #    at this point, firms can decide whether to fully develop them
     #    in the following time step, the wells begin production
     dt_w[status=="stopped", "status":= .("producing")]
-    dt_w[class=="undeveloped", c("class", "status"):= .("underdeveloped", "stopped")]
-    dt_w[class=="undeveloped" & gas_MCF==0, "class":= .("developed")]
+    dt_w[class=="undeveloped", c("class", "status"):= .(ifelse(gas_MCF==0, "developed", "underdeveloped"), "stopped")]
 
     # probabilistically discover new wells
     dt_w[sample(which(is.na(firmID)), length(new_discs)),
