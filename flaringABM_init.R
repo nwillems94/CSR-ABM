@@ -13,7 +13,7 @@ wells[, "gas_MCF":= sample.int(40, size=.N, replace=TRUE) + 10]
 wells[, "baseline_fCost":= pmax(rnorm(.N, mean=5000, sd=1000), 1000)]
 
 # standard operating cost without mitigation
-wells[, "baseline_oCost":= pmax(rnorm(.N, mean=500, sd=20), 100)]
+wells[, "baseline_oCost":= pmin(pmax(rnorm(.N, mean=500, sd=20), 100), oil_BBL*Params$oil_price)]
 
 # addtional fixed cost of mitigation
 wells[, "green_fCost":= pmax(rnorm(.N, mean=3000, sd=1000), 1000)]
