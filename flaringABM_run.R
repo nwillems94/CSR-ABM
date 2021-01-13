@@ -48,10 +48,8 @@ for (Run in 1:20) {
         cat(ti, ", ")
         wells[, "time":= ti]
         firms[, "time":= ti]
-        ## Calculate the Social Pressure on each firm (begins at time 0)
-        if (ti>0) {
-            dist_social_pressure(firms)
-        }
+
+        #### STAGING ####
         ## Update portfolio options
         if (length(options_changed) > 0) {
             # update credit parameters
@@ -87,6 +85,11 @@ for (Run in 1:20) {
         options_changed <- sort(unique(c(options_changed, wells[status=="stopped"]$firmID)))
 
         #### MARKETS ####
+        ## Apply Social Pressure to each firm (beginning at time 0)
+        if (ti > 0) {
+            dist_social_pressure(firms)
+        }
+
         ## Expenses
         calc_debits(firms, wells, ti)
 

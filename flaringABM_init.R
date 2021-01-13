@@ -27,7 +27,7 @@ wells[, "t_switch"] <- NA_integer_
 ### ASSIGN AGENT ATTRIBUTES ###
 # initialize firms, none of whom are under social pressure or mitigating
 firms <- data.table("firmID"=1:Params$nagents, key="firmID",
-                    "mitigation"=0, "economizer"=NA, "sPressure"=0,
+                    "mitigation"=0, "economizer"=NA, "sPressure"=NA_real_,
                     "capital"=NA_real_, "market_value"=NA_real_)
 
 ## TIME SCALES
@@ -52,6 +52,9 @@ while (min(well_count)==0) {
 #           stopped
 wells[!is.na(firmID), c("class", "status"):= .(ifelse(gas_MCF>0, "underdeveloped", "developed"), "producing")]
 
+# assume firms have had assets long enough that all baseline fixed costs are paid off
+wells[!is.na(firmID), "t_found":= Params$t0 - max(firms$i_horizon) - 1]
+
 # Attributes from Hartley 2013: zotero://select/items/1_IKQGEEBK
 # oil & gas reserves as a proxy for     upstream capital
 firms[, c("oil_reserves", "gas_reserves"):= 1]
@@ -59,24 +62,24 @@ firms[, c("oil_reserves", "gas_reserves"):= 1]
 # refining capacity as a proxy for      downstream capital
 firms[, "ref_capacity":= sample.int(40, size=.N, replace=TRUE) + 10]
 
-firms[, c("gas_output", "oil_output"):= wells[!is.na(firmID), .(sum(gas_MCF * ifelse(class=="developed",1,0)),
-                                                                sum(oil_BBL)), keyby=.(firmID)][,-"firmID"]]
-firms[, c("green_gas_output", "gas_revenue"):= .(0, NA_real_)]
-
-## COSTS
-firms[firms[wells, on="firmID"][, sum(baseline_oCost), by=firmID], on="firmID", "cost":= V1]
-firms[, "add_cost":= 0]
-
-# assume firms have had assets long enough that all baseline fixed costs are paid off
-wells[!is.na(firmID), "t_found":= Params$t0 - max(firms$i_horizon) - 1]
+firms[wells[!is.na(firmID), .(sum(oil_BBL), sum(gas_MCF * ifelse(class=="developed",1,0))), by=firmID], on="firmID",
+        c("oil_output", "gas_output"):= .(V1, V2)]
 
 ### DETERMINE INTIAL MARKET CONDITIONS ###
+firms[wells[, sum(baseline_oCost), by=firmID], on="firmID", "cost":= V1]
+# start with no firms capturing gas
+firms[, c("add_cost", "green_gas_output"):= 0]
+firms[, "gas_revenue":= gas_output * Params$market_price_dirty]
+
 # assume firms have enough cash to cover their baseline operating costs
 firms[, "cash":= 2*cost]
 firms[, "capital":= calc_capital_equivC(firms)]
+
 # initially there is no social pressure, and no firms are mitigating
+firms[, "sPressure":=0]
 firms[, "market_value":= ((oil_output * Params$oil_price) - cost)]
 
+# build initial portfolios
 portfolio_permutations <- build_permutations(firms$firmID)
 
 industry_revenue <- with(Params, list("prices"= list("dirty"= market_price_dirty),
