@@ -22,8 +22,7 @@ List calc_market_priceC (double pd, double pg) {
 
 List calc_market_quantityC (double ti) {
     List params = Environment::global_env()["Params"];
-    double qg = as<double>(params["market_size"]) * as<double>(params["market_prop_green"]);
-    qg += qg * as<double>(params["market_rate_green"]) * (ti - as<double>(params["t0"]));
+    double qg = as<double>(params["market_size"]) * as<NumericVector>(params["market_prop_green"])[ti - as<double>(params["t0"])];
     double qd = as<double>(params["market_size"]) - qg;
     
     return List::create(_["dirty"] = qd , _["green"] = qg);

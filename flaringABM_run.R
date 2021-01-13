@@ -19,7 +19,6 @@ Params <<- list(
     "threshold" = 0.1, # max units of gas "green" firms can flare per unit of oil produce
     "market_price_dirty" = 1,
     "market_price_green" = 1 * 1.16, # from Kitzmueller & Shimshack 16[5,20]% zotero://select/items/0_PGHV5RK7
-    "market_prop_green" = 0.03, # from OShaughnessy et al. % of green electricity sales zotero://select/items/0_HW2MXA38
     "oil_price" = 16,
     "capital_assets" = "upstream",
     # Activities
@@ -27,17 +26,20 @@ Params <<- list(
     "prob_e" = 0.1, #with what probability to exploring firms discover a new asset
     "prob_m" = 0  #probability that a follower will mimic a leader if they observe them mitigating
 )
+# from OShaughnessy et al. 3% of electricity sales green zotero://select/items/0_HW2MXA38
+Params$market_prop_green <- with(Params, c(rep(0.03 / 2, -t0),
+                                        seq(from=0.03 / 2, to=0.03 * 3/2, length.out=tf %/% 2),
+                                        rep(0.03 * 3/2, 1 + tf - (tf %/% 2))))
 
 for (Run in 1:20) {
     cat(Run, ":\t")
     # Initialize agents, save their initial state
     source("flaringABM_init.R")
     Params$market_size <- wells[status=="producing", sum(gas_MCF)] # sum(firms$gas_output)
-    Params$market_rate_green <- 0 #with(Params, market_size / (1 + nrow(firms)/5) / (tf-t0))
 
     firms[, c("RunID", "time"):= .(Run, Params$t0-1)]
     wells[, c("RunID", "time"):= .(Run, Params$t0-1)]
-    fwrite(Params, file=logOuts, append=(Run!=1))
+    fwrite(as.data.table(t(unlist(Params))), file=logOuts, append=(Run!=1))
     fwrite(firms, file=agentOuts, append=(Run!=1))
     fwrite(wells, file=wellOuts, append=(Run!=1))
 
