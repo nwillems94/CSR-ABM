@@ -129,15 +129,18 @@ build_permutations <- function(firmIDs) {
 #*
 
 find_imitators <- function(dt_f) {
-    # determine who is an imitator
-    imitators <- dt_f[, cut(rank(market_value, ties.method="first"),
-                        breaks=3, labels=c("follower", NA_character_, "leader"))]
-    if (length(which(imitators=="leader")) != length(which(imitators=="follower"))) {
-        imitators[dt_f[which(imitators=="follower")][which.max(market_value)]$firmID] <- NA_character_
+    # determine who is an imitator based on oil market share
+    imitators <- dt_f[, .("firmID"= firmID, "market_share"= oil_output / sum(oil_output))]
+    imitators[, "position":= cut(rank(market_share, ties.method="first"),
+                                breaks=3, labels=c("follower", NA_character_, "leader"))]
+
+    if (imitators[position=="leader", .N] != imitators[position=="follower", .N]) {
+        imitators[position=="follower", "position":= replace(position, which.max(market_share), NA_character_)]
     }
-    imitators <- dt_f[sample(which(imitators=="follower"))][
-                        (dt_f[sample(which(imitators=="leader"))]$mitigation==1)][
+    imitators <- dt_f[sample(imitators[position=="follower"]$firmID)][
+                        (dt_f[sample(imitators[position=="leader"]$firmID)]$mitigation==1)][
                             runif(.N) < Params$prob_m]$firmID
+
     return(imitators)
 
 }###--------------------    END OF FUNCTION find_imitators          --------------------###
