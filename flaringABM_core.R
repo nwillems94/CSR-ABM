@@ -74,6 +74,7 @@ calc_credits <- function(dt_f, ti) {
     industry_revenue <- calc_revenueC(dt_f, ti)
     dt_f[, "green_gas_output":= industry_revenue$green_units]
     dt_f[, "gas_revenue":= industry_revenue$gas_revenue]
+    dt_f[, "oil_revenue":= oil_output * Params$oil_price]
 
     return(industry_revenue)
 
@@ -157,6 +158,7 @@ optimize_strategy <- function(dt_p, dt_f) {
     #    (as long as they can afford it)
     imitators <- dt_p[best==TRUE][firmID %in% imitators, .N, by=firmID][N>1]$firmID
     dt_p[(firmID %in% imitators) & meets_thresh==FALSE, "best":= FALSE]
+    dt_f[, "imitator":= ifelse((firmID %in% imitators), TRUE, FALSE)]
 
     # if the possible harm outweighs the cost, exercise the mitigation option
     #    change in cost less change in revenue
@@ -210,6 +212,6 @@ do_exploration <- function(dt_f, dt_w, ti) {
             on="firmID", "gas_output":= .(V1)]
     # additional oil output from exploration
     dt_f[dt_w[firmID %in% prev_discs & status=="producing" & class!="undeveloped", .(sum(oil_BBL)), by=.(firmID)],
-            on="firmID", "oil_output":= .(V1)]
+            on="firmID", c("oil_output","oil_revenue"):= .(V1, V1 * Params$oil_price)]
 
 }###--------------------    END OF FUNCTION do_exploration          --------------------###

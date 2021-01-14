@@ -26,10 +26,9 @@ wells[, "t_switch"] <- NA_integer_
 
 ### ASSIGN AGENT ATTRIBUTES ###
 # initialize firms, none of whom are under social pressure or mitigating
-firms <- data.table("firmID"=1:Params$nagents, key="firmID",
-                    "mitigation"=0, "economizer"=NA, "sPressure"=NA_real_,
-                    "capital"=NA_real_, "market_value"=NA_real_)
-
+firms <- data.table("firmID"= 1:Params$nagents, key= "firmID",
+                    "mitigation"= 0, "economizer"= NA, "imitator"= NA, "sPressure"= NA_real_,
+                    "capital"= NA_real_, "market_value"= NA_real_)
 ## TIME SCALES
 firms[, "t_horizon":= 5] #time horizon for decision making
 firms[, "i_horizon":= 4] #time horizon over which investments are paid off
@@ -63,9 +62,12 @@ firms[, c("oil_reserves", "gas_reserves"):= 1]
 firms[, "ref_capacity":= sample.int(40, size=.N, replace=TRUE) + 10]
 
 firms[wells[!is.na(firmID), .(sum(oil_BBL), sum(gas_MCF * ifelse(class=="developed",1,0))), by=firmID], on="firmID",
-        c("oil_output", "gas_output"):= .(V1, V2)]
+        c("oil_output", "oil_revenue", "gas_output"):= .(V1, V1 * Params$oil_price, V2)]
 
 ### DETERMINE INTIAL MARKET CONDITIONS ###
+firms[, "time":= Params$t0-1]
+wells[, "time":= Params$t0-1]
+
 firms[wells[, sum(baseline_oCost), by=firmID], on="firmID", "cost":= V1]
 # start with no firms capturing gas
 firms[, c("add_cost", "green_gas_output"):= 0]
@@ -77,7 +79,7 @@ firms[, "capital":= calc_capital_equivC(firms)]
 
 # initially there is no social pressure, and no firms are mitigating
 firms[, "sPressure":=0]
-firms[, "market_value":= ((oil_output * Params$oil_price) - cost)]
+firms[, "market_value":= (oil_revenue - cost)]
 
 # build initial portfolios
 portfolio_permutations <- build_permutations(firms$firmID)

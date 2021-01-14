@@ -37,15 +37,15 @@ for (Run in 1:20) {
     source("flaringABM_init.R")
     Params$market_size <- wells[status=="producing", sum(gas_MCF)] # sum(firms$gas_output)
 
-    firms[, c("RunID", "time"):= .(Run, Params$t0-1)]
-    wells[, c("RunID", "time"):= .(Run, Params$t0-1)]
+    firms[, "RunID":= Run]
+    wells[, "RunID":= Run]
     fwrite(as.data.table(t(unlist(Params))), file=logOuts, append=(Run!=1))
     fwrite(firms, file=agentOuts, append=(Run!=1))
     fwrite(wells, file=wellOuts, append=(Run!=1))
 
     # step through time
     for (ti in Params$t0:Params$tf) {
-        cat(ti, ", ")
+        cat(ti, ", ", sep = "")
         wells[, "time":= ti]
         firms[, "time":= ti]
 
@@ -99,11 +99,11 @@ for (Run in 1:20) {
         ## Assess value
         # net cashflow from oil and gas operations
         #    (revenue from oil + gas operations) - (baseline costs + additional costs spent on mitigation)
-        firms[, "cash":= cash + (oil_output*Params$oil_price + gas_revenue) - (cost + add_cost)]
+        firms[, "cash":= cash + (oil_revenue + gas_revenue) - (cost + add_cost)]
         # calculates the market value based on Baron's formulation zotero://select/items/0_I7NL6RPA
         # market_value = profit + dprofit - Ai/SRoR - cost*xi + cost*xi*SRoR
-        firms[, "market_value":= ((oil_output * Params$oil_price) + gas_revenue - cost - add_cost) +  # Net cash flow
-                                ((add_cost * Params$SRoR) - (sPressure / Params$SRoR))]               # Net social value
+        firms[, "market_value":= (oil_revenue + gas_revenue - cost - add_cost) +            # Net cash flow
+                                ((add_cost * Params$SRoR) - (sPressure / Params$SRoR))]     # Net social value
 
         #### OUTPUT STATES ####
         fwrite(firms, file=agentOuts, append=TRUE)
