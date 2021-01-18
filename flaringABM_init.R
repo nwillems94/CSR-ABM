@@ -53,6 +53,7 @@ wells[!is.na(firmID), c("class", "status"):= .(ifelse(gas_MCF>0, "underdeveloped
 
 # assume firms have had assets long enough that all baseline fixed costs are paid off
 wells[!is.na(firmID), "t_found":= Params$t0 - max(firms$i_horizon) - 1]
+firms[, "cost_CE":= 0]
 
 # Attributes from Hartley 2013: zotero://select/items/1_IKQGEEBK
 # oil & gas reserves as a proxy for     upstream capital
@@ -68,18 +69,18 @@ firms[wells[!is.na(firmID), .(sum(oil_BBL), sum(gas_MCF * ifelse(class=="develop
 firms[, "time":= Params$t0-1]
 wells[, "time":= Params$t0-1]
 
-firms[wells[, sum(baseline_oCost), by=firmID], on="firmID", "cost":= V1]
+firms[wells[, sum(baseline_oCost), by=firmID], on="firmID", "cost_O":= V1]
 # start with no firms capturing gas
-firms[, c("add_cost", "green_gas_output"):= 0]
+firms[, c("cost_M", "green_gas_output"):= 0]
 firms[, "gas_revenue":= gas_output * Params$market_price_dirty]
 
 # assume firms have enough cash to cover their baseline operating costs
-firms[, "cash":= 2*cost]
+firms[, "cash":= 2*(cost_O + cost_M)]
 firms[, "capital":= calc_capital_equivC(firms)]
 
 # initially there is no social pressure, and no firms are mitigating
 firms[, "sPressure":=0]
-firms[, "market_value":= (oil_revenue - cost)]
+firms[, "market_value":= (oil_revenue - cost_O)]
 
 # build initial portfolios
 portfolio_permutations <- build_permutations(firms$firmID)

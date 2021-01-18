@@ -49,19 +49,20 @@ calc_debits <- function(dt_f, dt_w, ti) {
     dt_e <- dt_f[dt_w, on="firmID"]
 
     # baseline operating costs
-    dt_f[dt_e[status=="producing", sum(baseline_oCost), by=firmID], on="firmID", "cost":= V1]
-
-    # baseline fixed cost yet to be paid off
-    dt_f[dt_e[(t_found + i_horizon > ti),
-            sum(baseline_fCost) / i_horizon, by=firmID], on="firmID", "cost":= cost + V1]
+    dt_f[dt_e[status=="producing", sum(baseline_oCost), by=firmID], on="firmID", "cost_O":= V1]
 
     # additional mitigating operating costs
-    dt_f[dt_e[(!is.na(t_switch)) & status=="producing",
-        sum(green_add_oCost), by=firmID], on="firmID", "add_cost":= V1]
+    dt_f[dt_e[(!is.na(t_switch)) & status=="producing", sum(green_add_oCost), by=firmID],
+            on="firmID", "cost_M":= V1]
 
-    # additional costs from paying off fixed mitigation expenses
-    dt_f[dt_e[(t_switch + i_horizon > ti),
-            sum(green_fCost / i_horizon), by=firmID], on="firmID", "add_cost":= add_cost + V1]
+    # baseline capital expenditures yet to be paid off
+    dt_f[, "cost_CE":= 0]
+    dt_f[dt_e[(t_found + i_horizon > ti), sum(baseline_fCost) / i_horizon, by=firmID],
+            on="firmID", "cost_CE":= V1]
+
+    # additional capital expenditures from paying off fixed mitigation expenses
+    dt_f[dt_e[(t_switch + i_horizon > ti), sum(green_fCost / i_horizon), by=firmID],
+            on="firmID", "cost_CE":= cost_CE + V1]
 
 }###--------------------    END OF FUNCTION calc_debits             --------------------###
 
@@ -89,7 +90,7 @@ build_permutations <- function(firmIDs) {
                                     keyby=firmID]
     # add firm attributes
     dt_p[firms[.(firmIDs)], on="firmID", c("i_horizon", "t_horizon", "sPressure", "free_capital"):=
-                                                                .(i_horizon, t_horizon, sPressure, capital-cost)]
+                                        .(i_horizon, t_horizon, sPressure, capital - cost_O - cost_M - cost_CE)]
 
     # a well's class can only increase (ie underdeveloped --> developed, developed -/-> underdeveloped)
     #    a 1 represents an additonal cost (ie developing an underdeveloped well),
@@ -97,10 +98,9 @@ build_permutations <- function(firmIDs) {
     dt_p[, "perm":= .(Map("-", perm, class))]
     dt_p <- dt_p[!sapply(Map("<", perm, 0), any)]
 
-    # calculate the additional cost associated with excercizing each option
-    dt_p[, "cost":=
-            wells[unique(wellIDs), sapply(Map("*", .(green_add_oCost + green_fCost / unique(i_horizon)), perm), sum)],
-        by=firmID]
+    # calculate the additional cost associated with excercizing each option over the time horizon
+    dt_p[, "cost_M_add":= wells[first(wellIDs), sapply(Map("*", .(green_add_oCost), perm), sum)], by=firmID]
+    dt_p[, "cost_CE_add":= wells[first(wellIDs), sapply(Map("*", .(green_fCost), perm), sum)] / i_horizon, by=firmID]
 
     # calculate revenue given by exercising each option
     # base revenue
@@ -150,11 +150,11 @@ optimize_strategy <- function(dt_p, dt_f) {
     # determine the max profit portfolios with and without mitigation
     #    of those which are in budget
     dt_p[, "best":= FALSE]
-    dt_p[(cost < free_capital | cost==0),
-            "best":= replace(best, which.max(gas_revenue - cost), TRUE), by=.(firmID, meets_thresh)]
+    dt_p[(cost_M_add + cost_CE_add < free_capital | (cost_M_add + cost_CE_add)==0),
+            "best":= replace(best, which.max(gas_revenue - cost_M_add - cost_CE_add), TRUE), by=.(firmID, meets_thresh)]
 
     # is gas capture economical even without social pressure?
-    dt_p[best==TRUE, "economical":= ifelse(.N>1, diff(cost) < diff(gas_revenue)*t_horizon, NA), by=firmID]
+    dt_p[best==TRUE, "economical":= ifelse(.N>1, diff(cost_M_add + cost_CE_add) < diff(gas_revenue)*t_horizon, NA), by=firmID]
 
     # imitators will mitigate even if it is not strictly more economical
     imitators <- find_imitators(dt_f)
@@ -165,9 +165,9 @@ optimize_strategy <- function(dt_p, dt_f) {
 
     # if the possible harm outweighs the cost, exercise the mitigation option
     #    change in cost less change in revenue
-    #    possible harm from social pressure over "t_horizon"
+    #    possible harm from social pressure
     dt_p[best==TRUE, "best":= if(.N>1)
-        ifelse(((diff(cost)*(1-Params$SRoR)) - (diff(gas_revenue)*t_horizon)) < ((sPressure/Params$SRoR)*t_horizon),
+        ifelse(((diff(cost_M_add + cost_CE_add)*(1-Params$SRoR)) - (diff(gas_revenue)*t_horizon)) < ((sPressure/Params$SRoR)*t_horizon),
                 meets_thresh, !meets_thresh), by=firmID]
     # firms participating in exploration activities do no new development
     dt_p[firmID %in% dt_f[do_e==TRUE]$firmID, "best":= sapply(Map("==", perm, 0), all)]

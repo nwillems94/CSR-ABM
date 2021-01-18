@@ -54,7 +54,7 @@ for (Run in 1:20) {
         if (length(options_changed) > 0) {
             # update credit parameters
             portfolio_permutations[firms[!(firmID %in% options_changed)], on="firmID",
-                                    "free_capital":= capital - cost - add_cost]
+                                    "free_capital":= capital - cost_O - cost_M - cost_CE]
             # update based on new aquisitions and developments
             portfolio_permutations <- rbind(portfolio_permutations[!(firmID %in% options_changed)],
                                             build_permutations(options_changed))
@@ -99,11 +99,11 @@ for (Run in 1:20) {
         ## Assess value
         # net cashflow from oil and gas operations
         #    (revenue from oil + gas operations) - (baseline costs + additional costs spent on mitigation)
-        firms[, "cash":= cash + (oil_revenue + gas_revenue) - (cost + add_cost)]
+        firms[, "cash":= cash + (oil_revenue + gas_revenue) - (cost_O + cost_M + cost_CE)]
         # calculates the market value based on Baron's formulation zotero://select/items/0_I7NL6RPA
         # market_value = profit + dprofit - Ai/SRoR - cost*xi + cost*xi*SRoR
-        firms[, "market_value":= (oil_revenue + gas_revenue - cost - add_cost) +            # Net cash flow
-                                ((add_cost * Params$SRoR) - (sPressure / Params$SRoR))]     # Net social value
+        firms[, "market_value":= ((oil_revenue + gas_revenue) - (cost_O + cost_M)) +    # Net income
+                                ((cost_M * Params$SRoR) - (sPressure / Params$SRoR))]   # Net social value
 
         #### OUTPUT STATES ####
         fwrite(firms, file=agentOuts, append=TRUE)
