@@ -56,21 +56,22 @@ NumericVector dist_market_quantityC(NumericVector max_units, double total_units)
 NumericVector calc_capital_equivC (DataFrame agents) {
     List params = Environment::global_env()["Params"];
     String capital_assets = params["capital_assets"];
-    NumericVector gas_reserves = agents["gas_reserves"], oil_reserves = agents["oil_reserves"], downstream_capital = agents["ref_capacity"];
+    NumericVector gas_reserves = agents["gas_reserves"], oil_reserves = agents["oil_reserves"];
+    NumericVector downstream_capital = agents["ref_capacity"];
     NumericVector upstream_capital = (gas_reserves * as<double>(params["market_price_dirty"])) + (oil_reserves * as<double>(params["oil_price"]));
-    NumericVector capital;
+    NumericVector capital = agents["cash"];
 
     if (capital_assets=="upstream") {
-        capital = upstream_capital;
+        capital += upstream_capital;
     }
     else if (capital_assets=="downstream") {
-        capital = downstream_capital;
+        capital += downstream_capital;
     }
     else
     {
-        capital = upstream_capital + downstream_capital;
+        capital += upstream_capital + downstream_capital;
     }
-    return (capital + as<NumericVector>(agents["cash"]));
+    return (capital);
 }
 
 // [[Rcpp::export]]

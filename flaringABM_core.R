@@ -151,10 +151,10 @@ optimize_strategy <- function(dt_p, dt_f) {
     #    of those which are in budget
     dt_p[, "best":= FALSE]
     dt_p[(cost_M_add + cost_CE_add < free_capital | (cost_M_add + cost_CE_add)==0),
-            "best":= replace(best, which.max(gas_revenue - cost_M_add - cost_CE_add), TRUE), by=.(firmID, meets_thresh)]
+            "best":= replace(best, which.max(gas_revenue - cost_M_add), TRUE), by=.(firmID, meets_thresh)]
 
     # is gas capture economical even without social pressure?
-    dt_p[best==TRUE, "economical":= ifelse(.N>1, diff(cost_M_add + cost_CE_add) < diff(gas_revenue)*t_horizon, NA), by=firmID]
+    dt_p[best==TRUE, "economical":= ifelse(.N>1, diff(cost_M_add) < diff(gas_revenue)*t_horizon, NA), by=firmID]
 
     # imitators will mitigate even if it is not strictly more economical
     imitators <- find_imitators(dt_f)
@@ -167,7 +167,7 @@ optimize_strategy <- function(dt_p, dt_f) {
     #    change in cost less change in revenue
     #    possible harm from social pressure
     dt_p[best==TRUE, "best":= if(.N>1)
-        ifelse(((diff(cost_M_add + cost_CE_add)*(1-Params$SRoR)) - (diff(gas_revenue)*t_horizon)) < ((sPressure/Params$SRoR)*t_horizon),
+        ifelse((diff(cost_M_add) * (1-Params$SRoR) - diff(gas_revenue)) < (sPressure / Params$SRoR),
                 meets_thresh, !meets_thresh), by=firmID]
     # firms participating in exploration activities do no new development
     dt_p[firmID %in% dt_f[do_e==TRUE]$firmID, "best":= sapply(Map("==", perm, 0), all)]
