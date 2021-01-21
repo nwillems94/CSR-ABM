@@ -141,6 +141,9 @@ find_imitators <- function(dt_f) {
                         (dt_f[sample(imitators[position=="leader"]$firmID)]$mitigation==1)][
                             runif(.N) < Params$prob_m]$firmID
 
+    # firms doing exploration cannot imitate
+    imitators <- dt_f[do_e==TRUE, setdiff(imitators, firmID)]
+
     return(imitators)
 
 }###--------------------    END OF FUNCTION find_imitators          --------------------###
@@ -160,8 +163,16 @@ optimize_strategy <- function(dt_p, dt_f) {
     imitators <- find_imitators(dt_f)
     #    (as long as they can afford it)
     imitators <- dt_p[best==TRUE][firmID %in% imitators, .N, by=firmID][N>1]$firmID
+
+    # imitators who are already (planning to) mitigate are not really imitators
+    imitators <- dt_p[(firmID %in% imitators) & best==TRUE,
+                        ifelse(.N==1, meets_thresh,
+                            (diff(cost_M_add) * (1-Params$SRoR) - diff(gas_revenue)) < (sPressure / Params$SRoR)),
+                        by=firmID][V1==TRUE, setdiff(imitators, unique(firmID))]
+
     dt_p[(firmID %in% imitators) & meets_thresh==FALSE, "best":= FALSE]
-    dt_f[, "imitator":= ifelse((firmID %in% imitators), TRUE, FALSE)]
+
+    dt_f[, "imitator":= (firmID %in% imitators)]
 
     # if the possible harm outweighs the cost, exercise the mitigation option
     #    change in cost less change in revenue
