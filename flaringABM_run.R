@@ -75,7 +75,7 @@ for (Run in 1:20) {
         ## Development
         # optimize market value by executing the best portfolio option
         #   firms who's strategy calls for new development
-        options_changed <- portfolio_permutations[best==TRUE][sapply(Map("==", perm, 1), any)]$firmID
+        options_changed <- portfolio_permutations[best==TRUE][sapply(lapply(perm, `==`, 1), any)]$firmID
         do_development(firms, wells, portfolio_permutations, options_changed, ti)
 
         ## Exploration

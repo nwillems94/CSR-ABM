@@ -85,26 +85,27 @@ calc_credits <- function(dt_f, ti) {
 build_permutations <- function(firmIDs) {
     dt_p <- wells[firmID %in% firmIDs][,
                                         .("wellIDs"= .(wellID),
-                                        "class"= .(ifelse(class=="developed", 1, 0)),
+                                        "classes"= .(ifelse(class=="developed", 1, 0)),
                                         "perm"= transpose(as.list(do.call(CJ, rep(list(0:1), .N))))),
                                     keyby=firmID]
     # add firm attributes
     dt_p[firms[.(firmIDs)], on="firmID", c("i_horizon", "t_horizon", "sPressure", "free_capital"):=
                                         .(i_horizon, t_horizon, sPressure, capital - cost_O - cost_M - cost_CE)]
 
-    # a well's class can only increase (ie underdeveloped --> developed, developed -/-> underdeveloped)
+    # permutations of development vectors where a well's class can only increase
+    # (ie underdeveloped --> developed, developed -/-> underdeveloped)
     #    a 1 represents an additonal cost (ie developing an underdeveloped well),
     #    a 0 represents status-quo (ie an [under]developed well that stays that way)
-    dt_p[, "perm":= .(Map("-", perm, class))]
-    dt_p <- dt_p[!sapply(Map("<", perm, 0), any)]
+    dt_p[, "perm":= .(Map(`-`, perm, classes))]
+    dt_p <- dt_p[!sapply(lapply(perm, `<`, 0), any)]
 
     # calculate the additional cost associated with excercizing each option over the time horizon
-    dt_p[, "cost_M_add":= wells[first(wellIDs), sapply(Map("*", .(green_add_oCost), perm), sum)], by=firmID]
-    dt_p[, "cost_CE_add":= wells[first(wellIDs), sapply(Map("*", .(green_fCost), perm), sum)] / i_horizon, by=firmID]
+    dt_p[, "cost_M_add":= wells[first(wellIDs), sapply(lapply(perm, `*`, green_add_oCost), sum)], by=firmID]
+    dt_p[, "cost_CE_add":= wells[first(wellIDs), sapply(lapply(perm, `*`, green_fCost), sum)] / i_horizon, by=firmID]
 
     # calculate revenue given by exercising each option
     # base revenue
-    dt_p[, "gas_MCF":= sapply(lapply(Map("+", class, perm), "*", wells[first(wellIDs), gas_MCF]), sum), by=firmID]
+    dt_p[, "gas_MCF":= sapply(lapply(Map(`+`, classes, perm), `*`, wells[first(wellIDs), gas_MCF]), sum), by=firmID]
     dt_p[, "add_gas_MCF":= .SD[, "gas_MCF"] - .SD[1]$gas_MCF, by=firmID]
 
     # determine which configurations meet the green threshold
@@ -181,7 +182,7 @@ optimize_strategy <- function(dt_p, dt_f) {
         ifelse((diff(cost_M_add) * (1-Params$SRoR) - diff(gas_revenue)) < (sPressure / Params$SRoR),
                 meets_thresh, !meets_thresh), by=firmID]
     # firms participating in exploration activities do no new development
-    dt_p[firmID %in% dt_f[do_e==TRUE]$firmID, "best":= sapply(Map("==", perm, 0), all)]
+    dt_p[firmID %in% dt_f[do_e==TRUE]$firmID, "best":= sapply(lapply(perm, `==`, 0), all)]
 
 }###--------------------    END OF FUNCTION optimize_strategy       --------------------###
 
@@ -189,7 +190,7 @@ optimize_strategy <- function(dt_p, dt_f) {
 do_development <- function(dt_f, dt_w, dt_p, devs, ti) {
     ## Update well attributes
     # update well classes to reflect new development
-    dt_w[.(dt_p[best==TRUE][firmID %in% devs, unlist(Map("[", wellIDs, lapply(perm, as.logical)))]),
+    dt_w[.(dt_p[best==TRUE][firmID %in% devs, unlist(Map(`[`, wellIDs, lapply(perm, as.logical)))]),
             c("class", "t_switch"):= .("developed", ti)]
     ## Update firm attributes
     # whether they are mitigating and if
