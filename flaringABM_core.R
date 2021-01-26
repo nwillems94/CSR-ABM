@@ -25,11 +25,11 @@ dist_social_pressure <- function(dt_f, method="even", focus=1) {
     dt_f[, "sPressure":= 0]
 
     if (method=="even") {
-        dt_f[mitigation!=1, "sPressure":= A / .N]
+        dt_f[behavior=="flaring", "sPressure":= A / .N]
     } else if (method=="focused") {
-        dt_f[(firmID %in% focus) & mitigation!=1, "sPressure":= A / .N]
+        dt_f[(firmID %in% focus) & behavior=="flaring", "sPressure":= A / .N]
     } else if (method=="gas_output") {
-        dt_f[mitigation!=1, "sPressure":= A * gas_output / sum(gas_output)]
+        dt_f[behavior=="flaring", "sPressure":= A * gas_output / sum(gas_output)]
     }
     # pressure on leader firms
     else if (method=="leaders") {
@@ -115,7 +115,7 @@ build_permutations <- function(firmIDs) {
     #    and checking if it meets the green market threshold
     dt_p[, "meets_thresh":= flaring_intensity < Params$threshold]
 
-    dt_p[, c("gas_revenue", "best", "economical"):= .(NA_real_, NA, NA)]
+    dt_p[, c("gas_revenue", "best", "economical", "imitation"):= .(NA_real_, NA, NA, NA)]
 
     setkey(dt_p, firmID, meets_thresh)
 
@@ -139,11 +139,11 @@ find_imitators <- function(dt_f) {
         imitators[position=="follower", "position":= replace(position, which.max(market_share), NA_character_)]
     }
     imitators <- dt_f[sample(imitators[position=="follower"]$firmID)][
-                        (dt_f[sample(imitators[position=="leader"]$firmID)]$mitigation==1)][
+                        (dt_f[sample(imitators[position=="leader"]$firmID)]$behavior!="flaring")][
                             runif(.N) < Params$prob_m]$firmID
 
     # firms doing exploration cannot imitate
-    imitators <- dt_f[do_e==TRUE, setdiff(imitators, firmID)]
+    imitators <- dt_f[activity=="exploration", setdiff(imitators, firmID)]
 
     return(imitators)
 
@@ -158,22 +158,21 @@ optimize_strategy <- function(dt_p, dt_f) {
             "best":= replace(best, which.max(gas_revenue - cost_M_add), TRUE), by=.(firmID, meets_thresh)]
 
     # is gas capture economical even without social pressure?
-    dt_p[best==TRUE, "economical":= ifelse(.N>1, diff(cost_M_add) < diff(gas_revenue)*t_horizon, NA), by=firmID]
-
+    dt_p[best==TRUE, "economical":= if(.N==2) diff(cost_M_add) * (1-Params$SRoR) < diff(gas_revenue)
+                                    else if (meets_thresh==TRUE) dt_f[firmID==.BY]$behavior=="economizing"
+                                    else NA, by=firmID]
     # imitators will mitigate even if it is not strictly more economical
     imitators <- find_imitators(dt_f)
-    #    (as long as they can afford it)
-    imitators <- dt_p[best==TRUE][firmID %in% imitators, .N, by=firmID][N>1]$firmID
-
-    # imitators who are already (planning to) mitigate are not really imitators
+    # imitators who are already planning to begin mitigating or only have one option are not really imitators
     imitators <- dt_p[(firmID %in% imitators) & best==TRUE,
-                        ifelse(.N==1, meets_thresh,
-                            (diff(cost_M_add) * (1-Params$SRoR) - diff(gas_revenue)) < (sPressure / Params$SRoR)),
-                        by=firmID][V1==TRUE, setdiff(imitators, unique(firmID))]
+                        if(.N==2) (diff(cost_M_add) * (1-Params$SRoR) - diff(gas_revenue)) < (sPressure / Params$SRoR)
+                        else TRUE, by=firmID][V1==TRUE, setdiff(imitators, firmID)]
+
+    dt_p[best==TRUE, "imitation":=  if (.N==2) (.BY %in% imitators)
+                                    else if (meets_thresh==TRUE) dt_f[firmID==.BY]$behavior=="imitating"
+                                    else NA, by=firmID]
 
     dt_p[(firmID %in% imitators) & meets_thresh==FALSE, "best":= FALSE]
-
-    dt_f[, "imitator":= (firmID %in% imitators)]
 
     # if the possible harm outweighs the cost, exercise the mitigation option
     #    change in cost less change in revenue
@@ -182,7 +181,7 @@ optimize_strategy <- function(dt_p, dt_f) {
         ifelse((diff(cost_M_add) * (1-Params$SRoR) - diff(gas_revenue)) < (sPressure / Params$SRoR),
                 meets_thresh, !meets_thresh), by=firmID]
     # firms participating in exploration activities do no new development
-    dt_p[firmID %in% dt_f[do_e==TRUE]$firmID, "best":= sapply(lapply(perm, `==`, 0), all)]
+    dt_p[firmID %in% dt_f[activity=="exploration"]$firmID, "best":= sapply(lapply(perm, `==`, 0), all)]
 
 }###--------------------    END OF FUNCTION optimize_strategy       --------------------###
 
@@ -195,8 +194,9 @@ do_development <- function(dt_f, dt_w, dt_p, devs, ti) {
     ## Update firm attributes
     # whether they are mitigating and if
     #    they are doing so because of simple economics (besides social pressure)
-    dt_f[dt_p[best==TRUE], on="firmID", c("mitigation","economizer"):=
-        .(as.numeric(meets_thresh), meets_thresh & ifelse(is.na(economical), economizer, economical))]
+    dt_f[dt_p[best==TRUE], on="firmID", "behavior":= ifelse(meets_thresh==TRUE, "mitigating", "flaring")]
+    dt_f[dt_p[(best & meets_thresh & economical) == TRUE], on="firmID", "behavior":= "economizing"]
+    dt_f[dt_p[(best & meets_thresh & imitation) == TRUE], on="firmID", "behavior":= "imitating"]
 
     # gas output from development
     dt_f[dt_w[firmID %in% devs & class=="developed" & status=="producing", .(sum(gas_MCF)), by=.(firmID)],
@@ -206,7 +206,7 @@ do_development <- function(dt_f, dt_w, dt_p, devs, ti) {
 
 
 do_exploration <- function(dt_f, dt_w, ti) {
-    new_discs <- dt_f[(do_e==TRUE) & (runif(.N) < Params$prob_e)]$firmID
+    new_discs <- dt_f[(activity=="exploration") & (runif(.N) < Params$prob_e)]$firmID
     prev_discs <- unique(dt_w[status=="stopped"]$firmID)
 
     # progress wells from previous turns

@@ -66,7 +66,7 @@ for (Run in 1:20) {
 
         #### FIRM ACTIVITIES ####
         # randomly assign either development or exploration activities
-        firms[, "do_e":= runif(.N) < Params$prop_e]
+        firms[, "activity":= ifelse(runif(.N) < Params$prop_e, "exploration", "development")]
         # compare profit maximizing options with and without mitigation by comparing cost to possible harm
         optimize_strategy(portfolio_permutations, firms)
 
@@ -119,5 +119,5 @@ agent_states <- fread(agentOuts)
 agent_states$RunID <- as.factor(agent_states$RunID)
 
 progress <- ggplot(agent_states, aes(x=time, color=RunID)) +
-                geom_step(aes(y=mitigation), stat="summary", fun="sum")
+                geom_step(aes(y=as.numeric(behavior!="flaring")), stat="summary", fun="sum")
 print(progress)

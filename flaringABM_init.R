@@ -25,15 +25,26 @@ wells[, "green_add_oCost":= pmax(rnorm(.N, mean=400, sd=200), 100)]
 wells[, "t_switch"] <- NA_integer_
 
 ### ASSIGN AGENT ATTRIBUTES ###
-# initialize firms, none of whom are under social pressure or mitigating
+# initialize firms
 firms <- data.table("firmID"= 1:Params$nagents, key= "firmID",
-                    "mitigation"= 0, "economizer"= NA, "imitator"= NA, "sPressure"= NA_real_,
-                    "capital"= NA_real_, "market_value"= NA_real_)
+                    # Attributes from Hartley 2013: zotero://select/items/1_IKQGEEBK
+                    # oil & gas reserves / refining capacity as proxies for upstream / downstream capital
+                    "oil_reserves"= NA_real_, "gas_reserves"= NA_real_, "ref_capacity"= NA_real_,
+                    # how much oil (BBL) and gas (MCF) does the firm produce each time step
+                    "oil_output"= NA_real_, "oil_revenue"= NA_real_,
+                    "gas_output"= NA_real_, "green_gas_output"= NA_real_, "gas_revenue"= NA_real_,
+                    # Valuations; costs include Operating, Mitigation, Capital Expenditures
+                    "cash"= NA_real_, "capital"= NA_real_, "market_value"= NA_real_,
+                    "cost_O"= NA_real_, "cost_M"= NA_real_, "cost_CE"= NA_real_, "sPressure"= NA_real_,
+                    # time horizons for decision making and over which investments are paid off
+                    "t_horizon"= NA_real_, "i_horizon"= NA_real_,
+                    # activities: exploration, development; behaviors: flaring, mitigating, economizing, imitating
+                    "activity"= NA_character_, "behavior"= NA_character_,
+                    "time"= NA_real_)
+
 ## TIME SCALES
 firms[, "t_horizon":= 5] #time horizon for decision making
 firms[, "i_horizon":= 4] #time horizon over which investments are paid off
-
-firms[, "do_e"] <- NA #are agents conducting exploration in this time step?
 
 # randomly assign firms to wells
 wells[sample(.N, 4*nrow(firms), replace=FALSE), "firmID":= sample(nrow(firms), 4*nrow(firms), replace=TRUE)]
@@ -55,7 +66,7 @@ wells[!is.na(firmID), c("class", "status"):= .(ifelse(gas_MCF>0, "underdeveloped
 wells[!is.na(firmID), "t_found":= Params$t0 - max(firms$i_horizon) - 1]
 firms[, "cost_CE":= 0]
 
-# Attributes from Hartley 2013: zotero://select/items/1_IKQGEEBK
+# Placeholders for real capital proxy values
 # oil & gas reserves as a proxy for     upstream capital
 firms[, c("oil_reserves", "gas_reserves"):= 1]
 
@@ -75,11 +86,12 @@ firms[, c("cost_M", "green_gas_output"):= 0]
 firms[, "gas_revenue":= gas_output * Params$market_price_dirty]
 
 # assume firms have enough cash to cover their baseline operating costs
-firms[, "cash":= 2*(cost_O + cost_M)]
+firms[, "cash":= 2 * (cost_O + cost_M)]
 firms[, "capital":= calc_capital_equivC(firms)]
 
 # initially there is no social pressure, and no firms are mitigating
-firms[, "sPressure":=0]
+firms[, "behavior":= "flaring"]
+firms[, "sPressure":= 0]
 firms[, "market_value":= (oil_revenue - cost_O)]
 
 # build initial portfolios

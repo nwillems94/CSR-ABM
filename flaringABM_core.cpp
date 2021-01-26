@@ -94,12 +94,13 @@ NumericVector calc_costC (DataFrame agents, double ti, NumericVector t_switch=Nu
 
 // [[Rcpp::export]]
 List calc_revenueC (DataFrame agents, double ti) {
-    NumericVector gas_output = agents["gas_output"], mitigation = agents["mitigation"];
+    NumericVector gas_output = agents["gas_output"];
+    NumericVector mitigation = sapply(as<CharacterVector>(agents["behavior"]), [](String x) -> double { return x!="flaring"; });
     List params = Environment::global_env()["Params"];
 
     List prices = calc_market_priceC(params["market_price_dirty"], params["market_price_green"]);
     List total_units = calc_market_quantityC(ti);
-    NumericVector green_units = dist_market_quantityC(gas_output * floor(mitigation),  total_units["green"]);
+    NumericVector green_units = dist_market_quantityC(gas_output * mitigation,  total_units["green"]);
     NumericVector dirty_units = dist_market_quantityC(gas_output - green_units, total_units["dirty"]);
     double green_coeff = (as<double>(total_units["green"]) - sum(green_units)) / (as<double>(total_units["dirty"]) + as<double>(total_units["green"]));
     green_coeff *= as<double>(prices["green"]) - as<double>(prices["dirty"]);
