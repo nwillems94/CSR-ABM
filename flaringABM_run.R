@@ -8,6 +8,7 @@ agentOuts <- sprintf("outputs/agent_states_%s.csv", jobID)
 wellOuts <- sprintf("outputs/well_states_%s.csv", jobID)
 
 Params <<- list(
+    "refID" = NA, # reference initialization
     "nagents" = 100,
     "nwells" = 1000,
     "t0" = -5,
@@ -34,7 +35,20 @@ Params$market_prop_green <- with(Params, c(rep(0.03 / 2, -t0),
 for (Run in 1:20) {
     cat(Run, ":\t")
     # Initialize agents, save their initial state
-    source("flaringABM_init.R")
+    if (is.na(Params$refID)) {
+        source("flaringABM_init.R")
+    } else {
+        firms <- fread(sprintf("outputs/agent_states_%s.csv", Params$refID))[time==Params$t0-1 & RunID==Run]
+        setkey(firms, firmID)
+        wells <- fread(sprintf("outputs/well_states_%s.csv", Params$refID))[time==Params$t0-1 & RunID==Run]
+        setkey(wells, wellID)
+        portfolio_permutations <- build_permutations(firms$firmID)
+
+        industry_revenue <- with(Params, list("prices"= list("dirty"= market_price_dirty),
+                                    "green_coeff"= (market_price_green - market_price_dirty) * market_prop_green[1]))
+        options_changed <- c()
+    }
+
     Params$market_size <- wells[status=="producing", sum(gas_MCF)] # sum(firms$gas_output)
 
     firms[, "RunID":= Run]
