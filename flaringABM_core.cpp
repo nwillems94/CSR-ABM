@@ -107,3 +107,15 @@ List calc_revenueC (DataFrame agents, double ti) {
     return List::create(_["gas_revenue"] = (as<double>(prices["green"]) * green_units) + (as<double>(prices["dirty"]) * dirty_units) , 
                         _["green_units"] = green_units, _["prices"] = prices  , _["green_coeff"] = green_coeff);
 }// --------------------    END OF FUNCTION calc_revenueC           --------------------###
+
+// [[Rcpp::export]]
+double calc_netm_costC (DataFrame agent_options) {
+    // calculate the net cost of mitigating: change in cost less change in revenue
+    NumericVector m = 2*(as<NumericVector>(agent_options["meets_thresh"])) - 1;
+    NumericVector  cost = m * as<NumericVector>(agent_options["cost_M_add"]),
+                revenue = m * as<NumericVector>(agent_options["gas_revenue"]);    
+    double  SRoR = as<List>(Environment::global_env()["Params"])["SRoR"];
+
+    return (std::accumulate(cost.begin(), cost.end(), 0.0) * (1 - SRoR)) - 
+            std::accumulate(revenue.begin(), revenue.end(), 0.0);
+}// --------------------    END OF FUNCTION calc_netm_costC         --------------------###

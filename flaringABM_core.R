@@ -158,15 +158,14 @@ optimize_strategy <- function(dt_p, dt_f) {
             "best":= replace(best, which.max(gas_revenue - cost_M_add), TRUE), by=.(firmID, meets_thresh)]
 
     # is gas capture economical even without social pressure?
-    dt_p[best==TRUE, "economical":= if(.N==2) diff(cost_M_add) * (1-Params$SRoR) < diff(gas_revenue)
+    dt_p[best==TRUE, "economical":= if(.N==2) calc_netm_costC(.SD) < 0
                                     else if (meets_thresh==TRUE) dt_f[firmID==.BY]$behavior=="economizing"
                                     else NA, by=firmID]
     # imitators will mitigate even if it is not strictly more economical
     imitators <- find_imitators(dt_f)
     # imitators who are already planning to begin mitigating or only have one option are not really imitators
-    imitators <- dt_p[(firmID %in% imitators) & best==TRUE,
-                        if(.N==2) (diff(cost_M_add) * (1-Params$SRoR) - diff(gas_revenue)) < sPressure
-                        else TRUE, by=firmID][V1==TRUE, setdiff(imitators, firmID)]
+    imitators <- dt_p[(firmID %in% imitators) & best==TRUE, ifelse(.N==2, calc_netm_costC(.SD) < sPressure, TRUE),
+                        by=firmID][V1==TRUE, setdiff(imitators, firmID)]
 
     dt_p[best==TRUE, "imitation":=  if (.N==2) (.BY %in% imitators)
                                     else if (meets_thresh==TRUE) dt_f[firmID==.BY]$behavior=="imitating"
@@ -174,12 +173,8 @@ optimize_strategy <- function(dt_p, dt_f) {
 
     dt_p[(firmID %in% imitators) & meets_thresh==FALSE, "best":= FALSE]
 
-    # if the possible harm outweighs the cost, exercise the mitigation option
-    #    change in cost less change in revenue
-    #    possible harm from social pressure
-    dt_p[best==TRUE, "best":= if(.N>1)
-        ifelse((diff(cost_M_add) * (1-Params$SRoR) - diff(gas_revenue)) < sPressure,
-                meets_thresh, !meets_thresh), by=firmID]
+    # if the possible threat outweighs the cost, exercise the mitigation option
+    dt_p[best==TRUE, "best":= if(.N>1) ifelse(calc_netm_costC(.SD) < sPressure, meets_thresh, !meets_thresh), by=firmID]
     # firms participating in exploration activities do no new development
     dt_p[firmID %in% dt_f[activity=="exploration"]$firmID, "best":= sapply(lapply(perm, `==`, 0), all)]
 
