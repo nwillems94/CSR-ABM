@@ -21,19 +21,19 @@ calc_total_pressure <- function(Ai) {
 
 dist_social_pressure <- function(dt_f, method="even", focus=1) {
     # Determine what proportion of the total social pressure is allocated to each agent
-    A <- calc_total_pressure(Params$Activism)
+    a <- calc_total_pressure(Params$Activism) / Params$SRoR
     dt_f[, "sPressure":= 0]
 
     if (method=="even") {
-        dt_f[behavior=="flaring", "sPressure":= A / .N]
+        dt_f[behavior=="flaring", "sPressure":= a / .N]
     } else if (method=="focused") {
-        dt_f[(firmID %in% focus) & behavior=="flaring", "sPressure":= A / .N]
+        dt_f[(firmID %in% focus) & behavior=="flaring", "sPressure":= a / .N]
     } else if (method=="gas_output") {
-        dt_f[behavior=="flaring", "sPressure":= A * gas_output / sum(gas_output)]
+        dt_f[behavior=="flaring", "sPressure":= a * gas_output / sum(gas_output)]
     }
     # pressure on leader firms
     else if (method=="leaders") {
-        dt_f[market_value > quantile(market_value, 2/3), "sPressure":= A / .N]
+        dt_f[market_value > quantile(market_value, 2/3), "sPressure":= a / .N]
     }
 
 }###--------------------    END OF FUNCTION dist_social_pressure    --------------------###
@@ -165,7 +165,7 @@ optimize_strategy <- function(dt_p, dt_f) {
     imitators <- find_imitators(dt_f)
     # imitators who are already planning to begin mitigating or only have one option are not really imitators
     imitators <- dt_p[(firmID %in% imitators) & best==TRUE,
-                        if(.N==2) (diff(cost_M_add) * (1-Params$SRoR) - diff(gas_revenue)) < (sPressure / Params$SRoR)
+                        if(.N==2) (diff(cost_M_add) * (1-Params$SRoR) - diff(gas_revenue)) < sPressure
                         else TRUE, by=firmID][V1==TRUE, setdiff(imitators, firmID)]
 
     dt_p[best==TRUE, "imitation":=  if (.N==2) (.BY %in% imitators)
@@ -178,7 +178,7 @@ optimize_strategy <- function(dt_p, dt_f) {
     #    change in cost less change in revenue
     #    possible harm from social pressure
     dt_p[best==TRUE, "best":= if(.N>1)
-        ifelse((diff(cost_M_add) * (1-Params$SRoR) - diff(gas_revenue)) < (sPressure / Params$SRoR),
+        ifelse((diff(cost_M_add) * (1-Params$SRoR) - diff(gas_revenue)) < sPressure,
                 meets_thresh, !meets_thresh), by=firmID]
     # firms participating in exploration activities do no new development
     dt_p[firmID %in% dt_f[activity=="exploration"]$firmID, "best":= sapply(lapply(perm, `==`, 0), all)]

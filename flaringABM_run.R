@@ -103,7 +103,7 @@ for (Run in 1:20) {
         # calculates the market value based on Baron's formulation zotero://select/items/0_I7NL6RPA
         # market_value = profit + dprofit - Ai/SRoR - cost*xi + cost*xi*SRoR
         firms[, "market_value":= ((oil_revenue + gas_revenue) - (cost_O + cost_M)) +    # Net income
-                                ((cost_M * Params$SRoR) - (sPressure / Params$SRoR))]   # Net social value
+                                ((cost_M * Params$SRoR) - sPressure)]                   # Net social value
 
         #### OUTPUT STATES ####
         fwrite(firms, file=agentOuts, append=TRUE)
