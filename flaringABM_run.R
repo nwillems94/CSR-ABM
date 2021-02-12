@@ -15,7 +15,6 @@ Params <<- list(
     "tf" = 20,
     # Environmental Variables
     "Activism" = 200,
-    "SRoR" = 0.8,
     # Market conditions
     "threshold" = 0.1, # max units of gas "green" firms can flare per unit of oil produce
     "market_price_dirty" = 1,
@@ -27,6 +26,10 @@ Params <<- list(
     "prob_e" = 0.1, #with what probability to exploring firms discover a new asset
     "prob_m" = 0  #probability that a follower will mimic a leader if they observe them mitigating
 )
+#social rate of return
+#    [0: no social satisfaction from holding shares or contributing to the activist
+#     1: shareholding & activist contributions are perfect substitutes for personal giving]
+Params$SRoRv <- c(rep(0, -Params$t0), rep(0.3, Params$tf + 1))
 # from OShaughnessy et al. 3% of electricity sales green zotero://select/items/0_HW2MXA38
 Params$market_prop_green <- with(Params, c(rep(0.03 / 2, -t0),
                                         seq(from=0.03 / 2, to=0.03 * 3/2, length.out=tf %/% 2),
@@ -50,6 +53,7 @@ for (Run in 1:20) {
     }
 
     Params$market_size <- wells[status=="producing", sum(gas_MCF)] # sum(firms$gas_output)
+    Params$SRoR <- NULL
 
     firms[, "RunID":= Run]
     wells[, "RunID":= Run]
@@ -64,6 +68,8 @@ for (Run in 1:20) {
         firms[, "time":= ti]
 
         #### STAGING ####
+        Params$SRoR <- with(Params, SRoRv[ti - t0 + 1])
+
         ## Update portfolio options
         if (length(options_changed) > 0) {
             # update credit parameters
