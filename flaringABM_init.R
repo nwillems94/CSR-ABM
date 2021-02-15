@@ -6,7 +6,7 @@ wells <- data.table("wellID"=1:Params$nwells, key="wellID",
 
 ## RESOURCE
 wells[, "oil_BBL":= sample.int(40, size=.N, replace=TRUE) + 10]
-wells[, "gas_MCF":= sample.int(40, size=.N, replace=TRUE) + 10]
+wells[, "gas_MCF":= sample.int(400, size=.N, replace=TRUE) + 10]
 
 ## COSTS
 # standard fixed cost without mitigation

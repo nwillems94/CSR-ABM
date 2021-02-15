@@ -11,12 +11,12 @@ Params <<- list(
     "refID" = NA, # reference initialization
     "nagents" = 100,
     "nwells" = 1000,
-    "t0" = -5,
-    "tf" = 20,
+    "t0" = -25,
+    "tf" = 60,
     # Environmental Variables
-    "Activism" = 200,
+    "Activism" = 5000,
     # Market conditions
-    "threshold" = 0.1, # max units of gas "green" firms can flare per unit of oil produce
+    "threshold" = 0.5, # max units of gas "green" firms can flare per unit of oil produced
     "market_price_dirty" = 1,
     "market_price_green" = 1 * 1.16, # from Kitzmueller & Shimshack 16[5,20]% zotero://select/items/0_PGHV5RK7
     "oil_price" = 16,
@@ -24,16 +24,16 @@ Params <<- list(
     # Activities
     "prop_e" = 0.5, #what proportion of firms engage in exploration activities in a given time step
     "prob_e" = 0.1, #with what probability to exploring firms discover a new asset
-    "prob_m" = 0  #probability that a follower will mimic a leader if they observe them mitigating
+    "prob_m" = 1 #probability that a follower will mimic a leader if they observe them mitigating
 )
 #social rate of return
 #    [0: no social satisfaction from holding shares or contributing to the activist
 #     1: shareholding & activist contributions are perfect substitutes for personal giving]
 Params$SRoRv <- c(rep(0, -Params$t0), rep(0.3, Params$tf + 1))
 # from OShaughnessy et al. 3% of electricity sales green zotero://select/items/0_HW2MXA38
-Params$market_prop_green <- with(Params, c(rep(0.03 / 2, -t0),
-                                        seq(from=0.03 / 2, to=0.03 * 3/2, length.out=tf %/% 2),
-                                        rep(0.03 * 3/2, 1 + tf - (tf %/% 2))))
+Params$market_prop_green <- with(Params, c(rep(0, -t0),
+                                        seq(from=0, to=1.5, length.out= 1 + (tf %/% 2)),
+                                        rep(1.5, tf - (tf %/% 2)))) * 0.12
 
 for (Run in 1:20) {
     cat(Run, ":\t")
