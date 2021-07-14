@@ -87,7 +87,7 @@ firms[, "gas_revenue":= gas_output * Params$market_price_dirty]
 
 # assume firms have enough cash to cover their baseline operating costs
 firms[, "cash":= 2 * (cost_O + cost_M)]
-firms[, "capital":= calc_capital_equivC(firms)]
+firms[, "capital":= calc_capital_equivC(firms, ti)]
 
 # initially there is no social pressure, and no firms are mitigating
 firms[, "behavior":= "flaring"]

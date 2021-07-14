@@ -29,7 +29,7 @@ Params <<- list(
 #social rate of return
 #    [0: no social satisfaction from holding shares or contributing to the activist
 #     1: shareholding & activist contributions are perfect substitutes for personal giving]
-Params$SRoRv <- c(rep(0, -Params$t0), rep(0.3, Params$tf + 1))
+Params$SRoR <- c(rep(0, -Params$t0), rep(0.3, Params$tf + 1))
 # from OShaughnessy et al. 3% of electricity sales green zotero://select/items/0_HW2MXA38
 Params$market_prop_green <- with(Params, c(rep(0, -t0),
                                         seq(from=0, to=1.5, length.out= 1 + (tf %/% 2)),
@@ -38,6 +38,7 @@ Params$market_prop_green <- with(Params, c(rep(0, -t0),
 for (Run in 1:20) {
     cat(Run, ":\t")
     # Initialize agents, save their initial state
+    ti <- lapply(Params, `[[` , 1)
     if (is.na(Params$refID)) {
         source("flaringABM_init.R")
     } else {
@@ -53,7 +54,6 @@ for (Run in 1:20) {
     }
 
     Params$market_size <- wells[status=="producing", sum(gas_MCF)] # sum(firms$gas_output)
-    Params$SRoR <- NULL
 
     firms[, "RunID":= Run]
     wells[, "RunID":= Run]
@@ -61,14 +61,12 @@ for (Run in 1:20) {
     fwrite(firms, file=agentOuts, append=(Run!=1))
     fwrite(wells, file=wellOuts, append=(Run!=1))
 
-    # step through time
-    for (ti in Params$t0:Params$tf) {
-        cat(ti, ", ", sep = "")
-        wells[, "time":= ti]
-        firms[, "time":= ti]
+    # step through time with appropriate parameters
+    for (ti in split(as.data.table(c("time"=list(Params$t0:Params$tf), Params)), by="time")) {
 
-        #### STAGING ####
-        Params$SRoR <- with(Params, SRoRv[ti - t0 + 1])
+        cat(ti$time, ", ", sep = "")
+        wells[, "time":= ti$time]
+        firms[, "time":= ti$time]
 
         ## Update portfolio options
         if (length(options_changed) > 0) {
@@ -96,25 +94,25 @@ for (Run in 1:20) {
         # optimize market value by executing the best portfolio option
         #   firms who's strategy calls for new development
         options_changed <- portfolio_permutations[best==TRUE][sapply(lapply(perm, `==`, 1), any)]$firmID
-        do_development(firms, wells, portfolio_permutations, options_changed, ti)
+        do_development(firms, wells, portfolio_permutations, options_changed)
 
         ## Exploration
-        do_exploration(firms, wells, ti)
+        do_exploration(firms, wells)
         # also revise the options of
         #   firms who's previous discoveries will enter their portfolio in the next turn
         options_changed <- sort(unique(c(options_changed, wells[status=="stopped"]$firmID)))
 
         #### MARKETS ####
         ## Apply Social Pressure to each firm (beginning at time 0)
-        if (ti > 0) {
+        if (ti$time > 0) {
             dist_social_pressure(firms)
         }
 
         ## Expenses
-        calc_debits(firms, wells, ti)
+        calc_debits(firms, wells)
 
         ## Revenues
-        industry_revenue <- calc_credits(firms, ti)
+        industry_revenue <- calc_credits(firms)
 
         ## Assess value
         # net cashflow from oil and gas operations
@@ -123,7 +121,7 @@ for (Run in 1:20) {
         # calculates the market value based on Baron's formulation zotero://select/items/0_I7NL6RPA
         # market_value = profit + dprofit - Ai/SRoR - cost*xi + cost*xi*SRoR
         firms[, "market_value":= ((oil_revenue + gas_revenue) - (cost_O + cost_M)) +    # Net income
-                                ((cost_M * Params$SRoR) - sPressure)]                   # Net social value
+                                ((cost_M * ti$SRoR) - sPressure)]                       # Net social value
 
         #### OUTPUT STATES ####
         fwrite(firms, file=agentOuts, append=TRUE)

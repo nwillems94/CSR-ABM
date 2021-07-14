@@ -21,7 +21,7 @@ calc_total_pressure <- function(Ai) {
 
 dist_social_pressure <- function(dt_f, method="even", focus=1) {
     # Determine what proportion of the total social pressure is allocated to each agent
-    a <- calc_total_pressure(Params$Activism) / Params$SRoR
+    a <- calc_total_pressure(ti$Activism) / ti$SRoR
     dt_f[, "sPressure":= 0]
 
     if (method=="even") {
@@ -46,7 +46,7 @@ dist_social_pressure <- function(dt_f, method="even", focus=1) {
 #*** FIRM VALUATION ***#
 #*
 
-calc_debits <- function(dt_f, dt_w, ti) {
+calc_debits <- function(dt_f, dt_w) {
     # join firm and well attributes
     dt_e <- dt_f[dt_w, on="firmID"]
 
@@ -59,25 +59,25 @@ calc_debits <- function(dt_f, dt_w, ti) {
 
     # baseline capital expenditures yet to be paid off
     dt_f[, "cost_CE":= 0]
-    dt_f[dt_e[(t_found + i_horizon > ti), sum(baseline_fCost) / i_horizon, by=firmID],
+    dt_f[dt_e[(t_found + i_horizon > ti$time), sum(baseline_fCost) / i_horizon, by=firmID],
             on="firmID", "cost_CE":= V1]
 
     # additional capital expenditures from paying off fixed mitigation expenses
-    dt_f[dt_e[(t_switch + i_horizon > ti), sum(green_fCost / i_horizon), by=firmID],
+    dt_f[dt_e[(t_switch + i_horizon > ti$time), sum(green_fCost / i_horizon), by=firmID],
             on="firmID", "cost_CE":= cost_CE + V1]
 
 }###--------------------    END OF FUNCTION calc_debits             --------------------###
 
 
-calc_credits <- function(dt_f, ti) {
+calc_credits <- function(dt_f) {
     # capital based on cash and reserves
-    dt_f[, "capital":= calc_capital_equivC(dt_f)]
+    dt_f[, "capital":= calc_capital_equivC(dt_f, ti)]
 
     # determine industry revenues
     industry_revenue <- calc_revenueC(dt_f, ti)
     dt_f[, "green_gas_output":= industry_revenue$green_units]
     dt_f[, "gas_revenue":= industry_revenue$gas_revenue]
-    dt_f[, "oil_revenue":= oil_output * Params$oil_price]
+    dt_f[, "oil_revenue":= oil_output * ti$oil_price]
 
     return(industry_revenue)
 
@@ -115,7 +115,7 @@ build_permutations <- function(firmIDs) {
     dt_p[, "flaring_intensity":= (wells[first(wellIDs), sum(gas_MCF)] - gas_MCF) /
                                     wells[first(wellIDs), sum(oil_BBL)], by=firmID]
     #    and checking if it meets the green market threshold
-    dt_p[, "meets_thresh":= flaring_intensity < Params$threshold]
+    dt_p[, "meets_thresh":= flaring_intensity < ti$threshold]
 
     dt_p[, c("gas_revenue", "best", "economical", "imitation"):= .(NA_real_, NA, NA, NA)]
 
@@ -142,7 +142,7 @@ find_imitators <- function(dt_f) {
     }
     imitators <- dt_f[sample(imitators[position=="follower"]$firmID)][
                         (dt_f[sample(imitators[position=="leader"]$firmID)]$behavior!="flaring")][
-                            runif(.N) < Params$prob_m]$firmID
+                            runif(.N) < ti$prob_m]$firmID
 
     # firms doing exploration cannot imitate
     imitators <- dt_f[activity=="exploration", setdiff(imitators, firmID)]
@@ -160,14 +160,15 @@ optimize_strategy <- function(dt_p, dt_f) {
             "best":= replace(best, which.max(gas_revenue - cost_M_add), TRUE), by=.(firmID, meets_thresh)]
 
     # is gas capture economical even without social pressure?
-    dt_p[best==TRUE, "economical":= if(.N==2) calc_netm_costC(.SD) < 0
+    dt_p[best==TRUE, "economical":= if (.N==2) calc_netm_costC(.SD, ti$SRoR) < 0
                                     else if (meets_thresh==TRUE) dt_f[firmID==.BY]$behavior=="economizing"
                                     else NA, by=firmID]
     # imitators will mitigate even if it is not strictly more economical
     imitators <- find_imitators(dt_f)
     # imitators who are already planning to begin mitigating or only have one option are not really imitators
-    imitators <- dt_p[(firmID %in% imitators) & best==TRUE, ifelse(.N==2, calc_netm_costC(.SD) < sPressure, TRUE),
-                        by=firmID][V1==TRUE, setdiff(imitators, firmID)]
+    imitators <- dt_p[(firmID %in% imitators) & best==TRUE,
+                        ifelse(.N==2, calc_netm_costC(.SD, ti$SRoR) < sPressure, TRUE), by=firmID][
+                            V1==TRUE, setdiff(imitators, firmID)]
 
     dt_p[best==TRUE, "imitation":=  if (.N==2) (.BY %in% imitators)
                                     else if (meets_thresh==TRUE) dt_f[firmID==.BY]$behavior=="imitating"
@@ -176,18 +177,19 @@ optimize_strategy <- function(dt_p, dt_f) {
     dt_p[(firmID %in% imitators) & meets_thresh==FALSE, "best":= FALSE]
 
     # if the possible threat outweighs the cost, exercise the mitigation option
-    dt_p[best==TRUE, "best":= if(.N>1) ifelse(calc_netm_costC(.SD) < sPressure, meets_thresh, !meets_thresh), by=firmID]
+    dt_p[best==TRUE, "best":= if (.N>1)
+            ifelse(calc_netm_costC(.SD, ti$SRoR) < sPressure, meets_thresh, !meets_thresh), by=firmID]
     # firms participating in exploration activities do no new development
     dt_p[firmID %in% dt_f[activity=="exploration"]$firmID, "best":= sapply(lapply(perm, `==`, 0), all)]
 
 }###--------------------    END OF FUNCTION optimize_strategy       --------------------###
 
 
-do_development <- function(dt_f, dt_w, dt_p, devs, ti) {
+do_development <- function(dt_f, dt_w, dt_p, devs) {
     ## Update well attributes
     # update well classes to reflect new development
     dt_w[.(dt_p[best==TRUE][firmID %in% devs, unlist(Map(`[`, wellIDs, lapply(perm, as.logical)))]),
-            c("class", "t_switch"):= .("developed", ti)]
+            c("class", "t_switch"):= .("developed", ti$time)]
     ## Update firm attributes
     # whether they are mitigating and if
     #    they are doing so because of simple economics (besides social pressure)
@@ -202,8 +204,8 @@ do_development <- function(dt_f, dt_w, dt_p, devs, ti) {
 }###--------------------    END OF FUNCTION do_development          --------------------###
 
 
-do_exploration <- function(dt_f, dt_w, ti) {
-    new_discs <- dt_f[(activity=="exploration") & (runif(.N) < Params$prob_e)]$firmID
+do_exploration <- function(dt_f, dt_w) {
+    new_discs <- dt_f[(activity=="exploration") & (runif(.N) < ti$prob_e)]$firmID
     prev_discs <- unique(dt_w[status=="stopped"]$firmID)
 
     # progress wells from previous turns
@@ -216,7 +218,7 @@ do_exploration <- function(dt_f, dt_w, ti) {
 
     # probabilistically discover new wells
     dt_w[sample(which(is.na(firmID)), length(new_discs)),
-        c("firmID", "class", "t_found"):= .(new_discs, "undeveloped", ti)]
+        c("firmID", "class", "t_found"):= .(new_discs, "undeveloped", ti$time)]
 
     ## Update firm attributes
     # gas output from exploration
@@ -224,6 +226,6 @@ do_exploration <- function(dt_f, dt_w, ti) {
             on="firmID", "gas_output":= .(V1)]
     # additional oil output from exploration
     dt_f[dt_w[firmID %in% prev_discs & status=="producing" & class!="undeveloped", .(sum(oil_BBL)), by=.(firmID)],
-            on="firmID", c("oil_output","oil_revenue"):= .(V1, V1 * Params$oil_price)]
+            on="firmID", c("oil_output","oil_revenue"):= .(V1, V1 * ti$oil_price)]
 
 }###--------------------    END OF FUNCTION do_exploration          --------------------###

@@ -20,9 +20,8 @@ List calc_market_priceC (double pd, double pg) {
     return List::create(_["dirty"] = pd , _["green"] = pg);
 }// --------------------    END OF FUNCTION calc_market_priceC      --------------------###
 
-List calc_market_quantityC (double ti) {
-    List params = Environment::global_env()["Params"];
-    double qg = as<double>(params["market_size"]) * as<NumericVector>(params["market_prop_green"])[ti - as<double>(params["t0"])];
+List calc_market_quantityC (List params) {
+    double qg = as<double>(params["market_size"]) * as<double>(params["market_prop_green"]);
     double qd = as<double>(params["market_size"]) - qg;
     
     return List::create(_["dirty"] = qd , _["green"] = qg);
@@ -53,8 +52,7 @@ NumericVector dist_market_quantityC(NumericVector max_units, double total_units)
 //
 
 // [[Rcpp::export]]
-NumericVector calc_capital_equivC (DataFrame agents) {
-    List params = Environment::global_env()["Params"];
+NumericVector calc_capital_equivC (DataFrame agents, List params) {
     String capital_assets = params["capital_assets"];
     NumericVector gas_reserves = agents["gas_reserves"], oil_reserves = agents["oil_reserves"];
     NumericVector downstream_capital = agents["ref_capacity"];
@@ -72,7 +70,7 @@ NumericVector calc_capital_equivC (DataFrame agents) {
         capital += upstream_capital + downstream_capital;
     }
     return (capital);
-}
+}// --------------------    END OF FUNCTION calc_capital_equivC     --------------------###
 
 // [[Rcpp::export]]
 NumericVector calc_costC (DataFrame agents, double ti, NumericVector t_switch=NumericVector()) {
@@ -93,13 +91,12 @@ NumericVector calc_costC (DataFrame agents, double ti, NumericVector t_switch=Nu
 }// --------------------    END OF FUNCTION calc_costC              --------------------###
 
 // [[Rcpp::export]]
-List calc_revenueC (DataFrame agents, double ti) {
+List calc_revenueC (DataFrame agents, List params) {
     NumericVector gas_output = agents["gas_output"];
     NumericVector mitigation = sapply(as<CharacterVector>(agents["behavior"]), [](String x) -> double { return x!="flaring"; });
-    List params = Environment::global_env()["Params"];
 
     List prices = calc_market_priceC(params["market_price_dirty"], params["market_price_green"]);
-    List total_units = calc_market_quantityC(ti);
+    List total_units = calc_market_quantityC(params);
     NumericVector green_units = dist_market_quantityC(gas_output * mitigation,  total_units["green"]);
     NumericVector dirty_units = dist_market_quantityC(gas_output - green_units, total_units["dirty"]);
     double green_coeff = (as<double>(total_units["green"]) - sum(green_units)) / (as<double>(total_units["dirty"]) + as<double>(total_units["green"]));
@@ -109,12 +106,11 @@ List calc_revenueC (DataFrame agents, double ti) {
 }// --------------------    END OF FUNCTION calc_revenueC           --------------------###
 
 // [[Rcpp::export]]
-double calc_netm_costC (DataFrame agent_options) {
+double calc_netm_costC (DataFrame agent_options, double SRoR) {
     // calculate the net cost of mitigating: change in cost less change in revenue
     NumericVector m = 2*(as<NumericVector>(agent_options["meets_thresh"])) - 1;
     NumericVector  cost = m * as<NumericVector>(agent_options["cost_M_add"]),
                 revenue = m * as<NumericVector>(agent_options["gas_revenue"]);    
-    double  SRoR = as<List>(Environment::global_env()["Params"])["SRoR"];
 
     return (std::accumulate(cost.begin(), cost.end(), 0.0) * (1 - SRoR)) - 
             std::accumulate(revenue.begin(), revenue.end(), 0.0);
