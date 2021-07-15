@@ -85,23 +85,21 @@ calc_credits <- function(dt_f) {
 
 
 build_permutations <- function(firmIDs) {
-    dt_p <- wells[firmID %in% firmIDs][,
-                                        .("wellIDs"= .(wellID),
-                                        "classes"= .(ifelse(class=="developed", 1, 0)),
-                                        "perm"= transpose(as.list(do.call(CJ, rep(list(0:1), .N))))),
-                                    keyby=firmID]
+    dt_p <- wells[firmID %in% firmIDs,
+                        .("wellIDs"= .(wellID),
+                            "classes"= .(ifelse(class=="developed", 1, 0)),
+                            # permutations of development vectors where a well's class can only increase
+                            # (ie underdeveloped --> developed, developed -/-> underdeveloped)
+                            #    a 1 represents an additonal cost (ie developing an underdeveloped well),
+                            #    a 0 represents status-quo (ie an [under]developed well that stays that way)
+                            "perm"= transpose(as.list(do.call(CJ, lapply(class!="developed", `:`, 0))))),
+                    keyby=firmID]
+
     # add firm attributes
-    dt_p[firms[.(firmIDs)], on="firmID", c("i_horizon", "t_horizon", "sPressure", "free_capital"):=
-                                        .(i_horizon, t_horizon, sPressure, capital - cost_O - cost_M - cost_CE)]
+    dt_p[firms, on="firmID", c("i_horizon", "t_horizon", "sPressure", "free_capital"):=
+                                .(i_horizon, t_horizon, sPressure, capital - cost_O - cost_M - cost_CE)]
 
-    # permutations of development vectors where a well's class can only increase
-    # (ie underdeveloped --> developed, developed -/-> underdeveloped)
-    #    a 1 represents an additonal cost (ie developing an underdeveloped well),
-    #    a 0 represents status-quo (ie an [under]developed well that stays that way)
-    dt_p[, "perm":= .(Map(`-`, perm, classes))]
-    dt_p <- dt_p[!sapply(lapply(perm, `<`, 0), any)]
-
-    # calculate the additional cost associated with excercizing each option over the time horizon
+    # calculate the additional cost associated with exercising each option over the time horizon
     dt_p[, "cost_M_add":= wells[first(wellIDs), sapply(lapply(perm, `*`, green_add_oCost), sum)], by=firmID]
     dt_p[, "cost_CE_add":= wells[first(wellIDs), sapply(lapply(perm, `*`, green_fCost), sum)] / i_horizon, by=firmID]
 
