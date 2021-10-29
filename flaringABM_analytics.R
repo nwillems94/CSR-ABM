@@ -13,6 +13,7 @@ well_states[, RunID:= as.factor(RunID)]
 
 agent_states[, "mitigator":= any(behavior=="mitigating"), by=.(RunID,firmID)]
 agent_states[, RunID:= as.factor(RunID)]
+agent_states[, "behavior":= factor(behavior, levels=c("economizing","mitigating","imitating"))]
 
 # calculate gas flared by each firm per time step
 agent_states[
@@ -25,7 +26,7 @@ ggplot(agent_states[behavior!="flaring", .N, keyby=.(RunID, time, behavior)][
             CJ(RunID, time, behavior, unique=TRUE), .(RunID, time, behavior, "N"=replace(N, is.na(N), 0))]) +
         geom_step(aes(x=time, y=N, color=RunID)) +
         facet_grid(behavior~., scales="free_y") +
-        labs(x="Time", y="# of firms in green market")
+        labs(x="Time", y="# of firms in green market", title="Green market participants")
 
 #Attributes of mitigators and non mitigators
 ggplot(agent_states, aes(x=time, y=market_value, fill=behavior!="flaring")) +
