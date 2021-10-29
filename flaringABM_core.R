@@ -129,22 +129,23 @@ build_permutations <- function(firmIDs) {
 #*** FIRM ACTIVITIES ***#
 #*
 
-find_imitators <- function(dt_f) {
-    # determine who is an imitator based on oil market share
-    imitators <- dt_f[, .("firmID"= firmID, "market_share"= oil_output / sum(oil_output))]
-    imitators[, "position":= cut(rank(market_share, ties.method="first"),
-                                breaks=3, labels=c("follower", NA_character_, "leader"))]
-
-    if (imitators[position=="leader", .N] != imitators[position=="follower", .N]) {
-        imitators[position=="follower", "position":= replace(position, which.max(market_share), NA_character_)]
-    }
-    imitators <- dt_f[sample(imitators[position=="follower"]$firmID)][
-                        (dt_f[sample(imitators[position=="leader"]$firmID)]$behavior!="flaring")][
-                            runif(.N) < ti$prob_m]$firmID
-
-    # firms doing exploration cannot imitate
-    imitators <- dt_f[activity=="exploration", setdiff(imitators, firmID)]
-
+find_imitators <- function(dt_f, success_metric="sales") {
+    # determine who is an imitator - less successful followers mimic more successful leaders
+    # following Leary & Roberts "success" can be defined in terms of sales (market share), profit, or market_value
+    imitators <- dt_f[, .(firmID, behavior, activity, "weight"= log(1+get(success_metric)))][
+                            # agents doing exploration cannot imitate
+                            (activity!="exploration") &
+                            # moderate rate of imitation
+                            (runif(.N) < ti$prob_m) &
+                            # less sucessful agents are more likely to imitate
+                            (runif(.N) > weight / max(weight)) &
+                            # more successful agents are more likely to be imitated
+                            sapply(seq(.N), function(x)
+                                # the most succeessful agent has no one to imitate
+                                if (weight[x]==max(weight)) FALSE
+                                # agents imitate as or more successful agents (besides themselves)
+                                else sample(behavior[-x], 1, prob= pmax(weight[-x] - 0.95*weight[x], 0))!="flaring"),
+                        firmID]
     return(imitators)
 
 }###--------------------    END OF FUNCTION find_imitators          --------------------###

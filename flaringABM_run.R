@@ -22,9 +22,9 @@ Params <<- list(
     "oil_price" = 16,
     "capital_assets" = "upstream",
     # Activities
-    "prop_e" = 0.5, #what proportion of firms engage in exploration activities in a given time step
-    "prob_e" = 0.1, #with what probability to exploring firms discover a new asset
-    "prob_m" = 1 #probability that a follower will mimic a leader if they observe them mitigating
+    "prop_e" = 0.5, # what proportion of firms engage in exploration activities in a given time step
+    "prob_e" = 0.1, # with what probability to exploring firms discover a new asset
+    "prob_m" = 0.5  # probability that a follower will mimic a leader if they observe them mitigating
 )
 #social rate of return
 #    [0: no social satisfaction from holding shares or contributing to the activist
@@ -118,7 +118,9 @@ for (Run in 1:20) {
         ## Assess value
         # net cashflow from oil and gas operations
         #    (revenue from oil + gas operations) - (baseline costs + additional costs spent on mitigation)
-        firms[, "cash":= cash + (oil_revenue + gas_revenue) - (cost_O + cost_M + cost_CE)]
+        firms[, "sales":= oil_revenue + gas_revenue]
+        firms[, "profit":= sales - (cost_O + cost_M + cost_CE)]
+        firms[, "cash":= cash + profit]
         # calculates the market value based on Baron's formulation zotero://select/items/0_I7NL6RPA
         # market_value = profit + dprofit - Ai/SRoR - cost*xi + cost*xi*SRoR
         firms[, "market_value":= ((oil_revenue + gas_revenue) - (cost_O + cost_M)) +    # Net income
