@@ -93,10 +93,3 @@ firms[, "capital":= calc_capital_equivC(firms, ti)]
 firms[, "behavior":= "flaring"]
 firms[, "sPressure":= 0]
 firms[, "market_value":= (oil_revenue - cost_O)]
-
-# build initial portfolios
-portfolio_permutations <- build_permutations(firms$firmID)
-
-industry_revenue <- with(Params, list("prices"= list("dirty"= market_price_dirty),
-                                    "green_coeff"= (market_price_green - market_price_dirty) * market_prop_green[1]))
-options_changed <- c()

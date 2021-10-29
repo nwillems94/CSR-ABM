@@ -46,12 +46,13 @@ for (Run in 1:20) {
         setkey(firms, firmID)
         wells <- fread(sprintf("outputs/well_states_%s.csv", Params$refID))[time==Params$t0-1 & RunID==Run]
         setkey(wells, wellID)
-        portfolio_permutations <- build_permutations(firms$firmID)
-
-        industry_revenue <- with(Params, list("prices"= list("dirty"= market_price_dirty),
-                                    "green_coeff"= (market_price_green - market_price_dirty) * market_prop_green[1]))
-        options_changed <- c()
     }
+    # build initial portfolios
+    portfolio_permutations <- build_permutations(firms$firmID)
+
+    industry_revenue <- with(Params, list("prices"= list("dirty"= market_price_dirty),
+                                    "green_coeff"= (market_price_green - market_price_dirty) * market_prop_green[1]))
+    options_changed <- c()
 
     Params$market_size <- wells[status=="producing", sum(gas_MCF)] # sum(firms$gas_output)
 
