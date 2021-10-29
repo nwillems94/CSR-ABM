@@ -2,7 +2,8 @@ library(ggplot2)
 library(data.table)
 
 jobIDs <- c("02121202", # complete
-            "02121250", # no social variables (SRoR,Activism,=0)
+            #"02121250", # no social variables (SRoR,Activism,=0)
+            "03091220", # no shareholder valuation
             "02121223", # no product differentiation (market_prop_green = 0)
             "02121242", # no stakeholder activism (A=0)
             "02121318", # no peer effects (prob_m =0)
@@ -16,14 +17,16 @@ wellOuts  <- sapply(jobIDs, function(x) sprintf("outputs/well_states_%s.csv", x)
 
 ## Compare model components
 agent_states <- rbind(fread(agentOuts[1])[,"model":= "complete"],
-                    fread(agentOuts[2])[,"model":= "no social factors"],
+                    #fread(agentOuts[2])[,"model":= "no social factors"],
+                    fread(agentOuts[2])[,"model":= "no shareholder\nvaluation"],
                     fread(agentOuts[3])[,"model":= "no differentiation"],
-                    fread(agentOuts[4])[,"model":= "no stakeholder activism"],
+                    fread(agentOuts[4])[,"model":= "no stakeholder\nactivism"],
                     fread(agentOuts[5])[,"model":= "no imitation"])
 well_states <- rbind(fread(wellOuts[1])[,"model":= "complete"],
-                    fread(wellOuts[2])[,"model":= "no social factors"],
+                    #fread(wellOuts[2])[,"model":= "no social factors"],
+                    fread(wellOuts[2])[,"model":= "no shareholder\nvaluation"],
                     fread(wellOuts[3])[,"model":= "no differentiation"],
-                    fread(wellOuts[4])[,"model":= "no stakeholder activism"],
+                    fread(wellOuts[4])[,"model":= "no stakeholder\nactivism"],
                     fread(wellOuts[5])[,"model":= "no imitation"])
 
 well_states[, c("RunID","model"):= .(as.factor(RunID), as.factor(model))]
@@ -37,17 +40,12 @@ agent_states[!is.na(time) & is.na(gas_flared), "gas_flared":= 0]
 
 
 
-# ggplot(agent_states[, sum(gas_flared) / sum(oil_output), by=.(model, RunID, time)]) +
-#     #geom_line(stat="summary", fun="mean", aes(x=time, y=V1, color=model)) +
-#     geom_smooth(aes(x=time, y=V1, color=model)) +
-#     labs(x="Time", y="Total Flaring Intensity", color="Model: ") +
-#     theme(legend.position="bottom")
-
 main <- ggplot(agent_states[, sum(gas_flared) / sum(oil_output), by=.(model, RunID, time)]) +
     geom_smooth(aes(x=time, y=V1, color=model)) +
-    labs(x="Time", y="Total Flaring Intensity", color="Components: ") +
+    labs(title="Relative impact of model components", x="Time", y="Total Flaring Intensity", color="") +
     theme(legend.position="bottom")
 
+# main
 
 ## Compare green market thresholds
 agent_states <- rbind(fread(agentOuts[1])[,"threshold":= "0.5"],
@@ -65,12 +63,6 @@ agent_states[
 agent_states[!is.na(time) & is.na(gas_flared), "gas_flared":= 0]
 
 
-# ggplot(agent_states[, sum(gas_flared) / sum(oil_output), by=.(threshold, RunID, time)]) +
-#     #geom_line(stat="summary", fun="mean", aes(x=time, y=V1, color=threshold)) +
-#     geom_smooth(aes(x=time, y=V1, group=threshold)) +
-#     labs(x="Time", y="Total Flaring Intensity") +
-#     annotate("label", x=30, y=4.97, label="Threshold=0.1") +
-#     annotate("label", x=33, y=4.58, label="Threshold=0.5")
 inset <- ggplot(agent_states[, sum(gas_flared) / sum(oil_output), by=.(threshold, RunID, time)]) +
     geom_smooth(aes(x=time, y=V1, group=threshold)) +
     labs(x="Time", y="Total Flaring Intensity") +
