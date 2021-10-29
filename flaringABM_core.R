@@ -92,7 +92,7 @@ build_permutations <- function(firmIDs) {
                             # (ie underdeveloped --> developed, developed -/-> underdeveloped)
                             #    a 1 represents an additonal cost (ie developing an underdeveloped well),
                             #    a 0 represents status-quo (ie an [under]developed well that stays that way)
-                            "perm"= transpose(as.list(do.call(CJ, lapply(class!="developed", `:`, 0))))),
+                            "perm"= class_permutationsC(class)),
                     keyby=firmID]
 
     # add firm attributes

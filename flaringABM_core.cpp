@@ -115,3 +115,49 @@ double calc_netm_costC (DataFrame agent_options, double SRoR) {
     return (std::accumulate(cost.begin(), cost.end(), 0.0) * (1 - SRoR)) - 
             std::accumulate(revenue.begin(), revenue.end(), 0.0);
 }// --------------------    END OF FUNCTION calc_netm_costC         --------------------###
+
+//
+// *** PORTFOLIO ***
+//
+
+void vector_permutationsC(List array, int i, IntegerVector accum, List& perm, int& k) {
+    // recursive function to determine all possible permutations of arbitrarily many
+    //   vectors of arbitrary size. Each vector is an element in the List array
+    if (i == array.size()) {
+        // done, no more rows
+        perm[k] = clone(accum);
+        k += 1;
+    }
+    else {
+        IntegerVector row = array[i];
+        for(int j = 0; j < row.size(); ++j) {
+            accum[i] = row[j];
+            vector_permutationsC(array, i+1, accum, perm, k);
+        }
+    }
+}// --------------------    END OF FUNCTION vector_permutationsC    --------------------###
+
+// [[Rcpp::export]]
+List class_permutationsC(CharacterVector well_classes) {
+    // calculate all valid permutations of how fields can evolve based on class names
+    // a well's class can only increase (IE underdeveloped --> developed, developed -/-> underdeveloped)
+    // doing nothing (0) is always an option
+    List class_options (well_classes.size(), IntegerVector{0});
+    int output_dim = 0;
+
+    for(int i = 0; i < well_classes.size(); i++) {
+        if (well_classes[i] != "developed") {
+            // underdeveloped wells can also be further developed (1)
+            class_options[i] = IntegerVector{0, 1};
+            output_dim += 1;
+        }
+    }
+
+    // recursively determine all possible permutations of development vectors
+    List perm (pow(2, output_dim));
+    int k = 0;
+    vector_permutationsC(class_options, 0, IntegerVector(well_classes.size()), perm, k);
+
+    return perm;
+}// --------------------    END OF FUNCTION class_permutationsC     --------------------###
+
