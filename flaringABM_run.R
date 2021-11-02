@@ -20,7 +20,6 @@ Params <<- list(
     "market_price_dirty" = 1,
     "market_price_green" = 1 * 1.16, # from Kitzmueller & Shimshack 16[5,20]% zotero://select/items/0_PGHV5RK7
     "oil_price" = 16,
-    "capital_assets" = "upstream",
     # Activities
     "prop_e" = 0.5, # what proportion of firms engage in exploration activities in a given time step
     "prob_e" = 0.1, # with what probability to exploring firms discover a new asset
@@ -75,7 +74,7 @@ for (Run in 1:20) {
 
         ## Update portfolio options
         # update credit parameters
-        portfolio_permutations[firms, on="firmID", "free_capital":= capital - cost_O - cost_M - cost_CE]
+        portfolio_permutations[firms, on="firmID", "free_capital":= cash - cost_O - cost_M - cost_CE]
         if (length(options_changed) > 0) {
             # update based on new aquisitions and developments
             portfolio_permutations <- rbind(portfolio_permutations[!(firmID %in% options_changed)],

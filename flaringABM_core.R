@@ -70,9 +70,6 @@ calc_debits <- function(dt_f, dt_w) {
 
 
 calc_credits <- function(dt_f) {
-    # capital based on cash and reserves
-    dt_f[, "capital":= calc_capital_equivC(dt_f, ti)]
-
     # determine industry revenues
     industry_revenue <- calc_revenueC(dt_f, ti)
     dt_f[, "green_gas_output":= industry_revenue$green_units]
@@ -97,7 +94,7 @@ build_permutations <- function(firmIDs) {
 
     # add firm attributes
     dt_p[firms, on="firmID", c("i_horizon", "t_horizon", "sPressure", "free_capital"):=
-                                .(i_horizon, t_horizon, sPressure, capital - cost_O - cost_M - cost_CE)]
+                                .(i_horizon, t_horizon, sPressure, cash - cost_O - cost_M - cost_CE)]
 
     # calculate the additional cost associated with exercising each option over the time horizon
     dt_p[, "cost_M_add":= wells[first(wellIDs), sapply(lapply(perm, `*`, green_add_oCost), sum)], by=firmID]

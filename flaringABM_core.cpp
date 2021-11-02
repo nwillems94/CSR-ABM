@@ -1,15 +1,6 @@
 #include <Rcpp.h>
 
 using namespace Rcpp;
-//
-// *** SOCIAL PRESSURE ***
-//
-// double calc_total_pressureC () {
-//     List params = Environment::global_env()["Params"];
-    
-//     return params["Activism"];
-// }
-
 
 //
 // *** MARKETS ***
@@ -50,45 +41,6 @@ NumericVector dist_market_quantityC(NumericVector max_units, double total_units)
 //
 // *** FIRM VALUATION ***
 //
-
-// [[Rcpp::export]]
-NumericVector calc_capital_equivC (DataFrame agents, List params) {
-    String capital_assets = params["capital_assets"];
-    NumericVector gas_reserves = agents["gas_reserves"], oil_reserves = agents["oil_reserves"];
-    NumericVector downstream_capital = agents["ref_capacity"];
-    NumericVector upstream_capital = (gas_reserves * as<double>(params["market_price_dirty"])) + (oil_reserves * as<double>(params["oil_price"]));
-    NumericVector capital = agents["cash"];
-
-    if (capital_assets=="upstream") {
-        capital += upstream_capital;
-    }
-    else if (capital_assets=="downstream") {
-        capital += downstream_capital;
-    }
-    else
-    {
-        capital += upstream_capital + downstream_capital;
-    }
-    return (capital);
-}// --------------------    END OF FUNCTION calc_capital_equivC     --------------------###
-
-// [[Rcpp::export]]
-NumericVector calc_costC (DataFrame agents, double ti, NumericVector t_switch=NumericVector()) {
-    //Determine the cost at "time", assuming the firm transitions to the green market at "switch_time"
-    NumericVector switch_time;
-    if (t_switch.size()==0) {
-        switch_time = agents["t_switch"];
-    } else {
-        switch_time = NumericVector(agents.nrow(), t_switch[0]);
-    }
-
-    NumericVector green_fCost = agents["green_fCost"], oCost = agents["oCost"], i_horizon = agents["i_horizon"];
-    NumericVector green_add_oCost = ifelse(is_na(switch_time), 0.0, as<NumericVector>(agents["green_add_oCost"]));
-    LogicalVector cost_binary = ifelse(is_na(switch_time), 0.0, switch_time + i_horizon > ti);
-    
-    //assume the fixed cost is paid off equally over i_horizon years
-    return (as<NumericVector>(cost_binary) * green_fCost / i_horizon) + oCost + green_add_oCost;
-}// --------------------    END OF FUNCTION calc_costC              --------------------###
 
 // [[Rcpp::export]]
 List calc_revenueC (DataFrame agents, List params) {

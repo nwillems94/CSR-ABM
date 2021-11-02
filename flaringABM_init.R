@@ -27,14 +27,11 @@ wells[, "t_switch"] <- NA_integer_
 ### ASSIGN AGENT ATTRIBUTES ###
 # initialize firms
 firms <- data.table("firmID"= 1:Params$nagents, key= "firmID",
-                    # Attributes from Hartley 2013: zotero://select/items/1_IKQGEEBK
-                    # oil & gas reserves / refining capacity as proxies for upstream / downstream capital
-                    "oil_reserves"= NA_real_, "gas_reserves"= NA_real_, "ref_capacity"= NA_real_,
                     # how much oil (BBL) and gas (MCF) does the firm produce each time step
                     "oil_output"= NA_real_, "oil_revenue"= NA_real_,
                     "gas_output"= NA_real_, "green_gas_output"= NA_real_, "gas_revenue"= NA_real_,
                     # Valuations; costs include Operating, Mitigation, Capital Expenditures
-                    "cash"= NA_real_, "capital"= NA_real_, "market_value"= NA_real_,
+                    "cash"= NA_real_, "market_value"= NA_real_,
                     "cost_O"= NA_real_, "cost_M"= NA_real_, "cost_CE"= NA_real_, "sPressure"= NA_real_,
                     # time horizons for decision making and over which investments are paid off
                     "t_horizon"= NA_real_, "i_horizon"= NA_real_,
@@ -66,13 +63,6 @@ wells[!is.na(firmID), c("class", "status"):= .(ifelse(gas_MCF>0, "underdeveloped
 wells[!is.na(firmID), "t_found":= Params$t0 - max(firms$i_horizon) - 1]
 firms[, "cost_CE":= 0]
 
-# Placeholders for real capital proxy values
-# oil & gas reserves as a proxy for     upstream capital
-firms[, c("oil_reserves", "gas_reserves"):= 1]
-
-# refining capacity as a proxy for      downstream capital
-firms[, "ref_capacity":= sample.int(40, size=.N, replace=TRUE) + 10]
-
 firms[wells[!is.na(firmID), .(sum(oil_BBL), sum(gas_MCF * ifelse(class=="developed",1,0))), by=firmID], on="firmID",
         c("oil_output", "oil_revenue", "gas_output"):= .(V1, V1 * Params$oil_price, V2)]
 
@@ -86,8 +76,7 @@ firms[, c("cost_M", "green_gas_output"):= 0]
 firms[, "gas_revenue":= gas_output * Params$market_price_dirty]
 
 # assume firms have enough cash to cover their baseline operating costs
-firms[, "cash":= 2 * (cost_O + cost_M)]
-firms[, "capital":= calc_capital_equivC(firms, ti)]
+firms[, "cash":= 2 * (cost_O + cost_M) + sample.int(40, size=.N, replace=TRUE)]
 firms[, c("sales","profit"):= 0]
 
 # initially there is no social pressure, and no firms are mitigating
