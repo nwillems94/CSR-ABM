@@ -46,9 +46,9 @@ dist_social_pressure <- function(dt_f, method="even", focus=1) {
 #*** FIRM VALUATION ***#
 #*
 
-calc_debits <- function(dt_f, dt_w) {
-    # join firm and well attributes
-    dt_e <- dt_f[dt_w, on="firmID"]
+calc_debits <- function(dt_f, dt_l) {
+    # join firm and lease attributes
+    dt_e <- dt_f[dt_l, on="firmID"]
 
     # baseline operating costs
     dt_f[dt_e[status=="producing", sum(baseline_oCost), by=firmID], on="firmID", "cost_O":= V1]
@@ -82,13 +82,13 @@ calc_credits <- function(dt_f) {
 
 
 build_permutations <- function(firmIDs) {
-    dt_p <- wells[firmID %in% firmIDs,
-                        .("wellIDs"= .(wellID),
+    dt_p <- leases[firmID %in% firmIDs,
+                        .("leaseIDs"= .(leaseID),
                             "classes"= .(ifelse(class=="developed", 1, 0)),
-                            # permutations of development vectors where a well's class can only increase
+                            # permutations of development vectors where a lease's class can only increase
                             # (ie underdeveloped --> developed, developed -/-> underdeveloped)
-                            #    a 1 represents an additonal cost (ie developing an underdeveloped well),
-                            #    a 0 represents status-quo (ie an [under]developed well that stays that way)
+                            #    a 1 represents an additonal cost (ie developing an underdeveloped lease),
+                            #    a 0 represents status-quo (ie an [under]developed lease that stays that way)
                             "perm"= class_permutationsC(class)),
                     keyby=firmID]
 
@@ -97,18 +97,18 @@ build_permutations <- function(firmIDs) {
                                 .(i_horizon, t_horizon, sPressure, cash - cost_O - cost_M - cost_CE)]
 
     # calculate the additional cost associated with exercising each option over the time horizon
-    dt_p[, "cost_M_add":= wells[first(wellIDs), sapply(lapply(perm, `*`, green_add_oCost), sum)], by=firmID]
-    dt_p[, "cost_CE_add":= wells[first(wellIDs), sapply(lapply(perm, `*`, green_fCost), sum)] / i_horizon, by=firmID]
+    dt_p[, "cost_M_add":= leases[first(leaseIDs), sapply(lapply(perm, `*`, green_add_oCost), sum)], by=firmID]
+    dt_p[, "cost_CE_add":= leases[first(leaseIDs), sapply(lapply(perm, `*`, green_fCost), sum)] / i_horizon, by=firmID]
 
     # calculate revenue given by exercising each option
     # base revenue
-    dt_p[, "gas_MCF":= sapply(lapply(Map(`+`, classes, perm), `*`, wells[first(wellIDs), gas_MCF]), sum), by=firmID]
+    dt_p[, "gas_MCF":= sapply(lapply(Map(`+`, classes, perm), `*`, leases[first(leaseIDs), gas_MCF]), sum), by=firmID]
     dt_p[, "add_gas_MCF":= .SD[, "gas_MCF"] - .SD[1]$gas_MCF, by=firmID]
 
     # determine which configurations meet the green threshold
     #    by calculating proportion of gas (that would be) flared per unit of oil production
-    dt_p[, "flaring_intensity":= (wells[first(wellIDs), sum(gas_MCF)] - gas_MCF) /
-                                    wells[first(wellIDs), sum(oil_BBL)], by=firmID]
+    dt_p[, "flaring_intensity":= (leases[first(leaseIDs), sum(gas_MCF)] - gas_MCF) /
+                                    leases[first(leaseIDs), sum(oil_BBL)], by=firmID]
     #    and checking if it meets the green market threshold
     dt_p[, "meets_thresh":= flaring_intensity < ti$threshold]
 
@@ -181,10 +181,10 @@ optimize_strategy <- function(dt_p, dt_f) {
 }###--------------------    END OF FUNCTION optimize_strategy       --------------------###
 
 
-do_development <- function(dt_f, dt_w, dt_p, devs) {
-    ## Update well attributes
-    # update well classes to reflect new development
-    dt_w[.(dt_p[best==TRUE][firmID %in% devs, unlist(Map(`[`, wellIDs, lapply(perm, as.logical)))]),
+do_development <- function(dt_f, dt_l, dt_p, devs) {
+    ## Update lease attributes
+    # update lease classes to reflect new development
+    dt_l[.(dt_p[best==TRUE][firmID %in% devs, unlist(Map(`[`, leaseIDs, lapply(perm, as.logical)))]),
             c("class", "t_switch"):= .("developed", ti$time)]
     ## Update firm attributes
     # whether they are mitigating and if
@@ -194,34 +194,34 @@ do_development <- function(dt_f, dt_w, dt_p, devs) {
     dt_f[dt_p[(best & meets_thresh & imitation) == TRUE], on="firmID", "behavior":= "imitating"]
 
     # gas output from development
-    dt_f[dt_w[firmID %in% devs & class=="developed" & status=="producing", .(sum(gas_MCF)), by=.(firmID)],
+    dt_f[dt_l[firmID %in% devs & class=="developed" & status=="producing", .(sum(gas_MCF)), by=.(firmID)],
         on="firmID", "gas_output":= .(V1)]
 
 }###--------------------    END OF FUNCTION do_development          --------------------###
 
 
-do_exploration <- function(dt_f, dt_w) {
+do_exploration <- function(dt_f, dt_l) {
     new_discs <- dt_f[(activity=="exploration") & (runif(.N) < ti$prob_e)]$firmID
-    prev_discs <- unique(dt_w[status=="stopped"]$firmID)
+    prev_discs <- unique(dt_l[status=="stopped"]$firmID)
 
-    # progress wells from previous turns
-    #    newly discovered wells are undeveloped
+    # progress leases from previous turns
+    #    newly discovered leases are undeveloped
     #    in the following time step, they progress to underdeveloped with stopped production
     #    at this point, firms can decide whether to fully develop them
-    #    in the following time step, the wells begin production
-    dt_w[status=="stopped", "status":= .("producing")]
-    dt_w[class=="undeveloped", c("class", "status"):= .(ifelse(gas_MCF==0, "developed", "underdeveloped"), "stopped")]
+    #    in the following time step, the leases begin production
+    dt_l[status=="stopped", "status":= .("producing")]
+    dt_l[class=="undeveloped", c("class", "status"):= .(ifelse(gas_MCF==0, "developed", "underdeveloped"), "stopped")]
 
-    # probabilistically discover new wells
-    dt_w[sample(which(is.na(firmID)), length(new_discs)),
+    # probabilistically discover new leases
+    dt_l[sample(which(is.na(firmID)), length(new_discs)),
         c("firmID", "class", "t_found"):= .(new_discs, "undeveloped", ti$time)]
 
     ## Update firm attributes
     # gas output from exploration
-    dt_f[dt_w[firmID %in% prev_discs & status=="producing" & class=="developed", .(sum(gas_MCF)), by=.(firmID)],
+    dt_f[dt_l[firmID %in% prev_discs & status=="producing" & class=="developed", .(sum(gas_MCF)), by=.(firmID)],
             on="firmID", "gas_output":= .(V1)]
     # additional oil output from exploration
-    dt_f[dt_w[firmID %in% prev_discs & status=="producing" & class!="undeveloped", .(sum(oil_BBL)), by=.(firmID)],
+    dt_f[dt_l[firmID %in% prev_discs & status=="producing" & class!="undeveloped", .(sum(oil_BBL)), by=.(firmID)],
             on="firmID", c("oil_output","oil_revenue"):= .(V1, V1 * ti$oil_price)]
 
 }###--------------------    END OF FUNCTION do_exploration          --------------------###

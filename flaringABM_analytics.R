@@ -5,11 +5,11 @@ library(data.table)
 jobID <- "02121202"
 pdf(sprintf("graphics/plots_%s.pdf", jobID))
 agentOuts <- sprintf("outputs/agent_states_%s.csv", jobID)
-wellOuts <- sprintf("outputs/well_states_%s.csv", jobID)
+leaseOuts <- sprintf("outputs/lease_states_%s.csv", jobID)
 
 agent_states <- fread(agentOuts)
-well_states <- fread(wellOuts)
-well_states[, RunID:= as.factor(RunID)]
+lease_states <- fread(leaseOuts)
+lease_states[, RunID:= as.factor(RunID)]
 
 agent_states[, "mitigator":= any(behavior=="mitigating"), by=.(RunID,firmID)]
 agent_states[, RunID:= as.factor(RunID)]
@@ -17,7 +17,7 @@ agent_states[, "behavior":= factor(behavior, levels=c("economizing","mitigating"
 
 # calculate gas flared by each firm per time step
 agent_states[
-    well_states[status=="producing" & class=="underdeveloped", sum(gas_MCF), by=.(RunID, time, firmID)],
+    lease_states[status=="producing" & class=="underdeveloped", sum(gas_MCF), by=.(RunID, time, firmID)],
         on=c("RunID", "time", "firmID"), "gas_flared":= V1]
 agent_states[!is.na(time) & is.na(gas_flared), "gas_flared":= 0]
 

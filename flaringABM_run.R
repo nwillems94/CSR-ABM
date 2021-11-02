@@ -5,12 +5,12 @@ source("flaringABM_core.R")
 jobID <- format(Sys.time(), "%m%d%H%M")
 logOuts <- sprintf("logs/param_log_%s.csv", jobID)
 agentOuts <- sprintf("outputs/agent_states_%s.csv", jobID)
-wellOuts <- sprintf("outputs/well_states_%s.csv", jobID)
+leaseOuts <- sprintf("outputs/lease_states_%s.csv", jobID)
 
 Params <<- list(
     "refID" = NA, # reference initialization
     "nagents" = 100,
-    "nwells" = 1000,
+    "nleases" = 1000,
     "t0" = -25,
     "tf" = 60,
     # Environmental Variables
@@ -45,8 +45,8 @@ for (Run in 1:20) {
     } else {
         firms <- fread(sprintf("outputs/agent_states_%s.csv", Params$refID))[time==Params$t0-1 & RunID==Run]
         setkey(firms, firmID)
-        wells <- fread(sprintf("outputs/well_states_%s.csv", Params$refID))[time==Params$t0-1 & RunID==Run]
-        setkey(wells, wellID)
+        leases <- fread(sprintf("outputs/lease_states_%s.csv", Params$refID))[time==Params$t0-1 & RunID==Run]
+        setkey(leases, leaseID)
     }
     cat("...Running...\n\t")
     # build initial portfolios
@@ -56,20 +56,20 @@ for (Run in 1:20) {
                                     "green_coeff"= (market_price_green - market_price_dirty) * market_prop_green[1]))
     options_changed <- c()
 
-    Params$market_size <- wells[status=="producing", sum(gas_MCF)] # sum(firms$gas_output)
+    Params$market_size <- leases[status=="producing", sum(gas_MCF)] # sum(firms$gas_output)
 
     firms[, "RunID":= Run]
-    wells[, "RunID":= Run]
+    leases[, "RunID":= Run]
     fwrite(as.data.table(t(unlist(Params))), file=logOuts, append=(Run!=1))
     fwrite(firms, file=agentOuts, append=(Run!=1))
-    fwrite(wells, file=wellOuts, append=(Run!=1))
+    fwrite(leases, file=leaseOuts, append=(Run!=1))
 
     # step through time with appropriate parameters
     cat("|", strrep("_", options("width")[[1]]-12), "|\n\t ", strrep(" ", options("width")[[1]]-12), "|")
     for (ti in split(as.data.table(c("time"=list(Params$t0:Params$tf), Params)), by="time")) {
 
         cat("\r\t|", strrep("*", floor((options("width")[[1]]-12) * (ti$time - Params$t0) / (Params$tf-Params$t0))))
-        wells[, "time":= ti$time]
+        leases[, "time":= ti$time]
         firms[, "time":= ti$time]
 
         ## Update portfolio options
@@ -97,13 +97,13 @@ for (Run in 1:20) {
         # optimize market value by executing the best portfolio option
         #   firms who's strategy calls for new development
         options_changed <- portfolio_permutations[best==TRUE][sapply(lapply(perm, `==`, 1), any)]$firmID
-        do_development(firms, wells, portfolio_permutations, options_changed)
+        do_development(firms, leases, portfolio_permutations, options_changed)
 
         ## Exploration
-        do_exploration(firms, wells)
+        do_exploration(firms, leases)
         # also revise the options of
         #   firms who's previous discoveries will enter their portfolio in the next turn
-        options_changed <- sort(unique(c(options_changed, wells[status=="stopped"]$firmID)))
+        options_changed <- sort(unique(c(options_changed, leases[status=="stopped"]$firmID)))
 
         #### MARKETS ####
         ## Apply Social Pressure to each firm (beginning at time 0)
@@ -112,7 +112,7 @@ for (Run in 1:20) {
         }
 
         ## Expenses
-        calc_debits(firms, wells)
+        calc_debits(firms, leases)
 
         ## Revenues
         industry_revenue <- calc_credits(firms)
@@ -130,7 +130,7 @@ for (Run in 1:20) {
 
         #### OUTPUT STATES ####
         fwrite(firms, file=agentOuts, append=TRUE)
-        fwrite(wells, file=wellOuts, append=TRUE)
+        fwrite(leases, file=leaseOuts, append=TRUE)
     }
     cat("\n")
 }

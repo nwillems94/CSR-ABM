@@ -90,16 +90,16 @@ void vector_permutationsC(List array, int i, IntegerVector accum, List& perm, in
 }// --------------------    END OF FUNCTION vector_permutationsC    --------------------###
 
 // [[Rcpp::export]]
-List class_permutationsC(CharacterVector well_classes) {
+List class_permutationsC(CharacterVector lease_classes) {
     // calculate all valid permutations of how fields can evolve based on class names
-    // a well's class can only increase (IE underdeveloped --> developed, developed -/-> underdeveloped)
+    // a lease's class can only increase (IE underdeveloped --> developed, developed -/-> underdeveloped)
     // doing nothing (0) is always an option
-    List class_options (well_classes.size(), IntegerVector{0});
+    List class_options (lease_classes.size(), IntegerVector{0});
     int output_dim = 0;
 
-    for(int i = 0; i < well_classes.size(); i++) {
-        if (well_classes[i] != "developed") {
-            // underdeveloped wells can also be further developed (1)
+    for(int i = 0; i < lease_classes.size(); i++) {
+        if (lease_classes[i] != "developed") {
+            // underdeveloped leases can also be further developed (1)
             class_options[i] = IntegerVector{0, 1};
             output_dim += 1;
         }
@@ -108,7 +108,7 @@ List class_permutationsC(CharacterVector well_classes) {
     // recursively determine all possible permutations of development vectors
     List perm (pow(2, output_dim));
     int k = 0;
-    vector_permutationsC(class_options, 0, IntegerVector(well_classes.size()), perm, k);
+    vector_permutationsC(class_options, 0, IntegerVector(lease_classes.size()), perm, k);
 
     return perm;
 }// --------------------    END OF FUNCTION class_permutationsC     --------------------###

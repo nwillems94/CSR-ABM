@@ -11,7 +11,7 @@ jobIDs <- c("02121202", # complete
             "02121612", # activist targeting according to gas output
             "02121644") # activist targeting according to oil output
 agentOuts <- sapply(jobIDs, function(x) sprintf("outputs/agent_states_%s.csv", x))
-wellOuts  <- sapply(jobIDs, function(x) sprintf("outputs/well_states_%s.csv", x))
+leaseOuts  <- sapply(jobIDs, function(x) sprintf("outputs/lease_states_%s.csv", x))
 
 #pdf(sprintf("graphics/plots_%s.pdf", jobID))
 
@@ -22,19 +22,19 @@ agent_states <- rbind(fread(agentOuts[1])[,"model":= "complete"],
                     fread(agentOuts[3])[,"model":= "no differentiation"],
                     fread(agentOuts[4])[,"model":= "no stakeholder\nactivism"],
                     fread(agentOuts[5])[,"model":= "no imitation"])
-well_states <- rbind(fread(wellOuts[1])[,"model":= "complete"],
-                    #fread(wellOuts[2])[,"model":= "no social factors"],
-                    fread(wellOuts[2])[,"model":= "no shareholder\nvaluation"],
-                    fread(wellOuts[3])[,"model":= "no differentiation"],
-                    fread(wellOuts[4])[,"model":= "no stakeholder\nactivism"],
-                    fread(wellOuts[5])[,"model":= "no imitation"])
+lease_states <- rbind(fread(leaseOuts[1])[,"model":= "complete"],
+                    #fread(leaseOuts[2])[,"model":= "no social factors"],
+                    fread(leaseOuts[2])[,"model":= "no shareholder\nvaluation"],
+                    fread(leaseOuts[3])[,"model":= "no differentiation"],
+                    fread(leaseOuts[4])[,"model":= "no stakeholder\nactivism"],
+                    fread(leaseOuts[5])[,"model":= "no imitation"])
 
-well_states[, c("RunID","model"):= .(as.factor(RunID), as.factor(model))]
+lease_states[, c("RunID","model"):= .(as.factor(RunID), as.factor(model))]
 agent_states[, c("RunID","model"):= .(as.factor(RunID), as.factor(model))]
 
 # calculate gas flared by each firm per time step
 agent_states[
-    well_states[status=="producing" & class=="underdeveloped", sum(gas_MCF), by=.(model, RunID, time, firmID)],
+    lease_states[status=="producing" & class=="underdeveloped", sum(gas_MCF), by=.(model, RunID, time, firmID)],
         on=c("model", "RunID", "time", "firmID"), "gas_flared":= V1]
 agent_states[!is.na(time) & is.na(gas_flared), "gas_flared":= 0]
 
@@ -50,15 +50,15 @@ main <- ggplot(agent_states[, sum(gas_flared) / sum(oil_output), by=.(model, Run
 ## Compare green market thresholds
 agent_states <- rbind(fread(agentOuts[1])[,"threshold":= "0.5"],
                     fread(agentOuts[6])[,"threshold":= "0.1"])
-well_states <- rbind(fread(wellOuts[1])[,"threshold":= "0.5"],
-                    fread(wellOuts[6])[,"threshold":= "0.1"])
+lease_states <- rbind(fread(leaseOuts[1])[,"threshold":= "0.5"],
+                    fread(leaseOuts[6])[,"threshold":= "0.1"])
 
-well_states[, c("RunID","threshold"):= .(as.factor(RunID), as.factor(threshold))]
+lease_states[, c("RunID","threshold"):= .(as.factor(RunID), as.factor(threshold))]
 agent_states[, c("RunID","threshold"):= .(as.factor(RunID), as.factor(threshold))]
 
 # calculate gas flared by each firm per time step
 agent_states[
-    well_states[status=="producing" & class=="underdeveloped", sum(gas_MCF), by=.(threshold, RunID, time, firmID)],
+    lease_states[status=="producing" & class=="underdeveloped", sum(gas_MCF), by=.(threshold, RunID, time, firmID)],
         on=c("threshold", "RunID", "time", "firmID"), "gas_flared":= V1]
 agent_states[!is.na(time) & is.na(gas_flared), "gas_flared":= 0]
 
@@ -79,16 +79,16 @@ main +
 agent_states <- rbind(fread(agentOuts[1])[,"targeting":= "uniform"],
                     fread(agentOuts[7])[,"targeting":= "gas output"],
                     fread(agentOuts[8])[,"targeting":= "oil output"])
-well_states <- rbind(fread(wellOuts[1])[,"targeting":= "uniform"],
-                    fread(wellOuts[7])[,"targeting":= "gas output"],
-                    fread(wellOuts[8])[,"targeting":= "oil output"])
+lease_states <- rbind(fread(leaseOuts[1])[,"targeting":= "uniform"],
+                    fread(leaseOuts[7])[,"targeting":= "gas output"],
+                    fread(leaseOuts[8])[,"targeting":= "oil output"])
 
-well_states[, c("RunID","targeting"):= .(as.factor(RunID), as.factor(targeting))]
+lease_states[, c("RunID","targeting"):= .(as.factor(RunID), as.factor(targeting))]
 agent_states[, c("RunID","targeting"):= .(as.factor(RunID), as.factor(targeting))]
 
 # calculate gas flared by each firm per time step
 agent_states[
-    well_states[status=="producing" & class=="underdeveloped", sum(gas_MCF), by=.(targeting, RunID, time, firmID)],
+    lease_states[status=="producing" & class=="underdeveloped", sum(gas_MCF), by=.(targeting, RunID, time, firmID)],
         on=c("targeting", "RunID", "time", "firmID"), "gas_flared":= V1]
 agent_states[!is.na(time) & is.na(gas_flared), "gas_flared":= 0]
 
