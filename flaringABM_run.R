@@ -74,10 +74,9 @@ for (Run in 1:20) {
         firms[, "time":= ti$time]
 
         ## Update portfolio options
+        # update credit parameters
+        portfolio_permutations[firms, on="firmID", "free_capital":= capital - cost_O - cost_M - cost_CE]
         if (length(options_changed) > 0) {
-            # update credit parameters
-            portfolio_permutations[firms[!(firmID %in% options_changed)], on="firmID",
-                                    "free_capital":= capital - cost_O - cost_M - cost_CE]
             # update based on new aquisitions and developments
             portfolio_permutations <- rbind(portfolio_permutations[!(firmID %in% options_changed)],
                                             build_permutations(options_changed))
