@@ -35,9 +35,11 @@ Params$market_prop_green <- with(Params, c(rep(0, -t0),
                                         seq(from=0, to=1.5, length.out= 1 + (tf %/% 2)),
                                         rep(1.5, tf - (tf %/% 2)))) * 0.12
 
+run_time <- Sys.time()
 for (Run in 1:20) {
-    cat(Run, ":\t")
+    cat("Run", Run, ":\n")
     # Initialize agents, save their initial state
+    cat("...Initializing...\n")
     ti <- lapply(Params, `[[` , 1)
     if (is.na(Params$refID)) {
         source("flaringABM_init.R")
@@ -47,6 +49,7 @@ for (Run in 1:20) {
         wells <- fread(sprintf("outputs/well_states_%s.csv", Params$refID))[time==Params$t0-1 & RunID==Run]
         setkey(wells, wellID)
     }
+    cat("...Running...\n\t")
     # build initial portfolios
     portfolio_permutations <- build_permutations(firms$firmID)
 
@@ -63,9 +66,10 @@ for (Run in 1:20) {
     fwrite(wells, file=wellOuts, append=(Run!=1))
 
     # step through time with appropriate parameters
+    cat("|", strrep("_", options("width")[[1]]-12), "|\n\t ", strrep(" ", options("width")[[1]]-12), "|")
     for (ti in split(as.data.table(c("time"=list(Params$t0:Params$tf), Params)), by="time")) {
 
-        cat(ti$time, ", ", sep = "")
+        cat("\r\t|", strrep("*", floor((options("width")[[1]]-12) * (ti$time - Params$t0) / (Params$tf-Params$t0))))
         wells[, "time":= ti$time]
         firms[, "time":= ti$time]
 
@@ -132,6 +136,7 @@ for (Run in 1:20) {
     }
     cat("\n")
 }
+cat("\n", gsub("Time difference of", "All runs complete in", capture.output(Sys.time() - run_time)), "\n")
 
 # analytics
 library(ggplot2)
