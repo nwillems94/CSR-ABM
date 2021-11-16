@@ -1,6 +1,6 @@
 library(data.table)
 
-source("flaringABM_core.R")
+source("./flaringABM_core.R")
 
 jobID <- format(Sys.time(), "%m%d%H%M")
 logOuts <- sprintf("logs/param_log_%s.csv", jobID)
@@ -8,18 +8,17 @@ agentOuts <- sprintf("outputs/agent_states_%s.csv", jobID)
 leaseOuts <- sprintf("outputs/lease_states_%s.csv", jobID)
 
 Params <<- list(
-    "refID" = NA, # reference initialization
-    "nagents" = 100,
-    "nleases" = 1000,
+    # TxRRC data shows about 2000 firms producing gas alongside oil operating in any given year since 2010
+    "nagents" = 2000,
     "t0" = -25,
     "tf" = 60,
     # Environmental Variables
     "Activism" = 5000,
     # Market conditions
     "threshold" = 0.5, # max units of gas "green" firms can flare per unit of oil produced
-    "market_price_dirty" = 1,
-    "market_price_green" = 1 * 1.16, # from Kitzmueller & Shimshack 16[5,20]% zotero://select/items/0_PGHV5RK7
-    "oil_price" = 16,
+    "market_price_dirty" = 3,
+    "market_price_green" = 3 * 1.16, # from Kitzmueller & Shimshack 16[5,20]% zotero://select/items/0_PGHV5RK7
+    "oil_price" = 3 * 20,
     # Activities
     "prop_e" = 0.5, # what proportion of firms engage in exploration activities in a given time step
     "prob_e" = 0.1, # with what probability to exploring firms discover a new asset
@@ -41,7 +40,7 @@ for (Run in 1:20) {
     cat("...Initializing...\n")
     ti <- lapply(Params, `[[` , 1)
     if (is.na(Params$refID)) {
-        source("flaringABM_init.R")
+        source("./flaringABM_init_empirical.R")
     } else {
         firms <- fread(sprintf("outputs/agent_states_%s.csv", Params$refID))[time==Params$t0-1 & RunID==Run]
         setkey(firms, firmID)
@@ -56,7 +55,7 @@ for (Run in 1:20) {
                                     "green_coeff"= (market_price_green - market_price_dirty) * market_prop_green[1]))
     options_changed <- c()
 
-    Params$market_size <- leases[status=="producing", sum(gas_MCF)] # sum(firms$gas_output)
+    Params$market_size <- leases[status=="producing", 2*sum(gas_MCF)]
 
     firms[, "RunID":= Run]
     leases[, "RunID":= Run]
@@ -83,7 +82,7 @@ for (Run in 1:20) {
         }
         # project options based on previous market conditions
         portfolio_permutations[firms, on="firmID", c("sPressure", "gas_revenue"):= .(i.sPressure, i.gas_revenue +
-                        (add_gas_MCF * with(industry_revenue, prices$dirty + ifelse(meets_thresh, green_coeff, 0))))]
+                        (add_csgd_MCF * with(industry_revenue, prices$dirty + ifelse(meets_thresh, green_coeff, 0))))]
 
         #### FIRM ACTIVITIES ####
         # randomly assign either development or exploration activities
@@ -96,7 +95,7 @@ for (Run in 1:20) {
         ## Development
         # optimize market value by executing the best portfolio option
         #   firms who's strategy calls for new development
-        options_changed <- portfolio_permutations[best==TRUE][sapply(lapply(perm, `==`, 1), any)]$firmID
+        options_changed <- portfolio_permutations[, first(best), by=firmID][V1==FALSE, firmID]
         do_development(firms, leases, portfolio_permutations, options_changed)
 
         ## Exploration
@@ -130,7 +129,7 @@ for (Run in 1:20) {
 
         #### OUTPUT STATES ####
         fwrite(firms, file=agentOuts, append=TRUE)
-        fwrite(leases, file=leaseOuts, append=TRUE)
+        fwrite(leases[!is.na(firmID)], file=leaseOuts, append=TRUE)
     }
     cat("\n")
 }
