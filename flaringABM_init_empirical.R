@@ -183,6 +183,10 @@ firms[, c("oil_revenue", "gas_revenue"):= .(oil_output * Params$oil_price, gas_o
 
 firms[, "market_value":= (oil_revenue + gas_revenue - cost_O)]
 
+# generate validation report for this initialization
+cat("Writing validation report\n")
+rmarkdown::render("flaringABM_validation_init.Rmd", "html_document",
+                    sprintf("outputs/validation/init_%s.html", jobID), quiet=TRUE)
 
 # done
 cat("Cleaning up\n\t")

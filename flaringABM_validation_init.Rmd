@@ -1,0 +1,116 @@
+---
+title: "FlaringABM input validation sample"
+author: "Nick Willems"
+---
+
+```{r}
+library(ggplot2)
+library(data.table)
+```
+
+# Lease expenses
+## Operating costs per MCF of gas at oil and gas leases  
+```{r fig.cap="Gas lease operating expenditures are skewed left (cheaper) while oil leases are skewed right"}
+ggplot(leases[gas_MCF+csgd_MCF>0]) +
+    geom_density(aes(x=opEx_pMCF, color=OIL_GAS_CODE)) +
+    labs(color="Oil or Gas lease?") +
+    theme(legend.position = c(0.85, 0.9))
+```
+
+## Operating costs per BBL of oil at oil leases  
+```{r}
+ggplot(leases[oil_BBL>0][, "area":= ifelse(area=="Spraberry", "Midland Basin", area)][]) +
+    geom_density(aes(x=opEx_pBBL + opEx_pBOE, color=area)) +
+    labs(x="$ / barrel", main="Operating expenses per barrel of oil")
+```
+
+| Region            | Year  | Mean  | Min   | Max   |
+| ---               | ---   | ---   | ---   | ---   |
+| Eagle Ford        | 2017  | 29    | 10    | 50    |
+| Eagle Ford        | 2021  | 16.58 | 7     | 35    |
+| Permian - Delaware| 2017  | 33    | 15    | 55    |
+| Permian - Delaware| 2021  | 26.19 | 7     | 50    |
+| Permian - Midland | 2017  | 24    | 10    | 55    |
+| Permian - Midland | 2021  | 27.05 | 6     | 60    |
+Table: Break-even operating expenses ($/barrel) reported by Dallas Fed
+([2017](https://www.dallasfed.org/research/surveys/des/2017/1701.aspx#tab-questions),
+[2021](https://www.dallasfed.org/research/surveys/des/2021/2101.aspx#tab-questions)):  
+
+# Lease assignment summary  
+### Number of assigned leases   
+```{r}
+print(leases[is.na(firmID), .N, by=OIL_GAS_CODE])
+```
+
+### Number of leases left to be discovered  
+```{r}
+print(leases[!is.na(firmID), .N, by=OIL_GAS_CODE])
+```
+
+### Percent of operators with no gas leases  
+```{r}
+# Empirical
+print(market_shares[, sum(scaled_gas_MCF==0)/.N])
+# Generated
+print(leases[, sum(gas_MCF), by=firmID][, sum(V1==0)/.N])
+```
+
+# Distributions of operator production volumes
+```{r}
+par(mfrow=c(1,2))
+hist(log(market_shares$scaled_oil_BBL), breaks="scott", freq=FALSE,
+    main="Empirical", xlab="log(Oil (BBL))", xlim=c(0,20), ylim=c(0,0.2))
+market_shares[, {curve(dnorm(x, mean(log(scaled_oil_BBL)), sd(log(scaled_oil_BBL))), col="blue", add=TRUE); NULL}]
+hist(log(leases[!is.na(firmID), sum(oil_BBL), by=firmID]$V1), breaks="scott", freq=FALSE,
+    main="Generated", xlab="log(Oil (BBL))", xlim=c(0,20), ylim=c(0,0.2))
+market_shares[, {curve(dnorm(x, mean(log(scaled_oil_BBL)), sd(log(scaled_oil_BBL))), col="blue", add=TRUE); NULL}]
+```
+
+```{r}
+par(mfrow=c(1,2))
+hist(log(market_shares$scaled_gas_MCF), breaks="scott", freq=FALSE,
+    main="Empirical", xlab="log(Gas (MCF))", xlim=c(0,29), ylim=c(0,0.2))
+market_shares[scaled_gas_MCF>0, .(log(scaled_gas_MCF))][, {curve(dnorm(x, mean(V1), sd(V1)), col="blue", add=TRUE); NULL}]
+hist(log(leases[!is.na(firmID), sum(gas_MCF), by=firmID]$V1), breaks="scott", freq=FALSE,
+    main="Generated", xlab="log(Gas (MCF))", xlim=c(0,20), ylim=c(0,0.2))
+market_shares[scaled_gas_MCF>0, .(log(scaled_gas_MCF))][, {curve(dnorm(x, mean(V1), sd(V1)), col="blue", add=TRUE); NULL}]
+```
+
+Joint density of oil and gas outputs
+```{r}
+ggplot(market_shares, aes(x=scaled_oil_BBL, y=scaled_gas_MCF)) +
+    stat_density_2d(geom="raster", aes(fill=after_stat(density)), contour=FALSE) +
+    scale_fill_viridis_c() +
+    geom_point(data=leases[!is.na(firmID), .(sum(oil_BBL), sum(gas_MCF)), by=firmID][V1>0 & V2>0],
+                aes(x=V1, y=V2, color="red"), alpha=0.8, shape=1, size=2) +
+    scale_color_manual(labels="Generated", values="red") +
+    scale_x_log10() +
+    scale_y_log10() +
+    labs(title="Joint distribution of firm oil and gas production", x="Oil (BBL)", y="Gas (MCF)") +
+    labs(color="", fill="Emprical")
+```
+
+Joint density of oil and casinghead gas outputs
+```{r}
+ggplot(market_shares, aes(x=scaled_oil_BBL, y=scaled_csgd_MCF)) +
+    stat_density_2d(geom="raster", aes(fill=after_stat(density)), contour=FALSE) +
+    scale_fill_viridis_c() +
+    geom_point(data=leases[!is.na(firmID), .(sum(oil_BBL), sum(csgd_MCF)), by=firmID][V1>0 & V2>0],
+                aes(x=V1, y=V2, color="red"), alpha=0.8, shape=1, size=2) +
+    scale_color_manual(labels="Generated", values="red") +
+    scale_x_log10() +
+    scale_y_log10() +
+    labs(title="Joint distribution of firm oil and casinghead gas production", x="Oil (BBL)", y="Gas (MCF)") +
+    labs(color="", fill="Emprical")
+```
+
+# Distributions of operator cash
+```{r}
+par(mfrow=c(1,2))
+hist(log(finances[CI>0, CI]), breaks="scott", freq=FALSE,
+    main="Empirical", xlab="log(Dollars))", xlim=c(-6,4), ylim=c(0,0.5))
+finances[CI>0, .(log(CI))][, {curve(dnorm(x, mean(V1), sd(V1)), col="blue", add=TRUE); NULL}]
+hist(log(firms[, cash]), breaks="scott", freq=FALSE,
+    main="Generated", xlab="log(Dollars)", xlim=c(-6,4), ylim=c(0,0.5))
+finances[CI>0, .(log(CI))][, {curve(dnorm(x, mean(V1), sd(V1)), col="blue", add=TRUE); NULL}]
+```
