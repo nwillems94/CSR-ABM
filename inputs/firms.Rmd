@@ -1,0 +1,173 @@
+---
+title: "FlaringABM input firms"
+author: "Nick Willems"
+---
+
+
+GENERATE SAMPLE UPSTREAM OIL AND GAS FIRMS WHO PRODUCE GAS ALONGSIDE OIL FROM TEXAS RAILROAD COMMISSION DATA. 
+EACH FIRM HAS THE FOLLOWING PROPERTIES:  
+
+  1. MONTHLY OIL PRODUCTION  
+  2. MONTHLY GAS PRODUCTION  
+  3. MONTHLY CASINGHEAD GAS PRODUCTION  
+
+```{r}
+library(data.table)
+library(ggplot2)
+```
+
+# Monthly county production 
+### (from TxRRC Production Data Query Dump)  
+[Source](https://mft.rrc.texas.gov/link/fe3298a2-8788-4234-b2a0-90ee41558d75),
+[Manual](https://portalvhdskzlfb8q9lqr9.blob.core.windows.net/media/47731/pdq-dump-user-manual.pdf)
+```{r}
+OG_COUNTY_CYCLE <- fread("unzip -p ./data/PDQ_DSV.zip OG_COUNTY_CYCLE_DATA_TABLE.dsv", sep="}", quote="",
+                        select=list(character=c("DISTRICT_NAME"), numeric=c("COUNTY_NO","CYCLE_YEAR"),
+                                    numeric=c("CNTY_OIL_PROD_VOL","CNTY_GAS_PROD_VOL","CNTY_CSGD_PROD_VOL")))
+
+# which counties are represented in the subset of leases
+OG_COUNTY_CYCLE[, "subset":= FALSE]
+                # Permian
+OG_COUNTY_CYCLE[(DISTRICT_NAME %in% c("7C","08","8A")) |
+                # Eagle Ford
+                (COUNTY_NO %in% c(13, 21, 25, 41, 51, 123, 127, 149, 163, 177, 185, 255, 283, 285,
+                                287, 289, 297, 311, 313, 323, 331, 395, 471, 477, 479, 493, 507)),
+                "subset":= TRUE]
+
+# What proportion of gas comes from areas where we have lease data
+print(OG_COUNTY_CYCLE[CYCLE_YEAR>=2010 & CYCLE_YEAR<2021,
+                lapply(.SD, function(x) sum(x[subset==TRUE]) / sum(x)),
+                by=CYCLE_YEAR, .SDcols=c("CNTY_OIL_PROD_VOL","CNTY_GAS_PROD_VOL","CNTY_CSGD_PROD_VOL")])
+```
+
+# Monthly operator production 
+### (from TxRRC Production Data Query Dump )
+ [Source](https://mft.rrc.texas.gov/link/fe3298a2-8788-4234-b2a0-90ee41558d75),
+ [Manual](https://portalvhdskzlfb8q9lqr9.blob.core.windows.net/media/47731/pdq-dump-user-manual.pdf)
+```{r}
+OG_OPERATOR_CYCLE <- fread("unzip -p ./data/PDQ_DSV.zip OG_OPERATOR_CYCLE_DATA_TABLE.dsv", sep="}", quote="",
+                            colClasses=list(numeric=c("OPER_OIL_PROD_VOL","OPER_GAS_PROD_VOL","OPER_CSGD_PROD_VOL")))
+```
+
+## Types of operators based on mean yearly production
+```{r}
+# production from 2010 through 2020
+operator_types <- OG_OPERATOR_CYCLE[CYCLE_YEAR>=2010 & CYCLE_YEAR<2021,
+                    lapply(.SD, mean), .SDcols=c("OPER_OIL_PROD_VOL","OPER_GAS_PROD_VOL","OPER_CSGD_PROD_VOL"),
+                    by=.(OPERATOR_NO, CYCLE_YEAR)]
+
+# active operators
+operator_types <- operator_types[!(OPER_OIL_PROD_VOL==0 & OPER_GAS_PROD_VOL==0 & OPER_CSGD_PROD_VOL==0)]
+
+# determine which operators are producing gas alongside oil
+operator_types[(OPER_OIL_PROD_VOL>0) & (OPER_GAS_PROD_VOL==0), "firm_type":= "oil_only"]
+operator_types[(OPER_OIL_PROD_VOL==0) & (OPER_GAS_PROD_VOL>0), "firm_type":= "gas_only"]
+operator_types[(OPER_OIL_PROD_VOL>0) & (OPER_CSGD_PROD_VOL>0), "firm_type":= "associated"]
+
+OG_OPERATOR_CYCLE[operator_types, on=c("OPERATOR_NO","CYCLE_YEAR"), "firm_type":= firm_type]
+```
+
+```{r}
+# number of operators
+print(OG_OPERATOR_CYCLE[firm_type=="oil_only", .("N"=uniqueN(OPERATOR_NO)), keyby=CYCLE_YEAR])
+print(OG_OPERATOR_CYCLE[firm_type=="gas_only", .("N"=uniqueN(OPERATOR_NO)), keyby=CYCLE_YEAR])
+print(OG_OPERATOR_CYCLE[firm_type=="associated", .("N"=uniqueN(OPERATOR_NO)), keyby=CYCLE_YEAR])
+
+# percent of total gas production coming from 'associated' operators
+print(OG_OPERATOR_CYCLE[CYCLE_YEAR>=2010 & CYCLE_YEAR<2021,
+                lapply(.(rowSums(.SD)), function(x) sum(x[firm_type=="associated"], na.rm=TRUE) / sum(x)),
+                by=CYCLE_YEAR, .SDcols=c("OPER_GAS_PROD_VOL","OPER_CSGD_PROD_VOL")])
+```
+
+## Characterize active, 'associated' operators
+```{r}
+operators <- copy(OG_OPERATOR_CYCLE[firm_type=="associated"])
+
+# median average production
+operators[, "med_oil_BBL":= median(OPER_OIL_PROD_VOL), by=OPERATOR_NO]
+operators[, "med_gas_MCF":= median(OPER_GAS_PROD_VOL), by=OPERATOR_NO]
+operators[, "med_csgd_MCF":= median(OPER_CSGD_PROD_VOL), by=OPERATOR_NO]
+
+# scale according to how much production comes from areas corresponding to lease data
+operators[, "scaled_oil_BBL":= med_oil_BBL   * 0.9129716]
+operators[, "scaled_gas_MCF":= med_gas_MCF   * 0.3928558]
+operators[, "scaled_csgd_MCF":= med_csgd_MCF * 0.8732849]
+
+# subset operators who produce above a threshold
+operators <- operators[scaled_oil_BBL > 0]
+operators <- operators[(scaled_gas_MCF + scaled_csgd_MCF) > 0]
+```
+
+```{r fig.cap="Oil production is nearly log-normally distributed"}
+operators[, .(log(scaled_oil_BBL))][,
+            {hist(V1, breaks="scott", freq=FALSE, main="Distribution of firm oil production", xlab="log(Oil (BBL))");
+            curve(dnorm(x, mean(V1), sd(V1)), col="blue", add=TRUE); NULL}]
+```
+
+```{r}
+print(operators[, sum(scaled_oil_BBL), by=.(CYCLE_YEAR, CYCLE_MONTH)][, as.list(summary(V1)), keyby=CYCLE_YEAR])
+```
+
+```{r fig.cap="Gas production is nearly log-normally distributed"}
+operators[scaled_gas_MCF>0, .(log(scaled_gas_MCF))][,
+            {hist(V1, breaks="scott", freq=FALSE, main="Distribution of firm gas production", xlab="log(Gas (MCF))");
+            curve(dnorm(x, mean(V1), sd(V1)), col="blue", add=TRUE); NULL}]
+```
+
+```{r}
+print(operators[, sum(scaled_gas_MCF), by=.(CYCLE_YEAR, CYCLE_MONTH)][, as.list(summary(V1)), keyby=CYCLE_YEAR])
+```
+
+```{r fig.cap="Casinghead gas production is not log-normally distributed"}
+operators[scaled_csgd_MCF>0, .(log(scaled_csgd_MCF))][,
+            {hist(V1, breaks="scott", freq=FALSE, main="Distribution of firm casinghead gas production", xlab="log(Gas (MCF))");
+            curve(dnorm(x, mean(V1), sd(V1)), col="blue", add=TRUE); NULL}]
+```
+
+Output operators
+```{r}
+fwrite(operators, "./processed/firm_market_shares.csv")
+```
+
+# Financial data  
+```{r}
+# CRSP/Compustat Merged (Annual)
+CCM <- fread("./data/CRSPCompustat Merged - Fundamentals Annual.csv.gz", key=c("fyear","LPERMCO","conm"))
+
+# SIC major group 1311: oil and gas extraction- Crude Petroleum and Natural Gas
+# NAIC group 2111 Oil and Gas Extraction
+CCM_og <- CCM[(sic==1311 | naics==2111) & !is.na(sale) & sale>=0]
+
+# Number of firms
+ggplot(CCM_og[, .("Number of firms"=uniqueN(LPERMCO)), by=fyear]) +
+    geom_col(aes(x=fyear, y=`Number of firms`))
+
+print(CCM_og[fyear>2010, .("Number of firms"=uniqueN(LPERMCO)), by=fyear])
+```
+### Calculate characteristics using firm data
+Described in [Leary & Roberts 2014](zotero://select/items/0_2I87I24H)
+```{r}
+CCM_og[, "market_share":= sale / sum(sale), by=fyear] # compare to market share
+# market value
+CCM_og[, "market_value":= mkvalt] # compare to market value
+# capital investment
+CCM_og[, "CI":= c(NA, capx[-1] / ppent[-.N]), by=LPERMCO] # compare to cash
+CCM_og[CI==Inf, "CI":= NA]
+```
+
+```{r}
+ggplot(CCM_og[fyear>=2010]) +
+    geom_density(aes(x=CI)) +
+    scale_x_log10() +
+    facet_wrap(.~fyear)
+```
+```{r fig.cap="Cash reserves are nearly log-normally distributed"}
+CCM_og[fyear>=2010 & CI>0, .(log(CI))][,
+        {hist(V1, breaks="scott", freq=FALSE, main="Distribution of firm cash", xlab="log(Dollars)");
+        curve(dnorm(x, mean(V1), sd(V1)), col="blue", add=TRUE); NULL}]
+```
+
+Output financial data
+```{r}
+fwrite(CCM_og[fyear>=2010], "./processed/firm_finances.csv")
+```
