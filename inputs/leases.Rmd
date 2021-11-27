@@ -24,8 +24,9 @@ EACH LEASE HAS THE FOLLOWING PROPERTIES
       - Oil: per barrel of oil  
       - Gas: per thousand cubic feet of gas  
 
-  Cost data is derived by matching leases to areas and sampling data from: [US EIA. (2016)](zotero://select/items/0_EJYISQT4) 
-  and is assigned during initialization
+  Well data is used to find approximate lease locations and to calculate capital expenditures based on well depth(s). 
+  Cost data is derived by matching leases to areas and sampling data from: 
+  [US EIA. (2016)](zotero://select/items/0_EJYISQT4) and is assigned during initialization. 
 
 ```{r}
 library(data.table)
@@ -44,86 +45,54 @@ library(sf)
 
 ******  
 
-# Lease data
-## Historical Disposition by Lease (including flared) gas volumes ([PDQ](#pdq))
-from: http://webapps2.rrc.texas.gov/EWA/help/prod_results_questions.html:  
-
-> "Disposition details provide the breakdown of the various ways oil or gas leases dispose of their products...
-> ...The disposition totals may not match the production totals because leases may have stock on hand at the
-> beginning of the month. All production must be reported regardless of disposition. Disposition is shown for the
-> month in which it was actually moved."
-
+# Import spatial data
+ [Source: Play boundaries](https://www.eia.gov/maps/maps.htm), 
+ [Source: Processing plants & crude pipelines](https://www.eia.gov/maps/layer_info-m.php)
 ```{r}
-# use disposition instead of production (e.g., LEASE_OIL_PROD_VOL)
-#   this maintains consistency with flaring volumes and volumes move by pipeline, rail, or truck
-OG_LEASE_CYCLE_DISP <- fread("unzip -p ./data/PDQ_DSV.zip OG_LEASE_CYCLE_DISP_DATA_TABLE.dsv", sep="}", quote="",
-                            select=list(factor=c("DISTRICT_NO","FIELD_NO","OPERATOR_NO","LEASE_NO","OIL_GAS_CODE"),
-                                        numeric=c("CYCLE_YEAR_MONTH"),
-                                        numeric=sprintf("LEASE_OIL_DISPCD%02d_VOL", c(0:9, 99)),
-                                        numeric=sprintf("LEASE_COND_DISPCD%02d_VOL", c(0:8, 99)),
-                                        numeric=sprintf("LEASE_GAS_DISPCD%02d_VOL", c(1:9, 99)),
-                                        numeric=sprintf("LEASE_CSGD_DISPCDE%02d_VOL", c(1:8, 99))))
+TX <- st_read("./data/spatial/Texas_State_Boundary-shp", layer="State")
+plot(TX$geometry, reset=FALSE, main="Gas plants and crude oil pipelines in Texas")
 
-OG_LEASE_CYCLE_DISP[, "oil_BBL":= rowSums(.SD), .SDcols=patterns("OIL_DISPCD")]
-OG_LEASE_CYCLE_DISP[, "cond_BBL":= rowSums(.SD), .SDcols=patterns("COND_DISPCD")]
-OG_LEASE_CYCLE_DISP[, "gas_MCF":= rowSums(.SD), .SDcols=patterns("GAS_DISPCD")]
-OG_LEASE_CYCLE_DISP[, "csgd_MCF":= rowSums(.SD), .SDcols=patterns("CSGD_DISPCD")]
-OG_LEASE_CYCLE_DISP[, "gas_flared_MCF":= LEASE_GAS_DISPCD04_VOL + LEASE_CSGD_DISPCDE04_VOL]
-```
+permian     <- st_read("./data/spatial/PermianBasin_Boundary_Structural_Tectonic",
+                        layer="Permian_SubBasins_201712")
+spraberry   <- st_read("./data/spatial/ShalePlays_AboYeso_GlorietaYeso_Spraberry_EIA",
+                        layer="ShalePlay_Spraberry_Boundary_EIA_Aug2015_v2")
+eagle_ford  <- st_read("./data/spatial/EagleFord_Play_Boundary_Elevation_Isopach_EIA",
+                        layer="ShalePlay_EagleFord_Boundary_EIA_Aug2015_v2")
 
-```{r}
-# Lease, district numbers are unique
-print(sum(duplicated(OG_LEASE_CYCLE_DISP, by=c("DISTRICT_NO", "LEASE_NO", "CYCLE_YEAR_MONTH"))))
+# merge permian and eagle_ford shapefiles
+cat("CRS ok:", (st_crs(permian) == st_crs(TX)), "\n")
+cat("CRS ok:", (st_crs(permian) == st_crs(spraberry)) & (st_crs(permian) == st_crs(eagle_ford)), "\n")
+permian$geometry <- st_difference(permian$geometry, spraberry$geometry)
+areas <- rbind(cbind("Name"="Eagle Ford", eagle_ford[, c("Area_sq_mi", "Area_sq_km")]),
+                cbind("Name"="Spraberry", spraberry[, c("Area_sq_mi", "Area_sq_km")]),
+                permian[permian$Name %in% c("Delaware Basin", "Midland Basin"), c("Name", "Area_sq_mi", "Area_sq_km")])
 
-# Most OIL leases have at least some associated gas:
-print(summary(OG_LEASE_CYCLE_DISP[OIL_GAS_CODE=="O", sum(gas_MCF+csgd_MCF), by=.(DISTRICT_NO, LEASE_NO)]$V1))
+plot(areas$geometry, col=rainbow(4, alpha=0.5), add=TRUE)
+legend('bottomleft', areas$Name, fill=rainbow(4, alpha=0.5))
 
-# Condensate is only report in gas leases
-print(OG_LEASE_CYCLE_DISP[, sum(cond_BBL), by=.(DISTRICT_NO, LEASE_NO, OIL_GAS_CODE)][,
-                            as.list(summary(V1)), by=OIL_GAS_CODE])
+# gas processing plants
+gas_plants <- st_read("./data/spatial/NaturalGas_ProcessingPlants_US_EIA",
+                        layer="NaturalGas_ProcessingPlants_US_2017_v2")
+plot(gas_plants$geometry, col="orange", pch="+", cex=1.5, add=TRUE)
 
-# There is no casinghead gas disposition in GAS leases:
-print(OG_LEASE_CYCLE_DISP[OIL_GAS_CODE=="G", sum(csgd_MCF)])
+# crude oil pipelines
+crude_pipelines <- st_read("./data/spatial/CrudeOil_Pipelines_US_EIA",
+                            layer="CrudeOil_Pipelines_US_202001")
+plot(crude_pipelines$geometry, col="darkgrey", add=TRUE)
 
-# GAS leases have no oil disposition:
-print(summary(OG_LEASE_CYCLE_DISP[OIL_GAS_CODE=="G", sum(oil_BBL), by=.(DISTRICT_NO, LEASE_NO)]$V1))
+# store list of shapefiles
+cat("CRS ok:", (st_crs(permian) == st_crs(crude_pipelines)) & (st_crs(permian) == st_crs(gas_plants)), "\n")
+spatial_data <- list("state"=TX, "areas"= areas,
+                    "gas_plants"= gas_plants[gas_plants$State %in% c("LA","NM","OK","TX"),],
+                    "crude_pipelines"= crude_pipelines)
 
-# and the proportion of gas flared in GAS leases is almost always zero:
-print(OG_LEASE_CYCLE_DISP[OIL_GAS_CODE=="G", as.list(summary(gas_flared_MCF/(gas_MCF+csgd_MCF))),
-                            keyby=substr(CYCLE_YEAR_MONTH,0,4)])
-```
-
-## Average production characteristics of leases from 2010 onward
-Approximate with constant mean production over 10 year period
-```{r}
-OG_LEASE_AVG <- OG_LEASE_CYCLE_DISP[CYCLE_YEAR_MONTH>=201001 & CYCLE_YEAR_MONTH<=201912,
-                                    c("OPERATOR_NO"= ifelse(uniqueN(OPERATOR_NO)==1, first(OPERATOR_NO), NA_integer_),
-                                    lapply(.SD[,c("oil_BBL","cond_BBL","gas_MCF","csgd_MCF","gas_flared_MCF",
-                                                # fraction of oil transported by pipeline, rail, & truck
-                                                sprintf("LEASE_OIL_DISPCD%02d_VOL", 0:2))], mean, na.rm=TRUE)),
-                                    by=.(LEASE_NO, FIELD_NO, DISTRICT_NO, OIL_GAS_CODE)]
-
-OG_LEASE_AVG <- OG_LEASE_AVG[oil_BBL>0 | gas_MCF>0]
-
-OG_LEASE_AVG[OG_LEASE_CYCLE_DISP[, .(min(CYCLE_YEAR_MONTH), max(CYCLE_YEAR_MONTH)), by=.(LEASE_NO, DISTRICT_NO)],
-                on=c("LEASE_NO", "DISTRICT_NO"), c("start", "expiration"):= .(V1, V2)]
-
-OG_LEASE_AVG[OIL_GAS_CODE=="O", sprintf("%s_frac", c("pipe","rail","truck")):= .SD / oil_BBL,
-                        .SDcols=sprintf("LEASE_OIL_DISPCD%02d_VOL", 0:2)]
-
-# drop unused columns
-OG_LEASE_AVG[, sprintf("LEASE_OIL_DISPCD%02d_VOL", 0:2) := NULL]
-
-cat(uniqueN(OG_LEASE_AVG, by=c("DISTRICT_NO", "LEASE_NO")), "leases have data after 2010", "\n")
-
-rm(OG_LEASE_CYCLE_DISP)
-print(OG_LEASE_AVG)
+rm(TX, permian, spraberry, eagle_ford, areas, gas_plants, crude_pipelines)
 ```
 
 ******  
 
-# Wellbore Data   
-Get approximate locations & depths of leases based on member wells  
+# Process Wellbores
+Identify locations, depths, and completion date of wellbores to subsequently merge into the lease production data  
 
 ## Wellbore Completion data (contains lease numbers)  ([PDQ](#pdq))
 ```{r}
@@ -144,7 +113,6 @@ wellbore_full[, "id":= nafill(ifelse(grepl("^01", V1), .I, NA), type="locf")]
 
 Find location information
 ```{r}
-# find location information
 unique_locs <- wellbore_full[, grep("^13", V1)]
 cat(wellbore_full[, 100 * uniqueN(id[unique_locs]) / uniqueN(id)], "% of 'full' wellbores have lat/lon data\n")
 
@@ -161,17 +129,20 @@ unique_locs <- unique_locs[!duplicated(unique_bors)]
 unique_bors <- unique_bors[!duplicated(unique_bors)]
 ```
 
-Extract relevant wellbore data
+Extract relevant wellbore data from hierarchical records
 ```{r}
 wellbore_data <- wellbore_full[sort(c(unique_bors, unique_locs)),
-                                # API number & depth from record 01
+                                # API number, depth, and completion date from record 01
                                 .("API_NO"= substr(V1[1], 3, 10), "depth"= substr(V1[1], 29, 33),
+                                "start"= substr(V1[1], 21, 26),
                                 # location lat/lon from record 13
                                 "lat"= substr(V1[2], 133, 141), "lon"= substr(V1[2], 143, 151)), by=id]
 
 wellbore_data[, "lat":=  as.numeric(gsub("(\\d{3})(\\d{6})", "\\1.\\2", lat))]
 wellbore_data[, "lon":= -as.numeric(gsub("(\\d{3})(\\d{6})", "\\1.\\2", lon))]
 wellbore_data[, "depth":= as.numeric(depth)]
+wellbore_data[, "start":= as.numeric(start)]
+wellbore_data[start==0, "start":= NA_integer_]
 ```
 
 Check for missing depth information in WB-OVERRIDE-BONDED-DEPTH, WB-TOTAL-BONDED-DEPTH
@@ -199,55 +170,13 @@ wellbore_data[, "DC_cost":= (1.65e-5)*(depth/3.28084)^1.607]
 
 ### Merge locations & depth information into full well record
 ```{r}
-OG_WELL[wellbore_data, on="API_NO", c("lat","lon","depth"):= .(lat, lon, depth)]
+OG_WELL[wellbore_data, on="API_NO", c("lat","lon","depth","start"):= .(lat, lon, depth, start)]
+
 cat("Matched", OG_WELL[, 100*sum(!is.na(lat))/.N], "% of wells with lat/lon positions\n")
 cat("Matched", OG_WELL[, 100*sum(!is.na(depth))/.N], "% of wells with depths\n")
 
 rm(wellbore_full)
 rm(wellbore_data)
-```
-
-******  
-
-# Spatial characteristics
-### Import spatial data
- [Source: Play boundaries](https://www.eia.gov/maps/maps.htm), 
- [Source: Processing plants & crude pipelines](https://www.eia.gov/maps/layer_info-m.php)
-```{r}
-permian     <- st_read("./data/spatial/PermianBasin_Boundary_Structural_Tectonic",
-                        layer="Permian_SubBasins_201712")
-spraberry   <- st_read("./data/spatial/ShalePlays_AboYeso_GlorietaYeso_Spraberry_EIA",
-                        layer="ShalePlay_Spraberry_Boundary_EIA_Aug2015_v2")
-eagle_ford  <- st_read("./data/spatial/EagleFord_Play_Boundary_Elevation_Isopach_EIA",
-                        layer="ShalePlay_EagleFord_Boundary_EIA_Aug2015_v2")
-
-# merge permian and eagle_ford shapefiles
-cat("CRS ok:", (st_crs(permian) == st_crs(spraberry)) & (st_crs(permian) == st_crs(eagle_ford)), "\n")
-permian$geometry <- st_difference(permian$geometry, spraberry$geometry)
-areas <- rbind(cbind("Name"="Eagle Ford", eagle_ford[, c("Area_sq_mi", "Area_sq_km")]),
-                cbind("Name"="Spraberry", spraberry[, c("Area_sq_mi", "Area_sq_km")]),
-                permian[permian$Name %in% c("Delaware Basin", "Midland Basin"), c("Name", "Area_sq_mi", "Area_sq_km")])
-
-plot(areas$geometry, col=rainbow(4, alpha=0.5), reset=FALSE, main="Gas plants and crude oil pipelines in Texas")
-legend('bottomleft', areas$Name, fill=rainbow(4, alpha=0.5))
-
-# gas processing plants
-gas_plants <- st_read("./data/spatial/NaturalGas_ProcessingPlants_US_EIA",
-                        layer="NaturalGas_ProcessingPlants_US_2017_v2")
-plot(gas_plants$geometry, col="orange", pch="+", cex=1.5, add=TRUE)
-
-# crude oil pipelines
-crude_pipelines <- st_read("./data/spatial/CrudeOil_Pipelines_US_EIA",
-                            layer="CrudeOil_Pipelines_US_202001")
-plot(crude_pipelines$geometry, col="darkgrey", add=TRUE)
-
-# store list of shapefiles
-cat("CRS ok:", (st_crs(permian) == st_crs(crude_pipelines)) & (st_crs(permian) == st_crs(gas_plants)), "\n")
-spatial_data <- list("areas"= areas,
-                    "gas_plants"= gas_plants[gas_plants$State %in% c("LA","NM","OK","TX"),],
-                    "crude_pipelines"= crude_pipelines)
-
-rm(permian, spraberry, eagle_ford, areas, gas_plants, crude_pipelines)
 ```
 
 ### Map wells to areas
@@ -258,12 +187,8 @@ OG_WELL[!is.na(lat), "area":= st_join(st_as_sf(.SD, coords=c("lon","lat"), crs=s
 # remove leases that span multiple areas
 OG_WELL[!is.na(area), "area":= if (uniqueN(area)==2) NA, by=.(DISTRICT_NO, LEASE_NO)]
 
-# assume the last lease entry is the most current
-OG_WELL[API_NO %in% API_NO[duplicated(API_NO)], "area":= last(area), by=API_NO]
-OG_WELL[duplicated(API_NO, fromLast=TRUE), "area":= NA]
-OG_WELL[is.na(area), "depth":= NA]
-
-plot(spatial_data$areas$geometry, col=rainbow(4, alpha=0.3), main="Well locations", reset=FALSE)
+plot(spatial_data$state$geometry, reset=FALSE, main="Well locations")
+plot(spatial_data$areas$geometry, col=rainbow(4, alpha=0.3), add=TRUE)
 legend("bottomleft", spatial_data$areas$Name, fill=rainbow(4, alpha=0.3))
 OG_WELL[!is.na(area) & !is.na(depth), plot(st_as_sf(.SD, coords=c("lon","lat"), crs=st_crs(spatial_data$area))$geometry,
                                         col=rainbow(4)[factor(area, levels=spatial_data$areas$Name)], pch=4, add=TRUE)]
@@ -274,15 +199,155 @@ OG_WELL[!is.na(area) & !is.na(depth), plot(st_as_sf(.SD, coords=c("lon","lat"), 
 fwrite(OG_WELL[!is.na(area) & !is.na(depth)], file="./processed/wells.csv")
 ```
 
-## Merge well depths and areas with lease disposition data
+******  
+
+# Lease data
+## Historical Disposition by Lease (including flared) gas volumes ([PDQ](#pdq))
+[TxRRC](http://webapps2.rrc.texas.gov/EWA/help/prod_results_questions.html):  
+
+> "Disposition details provide the breakdown of the various ways oil or gas leases dispose of their products...
+> ...The disposition totals may not match the production totals because leases may have stock on hand at the
+> beginning of the month. All production must be reported regardless of disposition. Disposition is shown for the
+> month in which it was actually moved."
+
+Using disposition instead of production (e.g., LEASE_OIL_PROD_VOL) ensures 
+consistency with flaring volumes and volumes moved by pipeline, rail, or truck  
+```{r}
+OG_LEASE_CYCLE_DISP <- fread("unzip -p ./data/PDQ_DSV.zip OG_LEASE_CYCLE_DISP_DATA_TABLE.dsv", sep="}", quote="",
+                            select=list(factor=c("DISTRICT_NO","FIELD_NO","OPERATOR_NO","LEASE_NO","OIL_GAS_CODE"),
+                                        numeric=c("CYCLE_YEAR_MONTH"),
+                                        numeric=sprintf("LEASE_OIL_DISPCD%02d_VOL", c(0:9, 99)),
+                                        numeric=sprintf("LEASE_COND_DISPCD%02d_VOL", c(0:8, 99)),
+                                        numeric=sprintf("LEASE_GAS_DISPCD%02d_VOL", c(1:9, 99)),
+                                        numeric=sprintf("LEASE_CSGD_DISPCDE%02d_VOL", c(1:8, 99))))
+
+OG_LEASE_CYCLE_DISP[, "oil_BBL":= rowSums(.SD), .SDcols=patterns("OIL_DISPCD")]
+OG_LEASE_CYCLE_DISP[, "cond_BBL":= rowSums(.SD), .SDcols=patterns("COND_DISPCD")]
+OG_LEASE_CYCLE_DISP[, "gas_MCF":= rowSums(.SD), .SDcols=patterns("GAS_DISPCD")]
+OG_LEASE_CYCLE_DISP[, "csgd_MCF":= rowSums(.SD), .SDcols=patterns("CSGD_DISPCD")]
+OG_LEASE_CYCLE_DISP[, "gas_flared_MCF":= LEASE_GAS_DISPCD04_VOL + LEASE_CSGD_DISPCDE04_VOL]
+```
+
+```{r}
+# Lease, district numbers are unique
+print(sum(duplicated(OG_LEASE_CYCLE_DISP, by=c("DISTRICT_NO", "LEASE_NO", "CYCLE_YEAR_MONTH"))))
+
+# Most OIL leases have at least some associated gas:
+print(summary(OG_LEASE_CYCLE_DISP[OIL_GAS_CODE=="O", sum(csgd_MCF), by=.(DISTRICT_NO, LEASE_NO)]$V1))
+# There is only casinghead gas in OIL leases
+print(summary(OG_LEASE_CYCLE_DISP[OIL_GAS_CODE=="O", sum(gas_MCF), by=.(DISTRICT_NO, LEASE_NO)]$V1))
+
+# Condensate is only report in gas leases
+print(OG_LEASE_CYCLE_DISP[, sum(cond_BBL), by=.(DISTRICT_NO, LEASE_NO, OIL_GAS_CODE)][,
+                            as.list(summary(V1)), by=OIL_GAS_CODE])
+
+# There is no casinghead gas disposition in GAS leases:
+print(summary(OG_LEASE_CYCLE_DISP[OIL_GAS_CODE=="G", sum(csgd_MCF), by=.(DISTRICT_NO, LEASE_NO)]$V1))
+
+# GAS leases have no oil disposition:
+print(summary(OG_LEASE_CYCLE_DISP[OIL_GAS_CODE=="G", sum(oil_BBL), by=.(DISTRICT_NO, LEASE_NO)]$V1))
+
+# and the proportion of gas flared in GAS leases is almost always zero:
+print(OG_LEASE_CYCLE_DISP[OIL_GAS_CODE=="G", as.list(summary(gas_flared_MCF/gas_MCF)),
+                            keyby=substr(CYCLE_YEAR_MONTH,0,4)])
+```
+
+## Average production characteristics of leases from 2010 onward  
+Approximate with constant mean production over 10 year period  
+```{r}
+OG_LEASE_AVG <- OG_LEASE_CYCLE_DISP[(CYCLE_YEAR_MONTH>=201001 & CYCLE_YEAR_MONTH<=201912) &
+                                        (DISTRICT_NO %in% sprintf("%02d", c(1:4, 9:11))),
+                                    c("OPERATOR_NO"= ifelse(uniqueN(OPERATOR_NO)==1, first(OPERATOR_NO), NA_integer_),
+                                    lapply(.SD[,c("oil_BBL","cond_BBL","gas_MCF","csgd_MCF","gas_flared_MCF",
+                                                # fraction of oil transported by pipeline, rail, & truck
+                                                sprintf("LEASE_OIL_DISPCD%02d_VOL", 0:2))], mean, na.rm=TRUE)),
+                                    by=.(LEASE_NO, FIELD_NO, DISTRICT_NO, OIL_GAS_CODE)]
+
+OG_LEASE_AVG <- OG_LEASE_AVG[oil_BBL>0 | gas_MCF>0]
+
+OG_LEASE_AVG[OG_LEASE_CYCLE_DISP[, .(min(CYCLE_YEAR_MONTH), max(CYCLE_YEAR_MONTH)), by=.(LEASE_NO, DISTRICT_NO)],
+                on=c("LEASE_NO", "DISTRICT_NO"), c("start", "expiration"):= .(V1, V2)]
+OG_LEASE_AVG[OG_WELL[!is.na(area) & !is.na(depth), min(start), by=.(DISTRICT_NO, LEASE_NO)],
+                on=c("DISTRICT_NO", "LEASE_NO"), "start":= ifelse(start==199301 & !is.na(V1), V1, start)]
+
+# drop leases where field number changed (~1.5% of total)
+OG_LEASE_AVG <- OG_LEASE_AVG[, if (.N==1) .SD, by=.(DISTRICT_NO, LEASE_NO)]
+
+rm(OG_LEASE_CYCLE_DISP)
+print(OG_LEASE_AVG)
+```
+
+Lease numbers can change over time. Where possible, back propagate new lease numbers to historic years  
+```{r}
+lease_crswk <- unique(OG_WELL[, if (.N>1) .(DISTRICT_NO, LEASE_NO), by=API_NO])[
+                OG_LEASE_AVG, on=c("DISTRICT_NO", "LEASE_NO"), nomatch=0, .(DISTRICT_NO, FIELD_NO, LEASE_NO, API_NO)]
+lease_crswk <- lease_crswk[lease_crswk[, .N, by=API_NO][N>1], on="API_NO",
+                            .("API_NOs"=.(API_NO)), by=.(DISTRICT_NO, LEASE_NO)]
+lease_crswk[OG_LEASE_AVG, on=c("DISTRICT_NO", "LEASE_NO"),
+            c("OIL_GAS_CODE", "start", "expiration"):= .(OIL_GAS_CODE, start, expiration)]
+
+setorder(lease_crswk, -start)
+
+lease_crswk[, "size":= lengths(API_NOs)]
+lease_crswk[size==1, "API_NO":= unlist(API_NOs)]
+
+# determine the most recent LEASE_NO to propogate backwards
+lease_crswk[size==1,
+    "alias":= .(sapply(API_NO, function(x) LEASE_NO[which(x==API_NO)[1]])), by=DISTRICT_NO]
+lease_crswk[size>1,
+    "alias":= .(sapply(API_NOs, function(x) LEASE_NO[which(sapply(API_NOs, setequal, x))[1]])), by=.(size, DISTRICT_NO)]
+
+# drop leases which don't map neatly to an alias (likely the number of member wells is different)
+lease_crswk[, "drop":= (.N==1), by=.(DISTRICT_NO, alias)]
+# if leases change from oil to gas (or vice versa) keep whichever status they had first
+lease_crswk[, "drop":= if (uniqueN(OIL_GAS_CODE)>1) replace(drop, -.N, TRUE), by=alias]
+
+OG_LEASE_AVG <- lease_crswk[,.(DISTRICT_NO, LEASE_NO, drop)][OG_LEASE_AVG, on=c("DISTRICT_NO","LEASE_NO")][
+                            is.na(drop) | drop==FALSE, mget(names(OG_LEASE_AVG))]
+
+# propogate lease aliases
+lease_crswk <- lease_crswk[, if (uniqueN(OIL_GAS_CODE)==1) .SD, by=alias][drop==FALSE & alias!=LEASE_NO]
+lease_crswk[, "lifetime":= .SD[, lapply(.(pmax(start, 201001), pmin(expiration, 201912)),
+                                        function(x) 12*trunc(x/100) + x %% 100)][, V2-V1]]
+
+OG_LEASE_AVG[lease_crswk, on=c("DISTRICT_NO","LEASE_NO"), c("LEASE_NO", "lifetime"):= .(alias, lifetime)]
+OG_LEASE_AVG[is.na(lifetime), "lifetime":= 1]
+
+OG_LEASE_AVG <- OG_LEASE_AVG[,
+                            c("OPERATOR_NO"= ifelse(uniqueN(OPERATOR_NO)==1, first(OPERATOR_NO), NA_integer_),
+                            lapply(.SD[,c("oil_BBL","cond_BBL","gas_MCF","csgd_MCF","gas_flared_MCF",
+                                        # fraction of oil transported by pipeline, rail, & truck
+                                        sprintf("LEASE_OIL_DISPCD%02d_VOL", 0:2))], weighted.mean, lifetime),
+                            "start"=min(start), "expiration"=max(expiration)),
+                            by=.(LEASE_NO, FIELD_NO, DISTRICT_NO, OIL_GAS_CODE)]
+
+# drop leases where field number changed (~3% of total)
+OG_LEASE_AVG <- OG_LEASE_AVG[, if (.N==1) .SD, by=.(DISTRICT_NO, LEASE_NO)]
+
+rm(lease_crswk)
+```
+
+Calculate how oil leaves the lease (disposition)
+```{r}
+OG_LEASE_AVG[OIL_GAS_CODE=="O", sprintf("%s_frac", c("pipe","rail","truck")):= .SD / oil_BBL,
+                        .SDcols=sprintf("LEASE_OIL_DISPCD%02d_VOL", 0:2)]
+
+# drop unused columns
+OG_LEASE_AVG[, sprintf("LEASE_OIL_DISPCD%02d_VOL", 0:2) := NULL]
+
+cat(uniqueN(OG_LEASE_AVG, by=c("DISTRICT_NO", "LEASE_NO")), "leases have data after 2010", "\n")
+```
+
+## Combine lease (disposition) with well (depth and location) data 
 ```{r}
 OG_LEASE_AVG[
             # aggregate by district & lease
-            OG_WELL[!is.na(area) & !is.na(depth), .(mean(lat), mean(lon), .N), by=.(DISTRICT_NO, LEASE_NO, area)],
-            on=c("DISTRICT_NO", "LEASE_NO"), c("area","lat", "lon", "N"):= .(area, V1, V2, N)]
+            OG_WELL[!is.na(area) & !is.na(depth), .(mean(lat), mean(lon)), by=.(DISTRICT_NO, LEASE_NO, area)],
+            on=c("DISTRICT_NO", "LEASE_NO"), c("area","lat", "lon"):= .(area, V1, V2)]
 cat("Matched", OG_LEASE_AVG[!is.na(lat), .N], "leases with wells & locations in Eagle Ford & Permian basins")
 
-plot(spatial_data$areas$geometry, col=rainbow(4, alpha=0.3), main="Approximate lease locations", reset=FALSE)
+plot(spatial_data$state$geometry, reset=FALSE, main="Approximate lease locations")
+plot(spatial_data$areas$geometry, col=rainbow(4, alpha=0.3), add=TRUE)
 legend("bottomleft", spatial_data$areas$Name, fill=rainbow(4, alpha=0.3))
 OG_LEASE_AVG[!is.na(area), plot(st_as_sf(.SD, coords=c("lon","lat"), crs=st_crs(spatial_data$area))$geometry,
                                         col=rainbow(4)[factor(area, levels=spatial_data$areas$Name)], pch=4, add=TRUE)]
@@ -312,7 +377,7 @@ for (chunk in split(1:nrow(OG_LEASE_sf), sort(rep_len(1:10, nrow(OG_LEASE_sf))))
 }
 ```
 
-#### Merge distance data with full lease record
+Merge distance data with full lease record  
 ```{r}
 st_geometry(OG_LEASE_sf) <- NULL
 setDT(OG_LEASE_sf)
@@ -320,7 +385,7 @@ OG_LEASE_AVG[OG_LEASE_sf, on=c("DISTRICT_NO", "LEASE_NO"),
                 c("gas_cap", "gas_dist", "crude_dist"):= .(gas_cap, gas_dist, crude_dist)]
 ```
 
-### Output complete lease records
+### Output complete lease records  
 ```{r}
 fwrite(OG_LEASE_AVG[!is.na(area)], file="./processed/leases_full.csv")
 ```
