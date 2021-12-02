@@ -16,17 +16,21 @@ GENERATE SAMPLE OIL AND GAS LEASES FROM TEXAS RAILROAD COMMISSION DATA
 EACH LEASE HAS THE FOLLOWING PROPERTIES  
 
   1. MONTHLY OIL PRODUCTION  
+      - Marketable production (`oil_BBL`)  
+      - Total production (`total_oil_BBL`)  
   2. MONTHLY GAS PRODUCTION  
-  3. MONTHLY GAS FLARED  
-  4. CAPITAL EXPENDITURE  
-  5. OPERATING EXPENSES:  
-      - Base: per barrel of oil equivalent  
-      - Oil: per barrel of oil  
-      - Gas: per thousand cubic feet of gas  
+      - Marketable production (`gas_MCF`, `csgd_MCF`)  
+      - Total production (`total_MCF`)  
+      - Flared (`flared_MCF`)  
+  3. CAPITAL EXPENDITURE (`capEx`)  
+  4. OPERATING EXPENSES:  
+      - Base: dollars based on the barrel of oil equivalent production (`opEx`)  
+      - Oil: per barrel of oil (`opEx_pBBL`)  
+      - Gas: per thousand cubic feet of gas (`opEx_pMCF`)  
 
   Well data is used to find approximate lease locations and to calculate capital expenditures based on well depth(s). 
-  Cost data is derived by matching leases to areas and sampling data from: 
-  [US EIA. (2016)](zotero://select/items/0_EJYISQT4) and is assigned during initialization. 
+  Cost parameters are derived during initialization by matching leases to areas and sampling data from: 
+  [US EIA. (2016)](zotero://select/items/0_EJYISQT4). 
 
 ```{r}
 library(data.table)
@@ -216,39 +220,46 @@ consistency with flaring volumes and volumes moved by pipeline, rail, or truck
 OG_LEASE_CYCLE_DISP <- fread("unzip -p ./data/PDQ_DSV.zip OG_LEASE_CYCLE_DISP_DATA_TABLE.dsv", sep="}", quote="",
                             select=list(factor=c("DISTRICT_NO","FIELD_NO","OPERATOR_NO","LEASE_NO","OIL_GAS_CODE"),
                                         numeric=c("CYCLE_YEAR_MONTH"),
-                                        numeric=sprintf("LEASE_OIL_DISPCD%02d_VOL", c(0:9, 99)),
-                                        numeric=sprintf("LEASE_COND_DISPCD%02d_VOL", c(0:8, 99)),
-                                        numeric=sprintf("LEASE_GAS_DISPCD%02d_VOL", c(1:9, 99)),
+                                        numeric=sprintf("LEASE_OIL_DISPCD%02d_VOL",   c(0:9, 99)),
+                                        numeric=sprintf("LEASE_COND_DISPCD%02d_VOL",  c(0:8, 99)),
+                                        numeric=sprintf("LEASE_GAS_DISPCD%02d_VOL",   c(1:9, 99)),
                                         numeric=sprintf("LEASE_CSGD_DISPCDE%02d_VOL", c(1:8, 99))))
 
-OG_LEASE_CYCLE_DISP[, "oil_BBL":= rowSums(.SD), .SDcols=patterns("OIL_DISPCD")]
-OG_LEASE_CYCLE_DISP[, "cond_BBL":= rowSums(.SD), .SDcols=patterns("COND_DISPCD")]
-OG_LEASE_CYCLE_DISP[, "gas_MCF":= rowSums(.SD), .SDcols=patterns("GAS_DISPCD")]
-OG_LEASE_CYCLE_DISP[, "csgd_MCF":= rowSums(.SD), .SDcols=patterns("CSGD_DISPCD")]
-OG_LEASE_CYCLE_DISP[, "gas_flared_MCF":= LEASE_GAS_DISPCD04_VOL + LEASE_CSGD_DISPCDE04_VOL]
+OG_LEASE_CYCLE_DISP[, "oil_BBL":=  rowSums(.SD), .SDcols=sprintf("LEASE_OIL_DISPCD%02d_VOL",    0:2)]
+OG_LEASE_CYCLE_DISP[, "cond_BBL":= rowSums(.SD), .SDcols=sprintf("LEASE_COND_DISPCD%02d_VOL",   0:2)]
+OG_LEASE_CYCLE_DISP[, "gas_MCF":=  rowSums(.SD), .SDcols=sprintf("LEASE_GAS_DISPCD%02d_VOL",  c(2:4, 7:8, 99))]
+OG_LEASE_CYCLE_DISP[, "csgd_MCF":= rowSums(.SD), .SDcols=sprintf("LEASE_CSGD_DISPCDE%02d_VOL", c(2:4, 7:8, 99))]
+
+OG_LEASE_CYCLE_DISP[, "total_oil_BBL":= rowSums(.SD), .SDcols=patterns("OIL_DISPCD")]
+OG_LEASE_CYCLE_DISP[, "total_MCF":=     rowSums(.SD), .SDcols=patterns("GAS_DISPCD|CSGD_DISPCD")]
+OG_LEASE_CYCLE_DISP[, "flared_MCF":= LEASE_GAS_DISPCD04_VOL + LEASE_CSGD_DISPCDE04_VOL]
 ```
 
 ```{r}
 # Lease, district numbers are unique
 print(sum(duplicated(OG_LEASE_CYCLE_DISP, by=c("DISTRICT_NO", "LEASE_NO", "CYCLE_YEAR_MONTH"))))
 
-# Most OIL leases have at least some associated gas:
+# Most OIL leases have at least some associated gas
 print(summary(OG_LEASE_CYCLE_DISP[OIL_GAS_CODE=="O", sum(csgd_MCF), by=.(DISTRICT_NO, LEASE_NO)]$V1))
+
 # There is only casinghead gas in OIL leases
 print(summary(OG_LEASE_CYCLE_DISP[OIL_GAS_CODE=="O", sum(gas_MCF), by=.(DISTRICT_NO, LEASE_NO)]$V1))
 
-# Condensate is only report in gas leases
+# There is no casinghead gas disposition in GAS leases
+print(summary(OG_LEASE_CYCLE_DISP[OIL_GAS_CODE=="G", sum(csgd_MCF), by=.(DISTRICT_NO, LEASE_NO)]$V1))
+
+# Condensate is only report in GAS leases
 print(OG_LEASE_CYCLE_DISP[, sum(cond_BBL), by=.(DISTRICT_NO, LEASE_NO, OIL_GAS_CODE)][,
                             as.list(summary(V1)), by=OIL_GAS_CODE])
 
-# There is no casinghead gas disposition in GAS leases:
-print(summary(OG_LEASE_CYCLE_DISP[OIL_GAS_CODE=="G", sum(csgd_MCF), by=.(DISTRICT_NO, LEASE_NO)]$V1))
+# Condensate accounts for a relatively small proportion of BOE
+print(summary(OG_LEASE_CYCLE_DISP[gas_MCF > 0, cond_BBL / (gas_MCF/6)]))
 
 # GAS leases have no oil disposition:
 print(summary(OG_LEASE_CYCLE_DISP[OIL_GAS_CODE=="G", sum(oil_BBL), by=.(DISTRICT_NO, LEASE_NO)]$V1))
 
 # and the proportion of gas flared in GAS leases is almost always zero:
-print(OG_LEASE_CYCLE_DISP[OIL_GAS_CODE=="G", as.list(summary(gas_flared_MCF/gas_MCF)),
+print(OG_LEASE_CYCLE_DISP[OIL_GAS_CODE=="G", as.list(summary(flared_MCF/gas_MCF)),
                             keyby=substr(CYCLE_YEAR_MONTH,0,4)])
 ```
 
@@ -258,7 +269,8 @@ Approximate with constant mean production over 10 year period
 OG_LEASE_AVG <- OG_LEASE_CYCLE_DISP[(CYCLE_YEAR_MONTH>=201001 & CYCLE_YEAR_MONTH<=201912) &
                                         (DISTRICT_NO %in% sprintf("%02d", c(1:4, 9:11))),
                                     c("OPERATOR_NO"= ifelse(uniqueN(OPERATOR_NO)==1, first(OPERATOR_NO), NA_integer_),
-                                    lapply(.SD[,c("oil_BBL","cond_BBL","gas_MCF","csgd_MCF","gas_flared_MCF",
+                                    lapply(.SD[,c("oil_BBL","cond_BBL","gas_MCF","csgd_MCF",
+                                                "total_oil_BBL","total_MCF","flared_MCF",
                                                 # fraction of oil transported by pipeline, rail, & truck
                                                 sprintf("LEASE_OIL_DISPCD%02d_VOL", 0:2))], mean, na.rm=TRUE)),
                                     by=.(LEASE_NO, FIELD_NO, DISTRICT_NO, OIL_GAS_CODE)]
@@ -315,7 +327,8 @@ OG_LEASE_AVG[is.na(lifetime), "lifetime":= 1]
 
 OG_LEASE_AVG <- OG_LEASE_AVG[,
                             c("OPERATOR_NO"= ifelse(uniqueN(OPERATOR_NO)==1, first(OPERATOR_NO), NA_integer_),
-                            lapply(.SD[,c("oil_BBL","cond_BBL","gas_MCF","csgd_MCF","gas_flared_MCF",
+                            lapply(.SD[,c("oil_BBL","cond_BBL","gas_MCF","csgd_MCF",
+                                        "total_oil_BBL","total_MCF","flared_MCF",
                                         # fraction of oil transported by pipeline, rail, & truck
                                         sprintf("LEASE_OIL_DISPCD%02d_VOL", 0:2))], weighted.mean, lifetime),
                             "start"=min(start), "expiration"=max(expiration)),

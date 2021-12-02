@@ -78,7 +78,8 @@ leases_full[is.na(opEx_pMCF), "opEx_pMCF":= 0]
 # consolidate leases in the same field with the same start & expiration date
 cat("\tAggregating similar leases in the same field\n\t")
 # leases_full[, "start":= replace(start, start<201001, 201001)]
-leases <- leases_full[, c(lapply(.SD[,.(oil_BBL, cond_BBL, gas_MCF, csgd_MCF, gas_flared_MCF, capEx)], sum),
+leases <- leases_full[, c(lapply(.SD[,.(oil_BBL, cond_BBL, gas_MCF, csgd_MCF, capEx)], sum),
+                          lapply(.SD[,.(total_oil_BBL, total_MCF, flared_MCF)], sum),
                           lapply(.SD[,.(opEx_pBOE)], mean),
                           lapply(.SD[,.(opEx_pBBL)], weighted.mean, oil_BBL),
                           lapply(.SD[,.(opEx_pMCF)], weighted.mean, gas_MCF+csgd_MCF)),
@@ -127,12 +128,12 @@ while(!between(sum(firms$production_BBL)/mean(market_shares[, sum(scaled_oil_BBL
 }
 
 for (ID in firms[order(production_BBL)]$firmID) {
-    leases[is.na(firmID) & oil_BBL>0, "firmID":= replace(firmID, which.min(oil_BBL), ID)]
+    leases[is.na(firmID) & oil_BBL>0, "firmID":= replace(firmID, which.min(total_oil_BBL), ID)]
 
-    rem_capacity <- firms[ID, production_BBL] - leases[firmID==ID, sum(oil_BBL)]
-    while (rem_capacity - min(leases[is.na(firmID) & (oil_BBL>0)]$oil_BBL) > 0) {
-        leases[sample(.N, 1, prob=is.na(firmID) & (oil_BBL>0) & (rem_capacity - oil_BBL > 0)), "firmID":= ID]
-        rem_capacity <- firms[ID, production_BBL] - leases[firmID==ID, sum(oil_BBL)]
+    rem_capacity <- firms[ID, production_BBL] - leases[firmID==ID, sum(total_oil_BBL)]
+    while (rem_capacity - min(leases[is.na(firmID) & (oil_BBL>0)]$total_oil_BBL) > 0) {
+        leases[sample(.N, 1, prob=is.na(firmID) & (oil_BBL>0) & (rem_capacity - total_oil_BBL > 0)), "firmID":= ID]
+        rem_capacity <- firms[ID, production_BBL] - leases[firmID==ID, sum(total_oil_BBL)]
    }
 }
 
@@ -149,12 +150,12 @@ while(!between(sum(firms$production_MCF)/mean(market_shares[, sum(scaled_gas_MCF
 }
 
 for (ID in firms[production_MCF>0][order(production_MCF)]$firmID) {
-    leases[is.na(firmID) & gas_MCF>0, "firmID":= replace(firmID, which.min(gas_MCF), ID)]
+    leases[is.na(firmID) & gas_MCF>0, "firmID":= replace(firmID, which.min(total_MCF), ID)]
 
-    rem_capacity <- firms[ID, production_MCF] - leases[firmID==ID, sum(gas_MCF)]
-    while (rem_capacity - min(leases[is.na(firmID) & (gas_MCF>0)]$gas_MCF) > 0) {
-        leases[sample(.N, 1, prob=is.na(firmID) & (gas_MCF>0) & (rem_capacity - gas_MCF > 0)), "firmID":= ID]
-        rem_capacity <- firms[ID, production_MCF] - leases[firmID==ID, sum(gas_MCF)]
+    rem_capacity <- firms[ID, production_MCF] - leases[firmID==ID & gas_MCF>0, sum(total_MCF)]
+    while (rem_capacity - min(leases[is.na(firmID) & (gas_MCF>0)]$total_MCF) > 0) {
+        leases[sample(.N, 1, prob=is.na(firmID) & (gas_MCF>0) & (rem_capacity - total_MCF > 0)), "firmID":= ID]
+        rem_capacity <- firms[ID, production_MCF] - leases[firmID==ID & gas_MCF>0, sum(total_MCF)]
    }
 }
 
