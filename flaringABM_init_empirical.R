@@ -20,7 +20,15 @@ while (min(wells$capExMM) <= 0) {
 }
 
 # Lease capital expenditure is the sum of well costs (in millions of dollars)
-leases_full[wells[, sum(capExMM), by=.(DISTRICT_NO, LEASE_NO)], on=c("DISTRICT_NO", "LEASE_NO"), "capEx":= V1 * 10^6]
+leases_full[wells[, .(sum(capExMM), .N), by=.(DISTRICT_NO, LEASE_NO)], on=c("DISTRICT_NO", "LEASE_NO"),
+                c("capEx", "N"):= .(V1 * 10^6, N)]
+
+# Each gas lease should only have 1 well
+leases_full <- leases_full[!(OIL_GAS_CODE=="G" & N>1)]
+# Drop outlier oil leases
+leases_full <- leases_full[!(OIL_GAS_CODE=="O" & N>quantile(N[OIL_GAS_CODE=="O"], 0.99))]
+# Drop leases that appear to be flaring without any production
+leases_full <- leases_full[!(gas_MCF>0 & (flared_MCF / gas_MCF)>0.25 & cond_BBL / (gas_MCF/6)<1)]
 
 # Estimate operating expenses by lease (excludes natural gas liquids)
 # base (pBOE):  Water, General & Administrative, Lease Operating Expenses,
