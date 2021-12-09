@@ -13,10 +13,11 @@ cat("\tAssigning well capital expenses\n\t")
 setorder(wells, depth)
 wells[, "capExMM":= 0]
 while (min(wells$capExMM) <= 0) {
-    wells[area=="Eagle Ford",       "capExMM":= sort(rnorm(.N, (9.6 + 5.9)/2, (9.6 - 5.9)/4))]
-    wells[area=="Delaware Basin",   "capExMM":= sort(rnorm(.N, (8.5 + 5.0)/2, (8.5 - 5.0)/4))]
-    wells[area=="Midland Basin",    "capExMM":= sort(rnorm(.N, (8.6 + 5.5)/2, (8.6 - 5.5)/4))]
-    wells[area=="Spraberry",        "capExMM":= sort(rnorm(.N, 2.5, 0.25))]
+    wells[area=="Eagle Ford",       "capExMM":= sort(rnorm(.N, (9.6 + 5.9)/2, (9.6 - 5.9)/1.282/2))]
+    wells[area=="Delaware Basin",   "capExMM":= sort(rnorm(.N, (8.5 + 5.0)/2, (8.5 - 5.0)/1.282/2))]
+    wells[area=="Midland Basin",    "capExMM":= sort(rnorm(.N, (8.6 + 5.5)/2, (8.6 - 5.5)/1.282/2))]
+    # only the mean (2.5) is given for Spraberry. Assume a coefficient of variation of 0.2
+    wells[area=="Spraberry",        "capExMM":= sort(rnorm(.N, 2.5, 0.5))]
 }
 
 # Lease capital expenditure is the sum of well costs (in millions of dollars)
