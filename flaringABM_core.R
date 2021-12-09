@@ -49,10 +49,10 @@ dist_social_pressure <- function(dt_f, method="even", focus=1) {
 calc_opEx <- function(dt_l) {
     # determine operation costs based on lease outputs
     # MCF to BOE Conversion: https://petrowiki.spe.org/Glossary:Barrels_of_oil_equivalent
-    dt_l[,  .("oil"=  (opEx_pBBL + opEx_pBOE)    * oil_BBL,
-              "gas"=  (opEx_pMCF + opEx_pBOE/6)  * gas_MCF,
-              "csgd"= (opEx_pMCF + opEx_pBOE/6)  * csgd_MCF)]
-
+    dt_l[,  {csgd_developed_MCF= ifelse(class %in% "developed", csgd_MCF, 0);
+            opEx_pBOE= opEx / (oil_BBL + (gas_MCF + csgd_developed_MCF)/6);
+            .(cbind(oil_BBL, csgd_developed_MCF, gas_MCF) *
+                (sapply(c(1, 1/6, 1/6), `*`, opEx_pBOE) + cbind(opEx_pBBL, opEx_pMCF, opEx_pMCF)))}]
 }###--------------------    END OF FUNCTION calc_opEx               --------------------###
 
 
@@ -103,7 +103,7 @@ build_permutations <- function(firmIDs) {
                                 .(i_horizon, t_horizon, sPressure, cash - cost_O - cost_M - cost_CE)]
 
     # calculate the additional cost associated with exercising each option over the time horizon
-    dt_p[, "cost_M_add":= leases[first(leaseIDs), sapply(lapply(perm, `*`, opEx_csgd), sum)], by=firmID]
+    dt_p[, "cost_M_add":= leases[first(leaseIDs), sapply(lapply(perm, `*`, opEx_pMCF*csgd_MCF), sum)], by=firmID]
     # capital expenditures for gas capture are assumed to be borne by midstream firms
     dt_p[, "cost_CE_add":= 0]
 
@@ -207,6 +207,7 @@ do_development <- function(dt_f, dt_l, dt_p, devs) {
     dt_f[dt_p[(best & meets_thresh & imitation) == TRUE], on="firmID", "behavior":= "imitating"]
 
     # gas output from development
+    dt_l[firmID %in% devs, sprintf("opEx_%s", c("oil","csgd","gas")):= calc_opEx(.SD)]
     dt_f[dt_l[firmID %in% devs & class=="developed" & status=="producing", sum(gas_MCF+csgd_MCF), by=firmID],
         on="firmID", "gas_output":= .(V1)]
 

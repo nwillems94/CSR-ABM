@@ -40,6 +40,8 @@ while (min(leases_full$opEx_pBOE) <= 0) {
     leases_full[area %in% c("Midland Basin","Spraberry"),       "opEx_pBOE":=
                                                                 rnorm(.N, (16.1+7.9)/2, (16.1-7.9)/4)]
 }
+# Use the empirical BOEs sold to calculate the baseline operating cost
+leases_full[, "opEx" := opEx_pBOE * (oil_BBL + (gas_MCF + csgd_MCF - flared_MCF)/6)]
 
 # oil (pBBL):   Short Transportation, Long Transportation (ordered by how oil moves & distance from crude pipelines)
 cat("\tAssigning lease operating expenses per barrel of oil\n\t")
@@ -78,23 +80,24 @@ leases_full[is.na(opEx_pMCF), "opEx_pMCF":= 0]
 # consolidate leases in the same field with the same start & expiration date
 cat("\tAggregating similar leases in the same field\n\t")
 # leases_full[, "start":= replace(start, start<201001, 201001)]
-leases <- leases_full[, c(lapply(.SD[,.(oil_BBL, cond_BBL, gas_MCF, csgd_MCF, capEx)], sum),
+leases <- leases_full[, c(lapply(.SD[,.(oil_BBL, cond_BBL, gas_MCF, csgd_MCF)], sum),
                           lapply(.SD[,.(total_oil_BBL, total_MCF, flared_MCF)], sum),
-                          lapply(.SD[,.(opEx_pBOE)], mean),
+                          lapply(.SD[,.(capEx, opEx)], sum),
                           lapply(.SD[,.(opEx_pBBL)], weighted.mean, oil_BBL),
                           lapply(.SD[,.(opEx_pMCF)], weighted.mean, gas_MCF+csgd_MCF)),
                     by=.(start, expiration, area, DISTRICT_NO, FIELD_NO, OIL_GAS_CODE)]
 leases[oil_BBL==0,          opEx_pBBL:= 0]
 leases[gas_MCF+csgd_MCF==0, opEx_pMCF:= 0]
 
-# calculate lease operating expenses
-leases[, sprintf("opEx_%s", c("oil","gas","csgd")):= calc_opEx(.SD)]
 
 # Assign other lease attributes
 leases[, "firmID":= NA_integer_]
 leases[, c("t_found","t_switch"):= NA_integer_]
 leases[, c("class","status"):= NA_character_]
 leases[, "time":= Params$t0-1]
+
+# calculate lease operating expenses
+leases[, sprintf("opEx_%s", c("oil","csgd","gas")):= calc_opEx(.SD)]
 
 leases[, "leaseID":= .I]
 setkey(leases, leaseID)
