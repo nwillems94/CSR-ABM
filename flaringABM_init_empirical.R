@@ -32,25 +32,27 @@ leases_full <- leases_full[!(OIL_GAS_CODE=="O" & N>quantile(N[OIL_GAS_CODE=="O"]
 leases_full <- leases_full[!(gas_MCF>0 & (flared_MCF / gas_MCF)>0.25 & cond_BBL / (gas_MCF/6)<1)]
 
 # Estimate operating expenses by lease (excludes natural gas liquids)
-# base (pBOE):  Water, General & Administrative, Lease Operating Expenses,
+# base (pBOE):  Water, General & Administrative, Lease Operating Expenses, (ordered by productivity)
 #  values estimated from [US EIA, 2016](zotero://select/items/0_EJYISQT4)
 #  using [Webplotdigitizer](zotero://select/items/0_UW7H7HAP)
 cat("\tAssigning lease operating expenses per barrel of oil equivalent\n\t")
+leases_full[, "BOE":= oil_BBL + (gas_MCF + csgd_MCF - flared_MCF)/6]
+setorder(leases_full, -BOE)
 leases_full[, "opEx_pBOE":= 0]
 while (min(leases_full$opEx_pBOE) <= 0) {
     leases_full[area=="Eagle Ford" & oil_BBL>0,                 "opEx_pBOE":=                             # oil
-                                                                rnorm(.N, (15.2+9.3)/2, (15.2-9.3)/4)]
+                                                                sort(rnorm(.N, (15.2+9.3)/2, (15.2-9.3)/4))]
     leases_full[area=="Eagle Ford" & gas_MCF>0 & cond_BBL>0,    "opEx_pBOE":=                             # wet gas
-                                                                rnorm(.N, (13.5+6.7)/2, (13.5-6.7)/4)]
+                                                                sort(rnorm(.N, (13.5+6.7)/2, (13.5-6.7)/4))]
     leases_full[area=="Eagle Ford" & gas_MCF>0 & cond_BBL==0,   "opEx_pBOE":=                             # dry gas
-                                                                rnorm(.N, (10.3+5.3)/2, (10.3-5.3)/4)]
+                                                                sort(rnorm(.N, (10.3+5.3)/2, (10.3-5.3)/4))]
     leases_full[area=="Delaware Basin",                         "opEx_pBOE":=
-                                                                rnorm(.N, (16.1+7.7)/2, (16.1-7.7)/4)]
+                                                                sort(rnorm(.N, (16.1+7.7)/2, (16.1-7.7)/4))]
     leases_full[area %in% c("Midland Basin","Spraberry"),       "opEx_pBOE":=
-                                                                rnorm(.N, (16.1+7.9)/2, (16.1-7.9)/4)]
+                                                                sort(rnorm(.N, (16.1+7.9)/2, (16.1-7.9)/4))]
 }
 # Use the empirical BOEs sold to calculate the baseline operating cost
-leases_full[, "opEx" := opEx_pBOE * (oil_BBL + (gas_MCF + csgd_MCF - flared_MCF)/6)]
+leases_full[, "opEx" := opEx_pBOE * BOE]
 
 # oil (pBBL):   Short Transportation, Long Transportation (ordered by how oil moves & distance from crude pipelines)
 cat("\tAssigning lease operating expenses per barrel of oil\n\t")
@@ -66,9 +68,10 @@ while (min(leases_full$opEx_pBBL, na.rm=TRUE) <= 0) {
 }
 leases_full[is.na(opEx_pBBL), "opEx_pBBL":= 0]
 
-# gas (pMCF):   Gathering & Transportation, Processing (ordered by inverse-square distance weighted capacity)
+# gas (pMCF):   Gathering & Transportation, Processing (ordered by % flared & inverse-square distance weighted capacity)
 cat("\tAssigning lease operating expenses per thousand cubic feet of gas\n\t")
-setorder(leases_full, -gas_cap)
+leases_full[gas_MCF+csgd_MCF>0, "percent_flared":=  round(flared_MCF / (gas_MCF+csgd_MCF), 2)]
+setorder(leases_full, percent_flared, -gas_cap)
 leases_full[, "opEx_pMCF":= ifelse(gas_MCF+csgd_MCF>0, 0, NA)]
 while (min(leases_full$opEx_pMCF, na.rm=TRUE) <= 0) {
     leases_full[area=="Eagle Ford" & csgd_MCF>0,                "opEx_pMCF":=                             # oil
