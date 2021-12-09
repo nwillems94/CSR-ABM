@@ -67,10 +67,9 @@ calc_debits <- function(dt_f, dt_l) {
     dt_f[dt_e[(!is.na(t_switch)) & status=="producing", sum(opEx_csgd), by=firmID],
             on="firmID", "cost_M":= V1]
 
-    # baseline capital expenditures yet to be paid off
+    # capital expenditures which are paid off over the lease lifetime
     dt_f[, "cost_CE":= 0]
-    dt_f[dt_e[(t_found + i_horizon > ti$time), sum(capEx) / i_horizon, by=firmID],
-            on="firmID", "cost_CE":= V1]
+    dt_f[dt_e[, sum(capEx/lifetime), by=firmID], on="firmID", "cost_CE":= V1]
 
 }###--------------------    END OF FUNCTION calc_debits             --------------------###
 
@@ -99,8 +98,7 @@ build_permutations <- function(firmIDs) {
                     keyby=firmID]
 
     # add firm attributes
-    dt_p[firms, on="firmID", c("i_horizon", "t_horizon", "sPressure", "free_capital"):=
-                                .(i_horizon, t_horizon, sPressure, cash - cost_O - cost_M - cost_CE)]
+    dt_p[firms, on="firmID", c("sPressure", "free_capital"):= .(sPressure, cash - cost_O - cost_M - cost_CE)]
 
     # calculate the additional cost associated with exercising each option over the time horizon
     dt_p[, "cost_M_add":= leases[first(leaseIDs), sapply(lapply(perm, `*`, opEx_pMCF*csgd_MCF), sum)], by=firmID]

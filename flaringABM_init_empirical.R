@@ -86,6 +86,15 @@ leases <- leases_full[, c(lapply(.SD[,.(oil_BBL, cond_BBL, gas_MCF, csgd_MCF)], 
                           lapply(.SD[,.(opEx_pBBL)], weighted.mean, oil_BBL),
                           lapply(.SD[,.(opEx_pMCF)], weighted.mean, gas_MCF+csgd_MCF)),
                     by=.(start, expiration, area, DISTRICT_NO, FIELD_NO, OIL_GAS_CODE)]
+
+# calculate lease lifetime in months
+leases[, "lifetime":= .SD[, lapply(.(expiration, start), function(x) 12*trunc(x/100) + x %% 100)][, V1-V2]]
+leases <- leases[!(lifetime<12 & expiration<max(expiration))]
+#   for leases that are still operating, estimate a lifetime based on historical distribution
+leases[expiration==max(expiration),
+        "lifetime":= sapply(lifetime, function(x) leases[OIL_GAS_CODE==.BY & lifetime>x, sample(c(lifetime, x), 1)]),
+        by=OIL_GAS_CODE]
+
 leases[oil_BBL==0,          opEx_pBBL:= 0]
 leases[gas_MCF+csgd_MCF==0, opEx_pMCF:= 0]
 
@@ -112,8 +121,6 @@ firms <- data.table("firmID"= 1:Params$nagents, key= "firmID",
                     # Valuations; costs include Operating, Mitigation, Capital Expenditures
                     "cash"= NA_real_, "market_value"= NA_real_,
                     "cost_O"= NA_real_, "cost_M"= NA_real_, "cost_CE"= NA_real_, "sPressure"= NA_real_,
-                    # time horizons for decision making and over which investments are paid off
-                    "t_horizon"= 5, "i_horizon"= 4,
                     # activities: exploration, development; behaviors: flaring, mitigating, economizing, imitating
                     "activity"= NA_character_, "behavior"= NA_character_,
                     "time"= Params$t0-1)
@@ -162,7 +169,7 @@ for (ID in firms[production_MCF>0][order(production_MCF)]$firmID) {
    }
 }
 
-leases[!is.na(firmID), "t_found":= Params$t0 - max(firms$i_horizon) - 1]
+leases[!is.na(firmID), "t_found":= Params$t0 - 1]
 leases[!is.na(firmID), c("class", "status"):= .(ifelse(csgd_MCF>0, "underdeveloped", "developed"), "producing")]
 
 
