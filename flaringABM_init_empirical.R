@@ -110,19 +110,13 @@ leases[expiration==max(expiration),
 leases[oil_BBL==0,          opEx_pBBL:= 0]
 leases[gas_MCF+csgd_MCF==0, opEx_pMCF:= 0]
 
-# price index leases starting before 2005 according to historical cost data (which were mostly lower)
-# https://www.eia.gov/dnav/ng/NG_ENR_WELLCOST_S1_A.htm
-#   [US EIA](zotero://select/items/0_EJYISQT4) & [IEA](zotero://select/items/0_RAVQRI9Y)
-#   draw similar conclusions about historical cost data (e.g., 2015 costs were ~30% lower than 2012 values)
-#   IEA places 2014 upstream costs at 130% of 2005 costs
-well_cost_index <- fread("./inputs/data/NG_ENR_WELLCOST_S1_A.csv", skip=3)
-well_cost_index[, c("oil_real", "gas_real"):= lapply(.(oil_nominal, gas_nominal), `*`, avg_real / avg_nominal)]
-well_cost_index[, c("oil_index", "gas_index"):= .(oil_real/oil_real[year==2005]/1.3, gas_real/gas_real[year==2005]/1.3)]
+# apply a price index to convert from 2014 dollars to historical costs (which were mostly lower)
+well_cost_index <- fread("./inputs/processed/well_cost_index.csv")
 
 leases[well_cost_index[, cbind("date"=as.numeric(sprintf("%d%02d", year, 1:12)), .SD), by=year], on=c(start="date"),
-        "capEx":= capEx * ifelse(OIL_GAS_CODE=="O", oil_index, gas_index)]
+        "capEx":= capEx * real_index_2014]
 leases[substr(start, 1, 4) < min(well_cost_index$year),
-        "capEx":= capEx * with(well_cost_index[which.min(year)], ifelse(OIL_GAS_CODE=="O", oil_index, gas_index))]
+        "capEx":= capEx * well_cost_index[which.min(year), real_index_2014]]
 
 # Assign other lease attributes
 leases[, "firmID":= NA_integer_]
