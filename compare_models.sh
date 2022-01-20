@@ -77,5 +77,10 @@ concat_runs "lease" $JOBID_3 &
 wait 
 
 
+# process outputs into singular compact files
+RScript flaringABM_postproc.R "complete"=$JOBID_0 "no imitation"=$JOBID_1 "no differentiation"=$JOBID_2 "no stakeholder\nactivism"=$JOBID_3 
+gzip ./outputs/processed/all_states_${JOBID_0}-${JOBID_1}-${JOBID_2}-${JOBID_3}.sqlite 
+
+
 echo -e "\nCompleted jobs: ${JOBID_0}, ${JOBID_1}, ${JOBID_2}, ${JOBID_3}" 
 exit 0
