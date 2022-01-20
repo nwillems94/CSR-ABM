@@ -49,7 +49,7 @@ for (Run in 1:20) {
     }
     cat("...Running...\n\t")
     # build initial portfolios
-    portfolio_permutations <- build_permutations(firms$firmID)
+    portfolio_permutations <- build_permutations(firms, leases, firms$firmID, ti)
 
     industry_revenue <- with(Params, list("prices"= list("dirty"= market_price_dirty),
                                     "green_coeff"= (market_price_green - market_price_dirty) * market_prop_green[1]))
@@ -77,7 +77,7 @@ for (Run in 1:20) {
         if (length(options_changed) > 0) {
             # update based on new aquisitions and developments
             portfolio_permutations <- rbind(portfolio_permutations[!(firmID %in% options_changed)],
-                                            build_permutations(options_changed))
+                                            build_permutations(firms, leases, options_changed, ti))
             setkey(portfolio_permutations, firmID, meets_thresh)
         }
         # project options based on previous market conditions
@@ -88,7 +88,7 @@ for (Run in 1:20) {
         # randomly assign either development or exploration activities
         firms[, "activity":= ifelse(runif(.N) < Params$prop_e, "exploration", "development")]
         # compare profit maximizing options with and without mitigation by comparing cost to possible harm
-        optimize_strategy(portfolio_permutations, firms)
+        optimize_strategy(portfolio_permutations, firms, ti)
 
         # TOTDO: decide whether start production at newly developed wells
 
@@ -96,10 +96,10 @@ for (Run in 1:20) {
         # optimize market value by executing the best portfolio option
         #   firms who's strategy calls for new development
         options_changed <- portfolio_permutations[, first(best), by=firmID][V1==FALSE, firmID]
-        do_development(firms, leases, portfolio_permutations, options_changed)
+        do_development(firms, leases, portfolio_permutations, options_changed, ti)
 
         ## Exploration
-        do_exploration(firms, leases)
+        do_exploration(firms, leases, ti)
         # also revise the options of
         #   firms who's previous discoveries will enter their portfolio in the next turn
         options_changed <- sort(unique(c(options_changed, leases[status=="stopped"]$firmID)))
@@ -107,14 +107,14 @@ for (Run in 1:20) {
         #### MARKETS ####
         ## Apply Social Pressure to each firm (beginning at time 0)
         if (ti$time > 0) {
-            dist_social_pressure(firms)
+            dist_social_pressure(firms, ti)
         }
 
         ## Expenses
         calc_debits(firms, leases)
 
         ## Revenues
-        industry_revenue <- calc_credits(firms)
+        industry_revenue <- calc_credits(firms, ti)
 
         ## Assess value
         # net cashflow from oil and gas operations

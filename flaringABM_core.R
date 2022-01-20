@@ -1,6 +1,6 @@
 # THIS SCRIPT CONTAINS THE DECISION MAKING FUNCTIONALITY OF THE flaringABM
 # THE FUNCTIONS WHICH INFORM THESE ARE WRITTEN IN C++ & CONTAINED IN flaringABM_core.cpp
-# 
+#
 #
 library(data.table)
 library(Rcpp)
@@ -19,7 +19,7 @@ calc_total_pressure <- function(Ai) {
 }###--------------------    END OF FUNCTION calc_total_pressure     --------------------###
 
 
-dist_social_pressure <- function(dt_f, method="even", focus=1) {
+dist_social_pressure <- function(dt_f, ti, method="even", focus=1) {
     # Determine what proportion of the total social pressure is allocated to each agent
     a <- calc_total_pressure(ti$Activism) / ti$SRoR
     dt_f[, "sPressure":= 0]
@@ -74,7 +74,7 @@ calc_debits <- function(dt_f, dt_l) {
 }###--------------------    END OF FUNCTION calc_debits             --------------------###
 
 
-calc_credits <- function(dt_f) {
+calc_credits <- function(dt_f, ti) {
     # determine industry revenues
     industry_revenue <- calc_revenueC(dt_f, ti)
     dt_f[, "green_gas_output":= industry_revenue$green_units]
@@ -86,8 +86,8 @@ calc_credits <- function(dt_f) {
 }###--------------------    END OF FUNCTION calc_credits            --------------------###
 
 
-build_permutations <- function(firmIDs) {
-    dt_p <- leases[firmID %in% firmIDs,
+build_permutations <- function(dt_f, dt_l, firmIDs, ti) {
+    dt_p <- dt_l[firmID %in% firmIDs,
                         .("leaseIDs"= .(leaseID),
                             "classes"= .(ifelse(class=="developed", 1, 0)),
                             # permutations of development vectors where a lease's class can only increase
@@ -98,23 +98,23 @@ build_permutations <- function(firmIDs) {
                     keyby=firmID]
 
     # add firm attributes
-    dt_p[firms, on="firmID", c("sPressure", "free_capital"):= .(sPressure, cash - cost_O - cost_M - cost_CE)]
+    dt_p[dt_f, on="firmID", c("sPressure", "free_capital"):= .(sPressure, cash - cost_O - cost_M - cost_CE)]
 
     # calculate the additional cost associated with exercising each option over the time horizon
-    dt_p[, "cost_M_add":= leases[first(leaseIDs), sapply(lapply(perm, `*`, opEx_pMCF*csgd_MCF), sum)], by=firmID]
+    dt_p[, "cost_M_add":= dt_l[first(leaseIDs), sapply(lapply(perm, `*`, opEx_pMCF*csgd_MCF), sum)], by=firmID]
     # capital expenditures for gas capture are assumed to be borne by midstream firms
     dt_p[, "cost_CE_add":= 0]
 
     # calculate revenue given by exercising each option
     # base revenue
     dt_p[, "tot_csgd_MCF":=
-            sapply(lapply(Map(`+`, classes, perm), `*`, leases[first(leaseIDs), csgd_MCF]), sum), by=firmID]
+            sapply(lapply(Map(`+`, classes, perm), `*`, dt_l[first(leaseIDs), csgd_MCF]), sum), by=firmID]
     dt_p[, "add_csgd_MCF":= .SD$tot_csgd_MCF - .SD$tot_csgd_MCF[1], by=firmID]
 
     # determine which configurations meet the green threshold
     #    by calculating proportion of gas (that would be) flared per unit of oil production
-    dt_p[, "flaring_intensity":= (leases[first(leaseIDs), sum(csgd_MCF)] - tot_csgd_MCF) /
-                                    leases[first(leaseIDs), sum(oil_BBL)], by=firmID]
+    dt_p[, "flaring_intensity":= (dt_l[first(leaseIDs), sum(csgd_MCF)] - tot_csgd_MCF) /
+                                    dt_l[first(leaseIDs), sum(oil_BBL)], by=firmID]
     #    and checking if it meets the green market threshold
     dt_p[, "meets_thresh":= flaring_intensity < ti$threshold]
 
@@ -132,7 +132,7 @@ build_permutations <- function(firmIDs) {
 #*** FIRM ACTIVITIES ***#
 #*
 
-find_imitators <- function(dt_f, success_metric="sales") {
+find_imitators <- function(dt_f, ti, success_metric="sales") {
     # determine who is an imitator - less successful followers mimic more successful leaders
     # following Leary & Roberts "success" can be defined in terms of sales (market share), profit, or market_value
     imitators <- dt_f[, .(firmID, behavior, activity, "weight"= log(1+get(success_metric)))][
@@ -154,7 +154,7 @@ find_imitators <- function(dt_f, success_metric="sales") {
 }###--------------------    END OF FUNCTION find_imitators          --------------------###
 
 
-optimize_strategy <- function(dt_p, dt_f) {
+optimize_strategy <- function(dt_p, dt_f, ti) {
     # determine the max profit portfolios with and without mitigation
     #    of those which are in budget
     dt_p[, "best":= FALSE]
@@ -171,7 +171,7 @@ optimize_strategy <- function(dt_p, dt_f) {
                                                                 (cost_M_add + cost_CE_add < gas_revenue)
                                     else NA, by=firmID]
     # imitators will mitigate even if it is not strictly more economical
-    imitators <- find_imitators(dt_f)
+    imitators <- find_imitators(dt_f, ti)
     # imitators who are already planning to begin mitigating or only have one option are not really imitators
     imitators <- dt_p[(firmID %in% imitators) & best==TRUE,
                         ifelse(.N==2, calc_netm_costC(.SD, ti$SRoR) < sPressure, TRUE), by=firmID][
@@ -192,7 +192,7 @@ optimize_strategy <- function(dt_p, dt_f) {
 }###--------------------    END OF FUNCTION optimize_strategy       --------------------###
 
 
-do_development <- function(dt_f, dt_l, dt_p, devs) {
+do_development <- function(dt_f, dt_l, dt_p, devs, ti) {
     ## Update lease attributes
     # update lease classes to reflect new development
     dt_l[.(dt_p[best==TRUE][firmID %in% devs, unlist(Map(`[`, leaseIDs, lapply(perm, as.logical)))]),
@@ -212,7 +212,7 @@ do_development <- function(dt_f, dt_l, dt_p, devs) {
 }###--------------------    END OF FUNCTION do_development          --------------------###
 
 
-do_exploration <- function(dt_f, dt_l) {
+do_exploration <- function(dt_f, dt_l, ti) {
     new_discs <- dt_f[(activity=="exploration") & (runif(.N) < ti$prob_e)]$firmID
     prev_discs <- unique(dt_l[status=="stopped"]$firmID)
 
