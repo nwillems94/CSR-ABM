@@ -1,50 +1,15 @@
-library(data.table)
+flaringABM_main <- function(Params, jobID, Run) {
 
-source("./flaringABM_core.R")
-
-jobID <- format(Sys.time(), "%m%d%H%M")
-logOuts <- sprintf("logs/param_log_%s.csv", jobID)
-agentOuts <- sprintf("outputs/agent_states_%s.csv", jobID)
-leaseOuts <- sprintf("outputs/lease_states_%s.csv", jobID)
-
-Params <<- list(
-    # TxRRC data shows about 2000 firms producing gas alongside oil operating in any given year since 2010
-    "nagents" = 2000,
-    "t0" = -25,
-    "tf" = 60,
-    # Environmental Variables
-    "Activism" = 5000,
-    # Market conditions
-    "threshold" = 0.5, # max units of gas "green" firms can flare per unit of oil produced
-    "market_price_dirty" = 3,
-    "market_price_green" = 3 * 1.16, # from Kitzmueller & Shimshack 16[5,20]% zotero://select/items/0_PGHV5RK7
-    "oil_price" = 3 * 20,
-    # Activities
-    "prop_e" = 0.5, # what proportion of firms engage in exploration activities in a given time step
-    "prob_e" = 0.1, # with what probability to exploring firms discover a new asset
-    "prob_m" = 0.5  # probability that a follower will mimic a leader if they observe them mitigating
-)
-#social rate of return
-#    [0: no social satisfaction from holding shares or contributing to the activist
-#     1: shareholding & activist contributions are perfect substitutes for personal giving]
-Params$SRoR <- c(rep(0, -Params$t0), rep(0.3, Params$tf + 1))
-# from OShaughnessy et al. 3% of electricity sales green zotero://select/items/0_HW2MXA38
-Params$market_prop_green <- with(Params, c(rep(0, -t0),
-                                        seq(from=0, to=1.5, length.out= 1 + (tf %/% 2)),
-                                        rep(1.5, tf - (tf %/% 2)))) * 0.12
-
-run_time <- Sys.time()
-for (Run in 1:20) {
     cat("Run", Run, ":\n")
     # Initialize agents, save their initial state
     cat("...Initializing...\n")
     ti <- lapply(Params, `[[` , 1)
     if (is.na(Params$refID)) {
-        source("./flaringABM_init_empirical.R")
+        source("./flaringABM_init_empirical.R", local=TRUE)
     } else {
-        firms <- fread(sprintf("outputs/agent_states_%s.csv", Params$refID))[time==Params$t0-1 & RunID==Run]
+        firms <- fread(sprintf("./outputs/agent_states_%s.csv", Params$refID))[time==Params$t0-1 & RunID==Run]
         setkey(firms, firmID)
-        leases <- fread(sprintf("outputs/lease_states_%s.csv", Params$refID))[time==Params$t0-1 & RunID==Run]
+        leases <- fread(sprintf("./outputs/lease_states_%s.csv", Params$refID))[time==Params$t0-1 & RunID==Run]
         setkey(leases, leaseID)
     }
     cat("...Running...\n\t")
@@ -55,13 +20,13 @@ for (Run in 1:20) {
                                     "green_coeff"= (market_price_green - market_price_dirty) * market_prop_green[1]))
     options_changed <- c()
 
-    Params$market_size <- leases[status=="producing", 2*sum(gas_MCF)]
+    Params$market_size <- leases[status=="producing", 1.2*sum(gas_MCF)]
 
     firms[, "RunID":= Run]
     leases[, "RunID":= Run]
-    fwrite(as.data.table(t(unlist(Params))), file=logOuts, append=(Run!=1))
-    fwrite(firms, file=agentOuts, append=(Run!=1))
-    fwrite(leases, file=leaseOuts, append=(Run!=1))
+    fwrite(as.data.table(t(unlist(Params))), file=sprintf(logOuts, Run))
+    fwrite(firms, file=sprintf(agentOuts, Run))
+    fwrite(leases, file=sprintf(leaseOuts, Run))
 
     # step through time with appropriate parameters
     cat("|", strrep("_", options("width")[[1]]-12), "|\n\t ", strrep(" ", options("width")[[1]]-12), "|")
@@ -89,8 +54,6 @@ for (Run in 1:20) {
         firms[, "activity":= ifelse(runif(.N) < Params$prop_e, "exploration", "development")]
         # compare profit maximizing options with and without mitigation by comparing cost to possible harm
         optimize_strategy(portfolio_permutations, firms, ti)
-
-        # TOTDO: decide whether start production at newly developed wells
 
         ## Development
         # optimize market value by executing the best portfolio option
@@ -128,19 +91,8 @@ for (Run in 1:20) {
                                 ((cost_M * ti$SRoR) - sPressure)]                       # Net social value
 
         #### OUTPUT STATES ####
-        fwrite(firms, file=agentOuts, append=TRUE)
-        fwrite(leases[!is.na(firmID)], file=leaseOuts, append=TRUE)
+        fwrite(firms, file=sprintf(agentOuts, Run), append=TRUE)
+        fwrite(leases[!is.na(firmID)], file=sprintf(leaseOuts, Run), append=TRUE)
     }
     cat("\n")
 }
-cat("\n", gsub("Time difference of", "All runs complete in", capture.output(Sys.time() - run_time)), "\n")
-
-# analytics
-library(ggplot2)
-
-agent_states <- fread(agentOuts)
-agent_states$RunID <- as.factor(agent_states$RunID)
-
-progress <- ggplot(agent_states, aes(x=time, color=RunID)) +
-                geom_step(aes(y=as.numeric(behavior!="flaring")), stat="summary", fun="sum")
-print(progress)

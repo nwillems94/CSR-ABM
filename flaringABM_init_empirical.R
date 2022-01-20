@@ -225,8 +225,10 @@ firms[, "market_value":= (oil_revenue + gas_revenue - cost_O)]
 
 # generate validation report for this initialization
 cat("Writing validation report\n")
-rmarkdown::render("flaringABM_validation_init.Rmd", "html_document",
-                    sprintf("outputs/validation/init_%s.html", jobID), quiet=TRUE)
+rmarkdown::render("flaringABM_validation_init.Rmd", output_format="html_document",
+                    output_file=sprintf("./outputs/validation/init_%s_%s.html", jobID, Run),
+                    intermediates_dir=sprintf("./outputs/validation/init_%s_%s", jobID, Run), quiet=TRUE)
+unlink(sprintf("./outputs/validation/init_%s_%s", jobID, Run), recursive=TRUE)
 
 # done
 cat("Cleaning up\n\t")
