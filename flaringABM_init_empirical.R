@@ -69,22 +69,32 @@ while (min(leases_full$opEx_pBBL, na.rm=TRUE) <= 0) {
 leases_full[is.na(opEx_pBBL), "opEx_pBBL":= 0]
 
 # gas (pMCF):   Gathering & Transportation, Processing (ordered by % flared & inverse-square distance weighted capacity)
+# There is not gas processing fee for dry gas
 cat("\tAssigning lease operating expenses per thousand cubic feet of gas\n\t")
 leases_full[gas_MCF+csgd_MCF>0, "percent_flared":=  round(flared_MCF / (gas_MCF+csgd_MCF), 2)]
 setorder(leases_full, percent_flared, -gas_cap)
 leases_full[, "opEx_pMCF":= ifelse(gas_MCF+csgd_MCF>0, 0, NA)]
 while (min(leases_full$opEx_pMCF, na.rm=TRUE) <= 0) {
-    leases_full[area=="Eagle Ford" & csgd_MCF>0,                "opEx_pMCF":=                             # oil
-                                                                sort(rnorm(.N, (1.60+0.85)/2, (1.60-0.85)/4))]
-    leases_full[area=="Eagle Ford" & gas_MCF>0 & cond_BBL>0,    "opEx_pMCF":=                             # wet gas
-                                                                sort(rnorm(.N, (1.60+0.85)/2, (1.60-0.85)/4))]
-    leases_full[area=="Eagle Ford" & gas_MCF>0 & cond_BBL==0,   "opEx_pMCF":=                             # dry gas
-                                                                sort(rnorm(.N, (1.05+0.55)/2, (1.05-0.55)/4))]
-    leases_full[area=="Delaware Basin" & gas_MCF+csgd_MCF>0,    "opEx_pMCF":=
-                                                                sort(rnorm(.N, (2.35+0.85)/2, (2.35-0.85)/4))]
-    leases_full[area %in% c("Midland Basin","Spraberry") & gas_MCF+csgd_MCF>0,
-                                                                "opEx_pMCF":=
-                                                                sort(rnorm(.N, (1.70+0.85)/2, (1.70-0.85)/4))]
+    leases_full[area=="Eagle Ford" & csgd_MCF>0,                                    # oil
+                    "opEx_pMCF":= sort(rnorm(.N, (1.60+0.85)/2, (1.60-0.85)/4))]
+    leases_full[area=="Eagle Ford" & gas_MCF>0 & cond_BBL>0,                        # wet gas
+                    "opEx_pMCF":= sort(rnorm(.N, (1.60+0.85)/2, (1.60-0.85)/4))]
+    leases_full[area=="Eagle Ford" & gas_MCF>0 & cond_BBL==0,                       # dry gas
+                    "opEx_pMCF":= sort(rnorm(.N, (1.05+0.55)/2, (1.05-0.55)/4))]
+
+    leases_full[area=="Delaware Basin" & csgd_MCF>0,                                # oil
+                    "opEx_pMCF":= sort(rnorm(.N, (2.35+0.85)/2, (2.35-0.85)/4))]
+    leases_full[area=="Delaware Basin" & gas_MCF>0 & cond_BBL>0,                    # wet gas
+                    "opEx_pMCF":= sort(rnorm(.N, (2.35+0.85)/2, (2.35-0.85)/4))]
+    leases_full[area=="Delaware Basin" & gas_MCF>0 & cond_BBL==0,                   # dry gas
+                    "opEx_pMCF":= sort(rnorm(.N, (1.10+0.60)/2, (1.10-0.60)/4))]
+
+    leases_full[area %in% c("Midland Basin","Spraberry") & csgd_MCF>0,              # oil
+                    "opEx_pMCF":= sort(rnorm(.N, (1.70+0.85)/2, (1.70-0.85)/4))]
+    leases_full[area %in% c("Midland Basin","Spraberry") & gas_MCF>0 & cond_BBL>0,  # wet gas
+                    "opEx_pMCF":= sort(rnorm(.N, (1.70+0.85)/2, (1.70-0.85)/4))]
+    leases_full[area %in% c("Midland Basin","Spraberry") & gas_MCF>0 & cond_BBL==0, # dry gas
+                    "opEx_pMCF":= sort(rnorm(.N, (0.90+0.60)/2, (0.90-0.60)/4))]
 }
 leases_full[is.na(opEx_pMCF), "opEx_pMCF":= 0]
 
