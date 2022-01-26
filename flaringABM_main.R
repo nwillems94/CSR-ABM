@@ -7,9 +7,11 @@ flaringABM_main <- function(Params, jobID, Run) {
     if (is.na(Params$refID)) {
         source("./flaringABM_init_empirical.R", local=TRUE)
     } else {
-        firms <- fread(sprintf("./outputs/agent_states_%s.csv", Params$refID))[time==Params$t0-1 & RunID==Run]
+        firms <- fread(cmd=sprintf('grep "RunID$\\|,%d$" ./outputs/agent_states_%s.csv', Run, Params$refID), nrow=Params$nagents,
+                        colClasses=list(numeric=c("cost_CE","cost_M","sPressure"), character="activity"))
         setkey(firms, firmID)
-        leases <- fread(sprintf("./outputs/lease_states_%s.csv", Params$refID))[time==Params$t0-1 & RunID==Run]
+        leases <- fread(cmd=sprintf('grep "RunID$\\|,%d$" ./outputs/lease_states_%s.csv', Run, Params$refID), nrow=40060,
+                        colClasses=list(integer="t_switch", numeric="opEx_csgd"))
         setkey(leases, leaseID)
     }
     cat("...Running...\n\t")

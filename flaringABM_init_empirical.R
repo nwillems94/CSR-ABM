@@ -126,7 +126,7 @@ leases[substr(start, 1, 4) < min(well_cost_index$year),
 # Assign other lease attributes
 leases[, "firmID":= NA_integer_]
 leases[, c("t_found","t_switch"):= NA_integer_]
-leases[, c("class","status"):= NA_character_]
+leases[, c("class","status"):= ""]
 leases[, "time":= Params$t0-1]
 
 # calculate lease operating expenses
