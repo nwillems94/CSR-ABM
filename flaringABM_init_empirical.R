@@ -99,15 +99,10 @@ while (min(leases_full$opEx_pMCF, na.rm=TRUE) <= 0) {
 leases_full[is.na(opEx_pMCF), "opEx_pMCF":= 0]
 
 
-# consolidate leases in the same field with the same start & expiration date
-cat("\tAggregating similar leases in the same field\n\t")
-# leases_full[, "start":= replace(start, start<201001, 201001)]
-leases <- leases_full[, c(lapply(.SD[,.(oil_BBL, cond_BBL, gas_MCF, csgd_MCF)], sum),
-                          lapply(.SD[,.(total_oil_BBL, total_MCF, flared_MCF)], sum),
-                          lapply(.SD[,.(capEx, opEx)], sum),
-                          lapply(.SD[,.(opEx_pBBL)], weighted.mean, oil_BBL),
-                          lapply(.SD[,.(opEx_pMCF)], weighted.mean, gas_MCF+csgd_MCF)),
-                    by=.(start, expiration, area, DISTRICT_NO, FIELD_NO, OIL_GAS_CODE)]
+leases <- leases_full[, .(oil_BBL, cond_BBL, gas_MCF, csgd_MCF,
+                          total_oil_BBL, total_MCF, flared_MCF,
+                          capEx, opEx, opEx_pBBL,opEx_pMCF,
+                           start, expiration, area, DISTRICT_NO, FIELD_NO, OIL_GAS_CODE)]
 
 # calculate lease lifetime in months
 leases[, "lifetime":= .SD[, lapply(.(expiration, start), function(x) 12*trunc(x/100) + x %% 100)][, V1-V2]]
