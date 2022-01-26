@@ -16,7 +16,7 @@ function concat_runs {
 }
 
 echo "running baseline model"
-RScript flaringABM_exe.R >> ./logs/run_log_${UNIQUEID}_0.txt || exit
+Rscript flaringABM_exe.R >> ./logs/run_log_${UNIQUEID}_0.txt || exit
 
 # get jobID for reference in following runs
 JOBID_0=`grep "jobID:" ./logs/run_log_${UNIQUEID}_0.txt | cut -d " " -f 2`
@@ -37,17 +37,17 @@ echo -e "\nStarting comparative runs"
 
 # no imitation
 { echo "running without imitation"; 
-RScript flaringABM_exe.R refID=$JOBID_0 prob_m=0 >> ./logs/run_log_${UNIQUEID}_1.txt; } &
+Rscript flaringABM_exe.R refID=$JOBID_0 prob_m=0 >> ./logs/run_log_${UNIQUEID}_1.txt; } &
 
 # no differentiation
 { sleep 60; # pause to ensure unique jobIDs 
 echo "running without differentiation"; 
-RScript flaringABM_exe.R refID=$JOBID_0 market_prop_green=0 >> ./logs/run_log_${UNIQUEID}_2.txt; } &
+Rscript flaringABM_exe.R refID=$JOBID_0 market_prop_green=0 >> ./logs/run_log_${UNIQUEID}_2.txt; } &
 
 # no stakeholder activism
 { sleep 120; # pause to ensure unique jobIDs 
 echo "running without activism"; 
-RScript flaringABM_exe.R refID=$JOBID_0 Activism=0 >> ./logs/run_log_${UNIQUEID}_3.txt; } &
+Rscript flaringABM_exe.R refID=$JOBID_0 Activism=0 >> ./logs/run_log_${UNIQUEID}_3.txt; } &
 
 wait
 
@@ -78,7 +78,7 @@ wait
 
 
 # process outputs into singular compact files
-RScript flaringABM_postproc.R "complete"=$JOBID_0 "no imitation"=$JOBID_1 "no differentiation"=$JOBID_2 "no stakeholder\nactivism"=$JOBID_3 
+Rscript flaringABM_postproc.R "complete"=$JOBID_0 "no imitation"=$JOBID_1 "no differentiation"=$JOBID_2 "no stakeholder\nactivism"=$JOBID_3 
 gzip ./outputs/processed/all_states_${JOBID_0}-${JOBID_1}-${JOBID_2}-${JOBID_3}.sqlite 
 
 
