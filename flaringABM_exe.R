@@ -1,4 +1,6 @@
 args <- commandArgs(trailingOnly=TRUE)
+args <- args[substr(args, 1, 2)!="--"]
+
 
 ## Load libraries
 library(data.table)
@@ -6,6 +8,7 @@ library(Rcpp)
 library(future)
 library(future.apply)
 plan("multisession")
+
 
 ## Stage run
 source("./flaringABM_main.R")
@@ -71,3 +74,5 @@ future_lapply(1:20, function(Run) {
     flaringABM_main(Params, jobID, Run)
 })
 cat("\n", gsub("Time difference of", "All runs complete in", capture.output(Sys.time() - run_time)), "\n")
+print(warnings())
+
