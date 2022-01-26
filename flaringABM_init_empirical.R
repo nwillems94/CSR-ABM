@@ -226,12 +226,14 @@ firms[, "market_value":= (oil_revenue + gas_revenue - cost_O)]
 # generate validation report for this initialization
 cat("Writing validation report\n")
 rmarkdown::render("flaringABM_validation_init.Rmd", output_format="html_document",
-                    output_file=sprintf("./outputs/validation/init_%s_%s.html", jobID, Run),
-                    intermediates_dir=sprintf("./outputs/validation/init_%s_%s", jobID, Run), quiet=TRUE)
+                output_file=sprintf("%s/outputs/validation/init_%s_%s.html",
+                        ifelse(Sys.getenv("WORK")=="", ".", paste0(Sys.getenv("WORK"),"/flaringABM")), jobID, Run),
+                intermediates_dir=sprintf("./outputs/validation/init_%s_%s", jobID, Run), quiet=TRUE)
 unlink(sprintf("./outputs/validation/init_%s_%s", jobID, Run), recursive=TRUE)
 
 # done
 cat("Cleaning up\n\t")
 rm(wells, leases_full, ID, market_shares, rem_capacity, finances)
+gc()
 
 cat(gsub("Time difference of", "Initialization complete in", capture.output(Sys.time() - init_time)), "\n")
