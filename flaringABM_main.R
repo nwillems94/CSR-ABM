@@ -15,12 +15,8 @@ flaringABM_main <- function(Params, jobID, Run) {
         setkey(leases, leaseID)
     }
     cat("...Running...\n\t")
-    # build initial portfolios
-    portfolio_permutations <- build_permutations(firms, leases, firms$firmID, ti)
-
     industry_revenue <- with(Params, list("prices"= list("dirty"= market_price_dirty),
                                     "green_coeff"= (market_price_green - market_price_dirty) * market_prop_green[1]))
-    options_changed <- c()
 
     Params$market_size <- leases[status=="producing", 1.2*sum(gas_MCF)]
 
@@ -38,36 +34,20 @@ flaringABM_main <- function(Params, jobID, Run) {
         leases[, "time":= ti$time]
         firms[, "time":= ti$time]
 
-        ## Update portfolio options
-        # update credit parameters
-        portfolio_permutations[firms, on="firmID", "free_capital":= cash - cost_O - cost_M - cost_CE]
-        if (length(options_changed) > 0) {
-            # update based on new aquisitions and developments
-            portfolio_permutations <- rbind(portfolio_permutations[!(firmID %in% options_changed)],
-                                            build_permutations(firms, leases, options_changed, ti))
-            setkey(portfolio_permutations, firmID, meets_thresh)
-        }
-        # project options based on previous market conditions
-        portfolio_permutations[firms, on="firmID", c("sPressure", "gas_revenue"):= .(i.sPressure, i.gas_revenue +
-                        (add_csgd_MCF * with(industry_revenue, prices$dirty + ifelse(meets_thresh, green_coeff, 0))))]
 
         #### FIRM ACTIVITIES ####
         # randomly assign either development or exploration activities
         firms[, "activity":= ifelse(runif(.N) < Params$prop_e, "exploration", "development")]
-        # compare profit maximizing options with and without mitigation by comparing cost to possible harm
-        optimize_strategy(portfolio_permutations, firms, ti)
-
-        ## Development
-        # optimize market value by executing the best portfolio option
-        #   firms who's strategy calls for new development
-        options_changed <- portfolio_permutations[, first(best), by=firmID][V1==FALSE, firmID]
-        do_development(firms, leases, portfolio_permutations, options_changed, ti)
 
         ## Exploration
         do_exploration(firms, leases, ti)
-        # also revise the options of
-        #   firms who's previous discoveries will enter their portfolio in the next turn
-        options_changed <- sort(unique(c(options_changed, leases[status=="stopped"]$firmID)))
+
+        ## Development
+        # compare profit maximizing options with and without mitigation by comparing cost to possible harm
+        portfolio_options <- optimize_strategy(firms, leases, industry_revenue, ti)
+        # optimize market value by executing the best portfolio option
+        do_development(firms, leases, portfolio_options, ti)
+
 
         #### MARKETS ####
         ## Apply Social Pressure to each firm (beginning at time 0)
@@ -95,6 +75,8 @@ flaringABM_main <- function(Params, jobID, Run) {
         #### OUTPUT STATES ####
         fwrite(firms, file=sprintf(agentOuts, Run), append=TRUE)
         fwrite(leases[!is.na(firmID)], file=sprintf(leaseOuts, Run), append=TRUE)
+
+        rm(portfolio_options)
     }
     cat("\n")
 }

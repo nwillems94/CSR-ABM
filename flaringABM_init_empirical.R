@@ -141,7 +141,8 @@ cat("Generating representative firms\n\t")
 firms <- data.table("firmID"= 1:Params$nagents, key= "firmID",
                     # how much oil (BBL) and gas (MCF) does the firm produce each time step
                     "oil_output"= NA_real_, "oil_revenue"= NA_real_,
-                    "gas_output"= NA_real_, "green_gas_output"= NA_real_, "gas_revenue"= NA_real_,
+                    "gas_output"= NA_real_, "gas_revenue"= NA_real_,
+                    "green_gas_output"= NA_real_, "gas_flared"= NA_real_,
                     # Valuations; costs include Operating, Mitigation, Capital Expenditures
                     "cash"= NA_real_, "market_value"= NA_real_,
                     "cost_O"= NA_real_, "cost_M"= NA_real_, "cost_CE"= NA_real_, "sPressure"= NA_real_,
@@ -207,12 +208,11 @@ firms[, c("sales","profit"):= 0]
 firms[, "sPressure":= 0]
 
 # initially no firms are capturing casinghead gas
-firms[leases[!is.na(firmID), .(sum(oil_BBL), sum(gas_MCF)), by=firmID], on="firmID",
-        c("oil_output", "gas_output"):= .(V1, V2)]
-firms[leases[, sum(opEx_oil + opEx_gas), by=firmID], on="firmID", "cost_O":= V1]
+firms[leases[!is.na(firmID), .(sum(oil_BBL), sum(gas_MCF), sum(csgd_MCF)), by=firmID], on="firmID",
+        c("oil_output", "gas_output", "gas_flared"):= .(V1, V2, V3)]
+firms[, "behavior":= ifelse(gas_flared/oil_output > Params$threshold, "flaring", "economizing")]
 
-firms[leases[!is.na(firmID), sum(csgd_MCF), by=firmID], on="firmID",
-        "behavior":= ifelse(V1/oil_output > Params$threshold, "flaring", "economizing")]
+firms[leases[, sum(opEx_oil + opEx_gas), by=firmID], on="firmID", "cost_O":= V1]
 firms[, c("cost_M", "green_gas_output"):= 0]
 firms[, c("oil_revenue", "gas_revenue"):= .(oil_output * Params$oil_price, gas_output*Params$market_price_dirty)]
 

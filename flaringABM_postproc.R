@@ -15,8 +15,8 @@ write_outputs <- function(db, csv, ID, append_file) {
 
     agent_states[
         lease_states[status=="producing" & class=="underdeveloped", sum(csgd_MCF), by=.(model, RunID, time, firmID)],
-            on=c("model", "RunID", "time", "firmID"), "gas_flared":= V1]
-    agent_states[!is.na(time) & is.na(gas_flared), "gas_flared":= 0]
+            on=c("model", "RunID", "time", "firmID"), "gas_flared_calc":= V1]
+    agent_states[!is.na(time) & is.na(gas_flared_calc), "gas_flared_calc":= 0]
 
     # write outputs
     fwrite(agent_states, sprintf("./outputs/processed/agent_states_%s.csv.gz", csv), append=append_file)
