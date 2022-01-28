@@ -69,7 +69,7 @@ calc_debits <- function(dt_f, dt_l) {
 
     # capital expenditures which are paid off over the lease lifetime
     dt_f[, "cost_CE":= 0]
-    dt_f[dt_e[, sum(capEx/lifetime), by=firmID], on="firmID", "cost_CE":= V1]
+    dt_f[dt_e[status!="retired", sum(capEx/lifetime), by=firmID], on="firmID", "cost_CE":= V1]
 
 }###--------------------    END OF FUNCTION calc_debits             --------------------###
 
@@ -147,7 +147,7 @@ find_imitators <- function(dt_f, ti, success_metric="sales") {
 
 
 optimize_strategy <- function(dt_f, dt_l, market, ti) {
-    dt_p <- build_permutations(dt_l[firmID %in% dt_f[activity=="development"]$firmID], market, ti)
+    dt_p <- build_permutations(dt_l[firmID %in% dt_f[activity=="development"]$firmID][status!="retired"], market, ti)
 
     # update market conditions
     dt_p[dt_f, on="firmID", "sPressure":= sPressure]
@@ -204,7 +204,7 @@ do_development <- function(dt_f, dt_l, dt_p, ti) {
 
 do_exploration <- function(dt_f, dt_l, ti) {
     new_discs <- dt_f[(activity=="exploration") & (runif(.N) < ti$prob_e)]$firmID
-    prev_discs <- unique(dt_l[status=="stopped"]$firmID)
+    new_output <- unique(dt_l[status=="stopped" | (lifetime + t_found - ti$time)==0]$firmID)
 
     # progress leases from previous turns
     #    newly discovered leases are undeveloped
@@ -213,6 +213,8 @@ do_exploration <- function(dt_f, dt_l, ti) {
     #    in the following time step, the leases begin production
     dt_l[status=="stopped", "status":= "producing"]
     dt_l[class=="undeveloped", c("class", "status"):= .(ifelse(csgd_MCF==0, "developed", "underdeveloped"), "stopped")]
+    # retire leases at the end of their lifetime
+    dt_l[(lifetime + t_found - ti$time) == 0, "status":= "retired"]
 
     # probabilistically discover new leases
     dt_l[sample(which(is.na(firmID)), length(new_discs)),
@@ -220,15 +222,15 @@ do_exploration <- function(dt_f, dt_l, ti) {
 
     ## Update firm attributes
     # gas output from exploration
-    dt_f[dt_l[firmID %in% prev_discs, .SD[(status=="producing") & (class=="developed"), sum(gas_MCF+csgd_MCF)], by=firmID],
-            on="firmID", "gas_output":= V1]
-    dt_f[dt_l[firmID %in% prev_discs, .SD[(status=="producing") & (class=="underdeveloped"), sum(csgd_MCF)], by=firmID],
+    dt_f[dt_l[firmID %in% new_output, .SD[(status=="producing") & (class=="developed"), sum(gas_MCF+csgd_MCF)], by=firmID],
+            on="firmID", "gas_output":= .(V1)]
+    dt_f[dt_l[firmID %in% new_output, .SD[(status=="producing") & (class=="underdeveloped"), sum(csgd_MCF)], by=firmID],
             on="firmID", "gas_flared":= V1]
     # additional oil output from exploration
-    dt_f[dt_l[firmID %in% prev_discs, .SD[(status=="producing") & (class!="undeveloped"), sum(oil_BBL)], by=firmID],
+    dt_f[dt_l[firmID %in% new_output, .SD[(status=="producing") & (class!="undeveloped"), sum(oil_BBL)], by=firmID],
             on="firmID", c("oil_output","oil_revenue"):= .(V1, V1 * ti$oil_price)]
 
-    dt_f[firmID %in% prev_discs, "behavior":= ifelse((gas_flared/oil_output) > ti$threshold, "flaring",
+    dt_f[firmID %in% new_output, "behavior":= ifelse((gas_flared/oil_output) > ti$threshold, "flaring",
                                                         ifelse(behavior=="flaring", "economizing", behavior))]
 
 }###--------------------    END OF FUNCTION do_exploration          --------------------###

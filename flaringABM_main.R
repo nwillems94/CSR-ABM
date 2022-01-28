@@ -74,7 +74,7 @@ flaringABM_main <- function(Params, jobID, Run) {
 
         #### OUTPUT STATES ####
         fwrite(firms, file=sprintf(agentOuts, Run), append=TRUE)
-        fwrite(leases[!is.na(firmID)], file=sprintf(leaseOuts, Run), append=TRUE)
+        fwrite(leases[!is.na(firmID) & status!="retired"], file=sprintf(leaseOuts, Run), append=TRUE)
 
         rm(portfolio_options)
     }
