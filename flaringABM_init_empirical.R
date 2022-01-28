@@ -55,16 +55,23 @@ while (min(leases_full$opEx_pBOE) <= 0) {
 leases_full[, "opEx" := opEx_pBOE * BOE]
 
 # oil (pBBL):   Short Transportation, Long Transportation (ordered by how oil moves & distance from crude pipelines)
+# cond (pBBL):  Long Transportation, NGL fractionation (ordered by how oil moves & distance from crude pipelines)
 cat("\tAssigning lease operating expenses per barrel of oil\n\t")
 setorder(leases_full, -pipe_frac, -rail_frac, crude_dist)
-leases_full[, "opEx_pBBL":= ifelse(oil_BBL>0, 0, NA)]
+leases_full[, "opEx_pBBL":= ifelse(oil_BBL>0 | cond_BBL>0, 0, NA)]
 while (min(leases_full$opEx_pBBL, na.rm=TRUE) <= 0) {
     leases_full[area=="Eagle Ford" & oil_BBL>0,                 "opEx_pBBL":=
                                                                 sort(rnorm(.N, (6+3.75)/2, (6-3.75)/4))]
+    leases_full[area=="Eagle Ford" & cond_BBL>0,                "opEx_pBBL":=
+                                                                sort(rnorm(.N, (5.64+4.72)/2, (5.64-4.72)/4))]
     leases_full[area=="Delaware Basin" & oil_BBL>0,             "opEx_pBBL":=
                                                                 sort(rnorm(.N, (16+4.25)/2, (16-4.25)/4))]
-    leases_full[area %in% c("Midland Basin","Spraberry") & oil_BBL>0,"opEx_pBBL":=
+    leases_full[area=="Delaware Basin" & cond_BBL>0,            "opEx_pBBL":=
+                                                                sort(rnorm(.N, (13.78+6.13)/2, (13.78-6.13)/4))]
+    leases_full[area %in% c("Midland Basin","Spraberry") & oil_BBL>0, "opEx_pBBL":=
                                                                 sort(rnorm(.N, (15.5+4.25)/2, (15.5-4.25)/4))]
+    leases_full[area %in% c("Midland Basin","Spraberry") & cond_BBL>0, "opEx_pBBL":=
+                                                                sort(rnorm(.N, (13.38+5.29)/2, (13.38-5.29)/4))]
 }
 leases_full[is.na(opEx_pBBL), "opEx_pBBL":= 0]
 
@@ -208,7 +215,7 @@ firms[, c("sales","profit"):= 0]
 firms[, "sPressure":= 0]
 
 # initially no firms are capturing casinghead gas
-firms[leases[!is.na(firmID), .(sum(oil_BBL), sum(gas_MCF), sum(csgd_MCF)), by=firmID], on="firmID",
+firms[leases[!is.na(firmID), .(sum(oil_BBL+cond_BBL), sum(gas_MCF), sum(csgd_MCF)), by=firmID], on="firmID",
         c("oil_output", "gas_output", "gas_flared"):= .(V1, V2, V3)]
 firms[, "behavior":= ifelse(gas_flared/oil_output > Params$threshold, "flaring", "economizing")]
 

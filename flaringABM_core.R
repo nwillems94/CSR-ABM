@@ -50,8 +50,8 @@ calc_opEx <- function(dt_l) {
     # determine operation costs based on lease outputs
     # MCF to BOE Conversion: https://petrowiki.spe.org/Glossary:Barrels_of_oil_equivalent
     dt_l[,  {csgd_developed_MCF= ifelse(class %in% "developed", csgd_MCF, 0);
-            opEx_pBOE= opEx / (oil_BBL + (gas_MCF + csgd_developed_MCF)/6);
-            .(cbind("oil"=oil_BBL, "csgd"=csgd_developed_MCF, "gas"=gas_MCF) *
+            opEx_pBOE= opEx / (oil_BBL + cond_BBL + (gas_MCF + csgd_developed_MCF)/6);
+            .(cbind("oil"=oil_BBL+cond_BBL, "csgd"=csgd_developed_MCF, "gas"=gas_MCF) *
                 (sapply(c(1, 1/6, 1/6), `*`, opEx_pBOE) + cbind(opEx_pBBL, opEx_pMCF, opEx_pMCF)))}]
 }###--------------------    END OF FUNCTION calc_opEx               --------------------###
 
@@ -227,7 +227,7 @@ do_exploration <- function(dt_f, dt_l, ti) {
     dt_f[dt_l[firmID %in% new_output, .SD[(status=="producing") & (class=="underdeveloped"), sum(csgd_MCF)], by=firmID],
             on="firmID", "gas_flared":= V1]
     # additional oil output from exploration
-    dt_f[dt_l[firmID %in% new_output, .SD[(status=="producing") & (class!="undeveloped"), sum(oil_BBL)], by=firmID],
+    dt_f[dt_l[firmID %in% new_output, .SD[(status=="producing") & (class!="undeveloped"), sum(oil_BBL+cond_BBL)], by=firmID],
             on="firmID", c("oil_output","oil_revenue"):= .(V1, V1 * ti$oil_price)]
 
     dt_f[firmID %in% new_output, "behavior":= ifelse((gas_flared/oil_output) > ti$threshold, "flaring",
