@@ -6,6 +6,8 @@ flaringABM_main <- function(Params, jobID, Run) {
     ti <- lapply(Params, `[[` , 1)
     if (is.na(Params$refID)) {
         source("./flaringABM_init_empirical.R", local=TRUE)
+        firms[, "RunID":= Run]
+        leases[, "RunID":= Run]
     } else {
         firms <- fread(cmd=sprintf('grep "RunID$\\|,%d$" ./outputs/agent_states_%s.csv', Run, Params$refID), nrow=Params$nagents,
                         colClasses=list(numeric=c("cost_CE","cost_M","sPressure"), character="activity"))
@@ -20,8 +22,6 @@ flaringABM_main <- function(Params, jobID, Run) {
 
     Params$market_size <- leases[status=="producing", 1.2*sum(gas_MCF)]
 
-    firms[, "RunID":= Run]
-    leases[, "RunID":= Run]
     fwrite(as.data.table(t(unlist(Params))), file=sprintf(logOuts, Run))
     fwrite(firms, file=sprintf(agentOuts, Run))
     fwrite(leases, file=sprintf(leaseOuts, Run))

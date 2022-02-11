@@ -57,19 +57,15 @@ calc_opEx <- function(dt_l) {
 
 
 calc_debits <- function(dt_f, dt_l) {
-    # join firm and lease attributes
-    dt_e <- dt_f[dt_l, on="firmID"]
-
     # baseline operating costs
-    dt_f[dt_e[status=="producing", sum(opEx_oil + opEx_gas), by=firmID], on="firmID", "cost_O":= V1]
+    dt_f[dt_l[status=="producing", sum(opEx_oil + opEx_gas), by=firmID], on="firmID", "cost_O":= V1]
 
     # additional mitigating operating costs
-    dt_f[dt_e[(!is.na(t_switch)) & status=="producing", sum(opEx_csgd), by=firmID],
-            on="firmID", "cost_M":= V1]
+    dt_f[dt_l[class=="developed" & status=="producing", sum(opEx_csgd), by=firmID], on="firmID", "cost_M":= V1]
 
     # capital expenditures which are paid off over the lease lifetime
     dt_f[, "cost_CE":= 0]
-    dt_f[dt_e[status!="retired", sum(capEx/lifetime), by=firmID], on="firmID", "cost_CE":= V1]
+    dt_f[dt_l[status!="retired", sum(capEx / lifetime), by=firmID], on="firmID", "cost_CE":= V1]
 
 }###--------------------    END OF FUNCTION calc_debits             --------------------###
 
