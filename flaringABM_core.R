@@ -199,8 +199,13 @@ do_development <- function(dt_f, dt_l, dt_p, ti) {
 
 
 do_exploration <- function(dt_f, dt_l, ti) {
-    new_discs <- dt_f[(activity=="exploration") & (runif(.N) < ti$prob_e)]$firmID
-    new_output <- unique(dt_l[status=="stopped" | (lifetime + t_found - ti$time)==0]$firmID)
+    retiring_leases <- dt_l[(lifetime + t_found) == ti$time]$leaseID
+    new_discs <- dt_l[dt_f[(activity=="exploration")], on="firmID",
+                    .SD[leaseID %in% retiring_leases, sum(oil_BBL + gas_MCF/6)], by=.EACHI][,
+                        sample(firmID, sum(runif(.N) < ti$prob_e * dt_l[.(retiring_leases), sum(oil_BBL+cond_BBL)]),
+                                        prob=V1+10, replace=TRUE)]
+
+    new_output <- unique(dt_l[union(retiring_leases, which(status=="stopped"))]$firmID)
 
     # progress leases from previous turns
     #    newly discovered leases are undeveloped
@@ -210,12 +215,19 @@ do_exploration <- function(dt_f, dt_l, ti) {
     dt_l[status=="stopped", "status":= "producing"]
     dt_l[class=="undeveloped", c("class", "status"):= .(ifelse(csgd_MCF==0, "developed", "underdeveloped"), "stopped")]
     # retire leases at the end of their lifetime
-    dt_l[(lifetime + t_found - ti$time) == 0, "status":= "retired"]
+    dt_l[.(retiring_leases), "status":= "retired"]
 
     # probabilistically discover new leases
-    dt_l[sample(which(is.na(firmID)), length(new_discs)),
-        c("firmID", "class", "t_found"):= .(new_discs, "undeveloped", ti$time)]
-
+    if (length(new_discs)>0) {
+        # prevalence of oil and gas leases among new_discs
+        weights <- dt_l[status!="retired"][.("firmID"=new_discs), on="firmID", allow.cartesian=TRUE,
+                        .N, by=OIL_GAS_CODE][, setNames(N, OIL_GAS_CODE)]
+        new_leases <- dt_l[is.na(firmID)][sample(.N, length(new_discs), prob=weights[OIL_GAS_CODE])]
+        dt_l[.(new_leases[oil_BBL==0][order(-gas_MCF)]$leaseID), c("firmID", "class", "t_found"):=
+                .(dt_f[.(new_discs)][order(-production_MCF)[1:length(leaseID)], firmID], "undeveloped", ti$time)]
+        dt_l[.(new_leases[oil_BBL>0][order(-oil_BBL)]$leaseID), c("firmID", "class", "t_found"):=
+                .(dt_f[.(new_discs)][order(-production_BBL)[1:length(leaseID)], firmID], "undeveloped", ti$time)]
+    }
     ## Update firm attributes
     # gas output from exploration
     dt_f[dt_l[firmID %in% new_output, .SD[(status=="producing") & (class=="developed"), sum(gas_MCF+csgd_MCF)], by=firmID],

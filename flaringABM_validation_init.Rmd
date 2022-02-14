@@ -49,6 +49,22 @@ print(leases[is.na(firmID), .N, by=OIL_GAS_CODE])
 print(leases[!is.na(firmID), .N, by=OIL_GAS_CODE])
 ```
 
+### Expiring & new production
+```{r}
+ggplot(leases[!is.na(firmID), sum(oil_BBL + cond_BBL), by=.("ex"=lifetime + t_found - Params$t0)]) +
+    geom_col(aes(x=ex, y=V1)) +
+    geom_hline(aes(yintercept=median(V1, na.rm=TRUE)), lty=2) +
+    geom_text(data=function(x) {x[,.(median(V1, na.rm=TRUE))]},
+         aes(y=V1, label=sprintf("Median: %.02f", V1)), x=-Inf, hjust=-0.01, vjust=-1) +
+    labs(title="Quantity of expiring oil production", y="Oil + Condensate (BBL)", x="Time (Months)") +
+    coord_cartesian(xlim=c(0, Params$tf - Params$t0))
+```
+
+```{r}
+cat("Potential new production\n")
+print(leases[is.na(firmID), summary(oil_BBL + cond_BBL)])
+```
+
 ### Percent of operators with no gas leases  
 ```{r}
 # Empirical

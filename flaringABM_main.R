@@ -21,6 +21,8 @@ flaringABM_main <- function(Params, jobID, Run) {
                                     "green_coeff"= (market_price_green - market_price_dirty) * market_prop_green[1]))
 
     Params$market_size <- leases[status=="producing", 1.2*sum(gas_MCF)]
+    # with what probability to exploring firms discover a new asset - validated based on EIA DPR
+    Params$prob_e <- 0.85 * 1.23 / (Params$nagents * Params$prop_e * leases[is.na(firmID), mean(oil_BBL+cond_BBL)])
 
     fwrite(as.data.table(t(unlist(Params))), file=sprintf(logOuts, Run))
     fwrite(firms, file=sprintf(agentOuts, Run))

@@ -38,8 +38,7 @@ Params <<- list(
     "market_price_green" = 2*1.16, # from Kitzmueller & Shimshack 16[5,20]% zotero://select/items/0_PGHV5RK7
     "oil_price" = 60,
     # Activities
-    "prop_e" = 0.5, # what proportion of firms engage in exploration activities in a given time step
-    "prob_e" = 0.1, # with what probability to exploring firms discover a new asset
+    "prop_e" = 11/12, # what proportion of firms engage in exploration activities in a given time step
     "prob_m" = 1  # probability that a follower will mimic a leader if they observe them mitigating
 )
 Params$SRoR <- c(rep(0, -Params$t0), rep(Params$SRoR, Params$tf + 1))

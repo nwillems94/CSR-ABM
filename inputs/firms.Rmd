@@ -1,19 +1,62 @@
 ---
-title: "FlaringABM input firms"
+title: "FlaringABM firms characteristics"
 author: "Nick Willems"
 ---
 
 
-GENERATE SAMPLE UPSTREAM OIL AND GAS FIRMS WHO PRODUCE GAS ALONGSIDE OIL FROM TEXAS RAILROAD COMMISSION DATA. 
-EACH FIRM HAS THE FOLLOWING PROPERTIES:  
+CHARACTERIZE UPSTREAM OIL AND GAS FIRMS WHO PRODUCE GAS ALONGSIDE OIL USING TEXAS RAILROAD COMMISSION DATA.  
 
-  1. MONTHLY OIL PRODUCTION  
-  2. MONTHLY GAS PRODUCTION  
-  3. MONTHLY CASINGHEAD GAS PRODUCTION  
 
 ```{r}
 library(data.table)
 library(ggplot2)
+library(readxl)
+```
+
+# Monthly production from new wells
+### (from EIA Drilling productivity report)  
+[Source](https://www.eia.gov/petroleum/drilling/archive/2021/10/)  
+```{r}
+EIA_dpr <- rbindlist(lapply(list("Eagle Ford"="Eagle Ford Region", "Permian"="Permian Region"),
+                            function(x) read_xlsx("./data/dpr-data.xlsx", sheet=x, skip=1)), idcol="region")
+setnames(EIA_dpr, "Month", "date")
+
+EIA_dpr[, "new_BBL":= `Rig count` * `Production per rig...3`]
+EIA_dpr[, "retired_BBL":= -`Legacy production change...4`]
+EIA_dpr[, "total_BBL":= cumsum(new_BBL - retired_BBL) + first(`Total production...5`), by=region]
+
+ggplot(EIA_dpr, aes(x=date)) +
+    geom_line(aes(y=total_BBL, color="Calculated")) +
+    geom_line(aes(y=`Total production...5`, color="Provided")) +
+    facet_grid(region~., scale="free_y") +
+    labs(title="Calculated and provided total oil production", y="Production (BBL)")
+```
+
+```{r}
+ggplot(EIA_dpr, aes(x=date)) +
+    geom_line(aes(y=new_BBL / retired_BBL, color=region)) +
+    geom_hline(aes(yintercept=median(new_BBL / retired_BBL, na.rm=TRUE)), lty=2) +
+    geom_text(data=function(x) {x[,.(median(new_BBL / retired_BBL, na.rm=TRUE))]},
+        aes(y=V1, label=sprintf("Median: %.02f",V1)), x=-Inf, hjust=-1, vjust=-1) +
+    labs(title="Oil production gained and lost from new and retiring wells", y="Production gained / Production lost")
+```
+
+```{r}
+ggplot(EIA_dpr, aes(x=date)) +
+    geom_line(aes(y=new_BBL / retired_BBL, color=region)) +
+    geom_hline(aes(yintercept=median(new_BBL / retired_BBL, na.rm=TRUE)), lty=2) +
+    geom_text(data=function(x) {x[,.(median(new_BBL / retired_BBL, na.rm=TRUE))]},
+        aes(y=V1, label=sprintf("Median: %.02f",V1)), x=-Inf, hjust=-1, vjust=-1) +
+    labs(title="Oil production gained and lost from new and retiring wells", y="Production gained / Production lost") +
+    ylim(0,3)
+```
+
+Output the compiled drilling productivity data  
+```{r}
+EIA_dpr[, "new_MCF":= `Rig count` * `Production per rig...6`]
+EIA_dpr[, "retired_MCF":= -`Legacy production change...7`]
+
+fwrite(EIA_dpr[!is.na(new_BBL), .(date, region, new_BBL, retired_BBL, new_MCF, retired_MCF)], "./processed/EIA_dpr.csv")
 ```
 
 # Monthly county production 
