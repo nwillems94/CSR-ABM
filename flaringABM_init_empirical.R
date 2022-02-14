@@ -164,7 +164,7 @@ market_shares <- fread("./inputs/processed/firm_market_shares.csv")
 cat("\tAssigning oil leases to firms\n\t")
 
 firms[, "production_BBL":= 0]
-while(!between(sum(firms$production_BBL)/mean(market_shares[, sum(scaled_oil_BBL), by=.(CYCLE_YEAR, CYCLE_MONTH)]$V1), 0.8, 1.1)) {
+while(!between(sum(firms$production_BBL)/mean(market_shares[, sum(scaled_oil_BBL), by=.(CYCLE_YEAR, CYCLE_MONTH)]$V1), 0.8, 0.85)) {
     firms[, "production_BBL":= rlnorm(.N, mean(log(market_shares$scaled_oil_BBL)),
                                             sd(log(market_shares$scaled_oil_BBL)))]
 }
@@ -174,7 +174,7 @@ for (ID in firms[order(production_BBL)]$firmID) {
 
     rem_capacity <- firms[ID, production_BBL] - leases[firmID==ID, sum(total_oil_BBL)]
     while (rem_capacity - min(leases[is.na(firmID) & (oil_BBL>0)]$total_oil_BBL) > 0) {
-        leases[sample(.N, 1, prob=is.na(firmID) & (oil_BBL>0) & (rem_capacity - total_oil_BBL > 0)), "firmID":= ID]
+        leases[sample(.N, 1, prob=(is.na(firmID) & (oil_BBL>0) & (rem_capacity - total_oil_BBL > 0)) / log(2+csgd_MCF)), "firmID":= ID]
         rem_capacity <- firms[ID, production_BBL] - leases[firmID==ID, sum(total_oil_BBL)]
    }
 }
@@ -183,7 +183,7 @@ for (ID in firms[order(production_BBL)]$firmID) {
 cat("\tAssigning gas leases to firms\n\t")
 
 firms[, "production_MCF":= 0]
-while(!between(sum(firms$production_MCF)/mean(market_shares[, sum(scaled_gas_MCF), by=.(CYCLE_YEAR, CYCLE_MONTH)]$V1), 0.9, 1.1)) {
+while(!between(sum(firms$production_MCF)/mean(market_shares[, sum(scaled_gas_MCF), by=.(CYCLE_YEAR, CYCLE_MONTH)]$V1), 0.8, 0.85)) {
     firms[order(log(production_BBL) * runif(.N, 0.5, 1.5)),
             "production_MCF":= sort(rlnorm(.N, mean(log(market_shares[scaled_gas_MCF>0, scaled_gas_MCF])),
                                                 sd(log(market_shares[scaled_gas_MCF>0, scaled_gas_MCF]))))]
@@ -201,7 +201,7 @@ for (ID in firms[production_MCF>0][order(production_MCF)]$firmID) {
    }
 }
 
-leases[!is.na(firmID), "t_found":= Params$t0 - 1]
+leases[!is.na(firmID), "t_found":= Params$t0 - sample(lifetime-1, 1), by=leaseID]
 leases[!is.na(firmID), c("class", "status"):= .(ifelse(csgd_MCF>0, "underdeveloped", "developed"), "producing")]
 
 
