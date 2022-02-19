@@ -58,14 +58,13 @@ calc_opEx <- function(dt_l) {
 
 calc_debits <- function(dt_f, dt_l) {
     # baseline operating costs
-    dt_f[dt_l[status=="producing", sum(opEx_oil + opEx_gas), by=firmID], on="firmID", "cost_O":= V1]
+    dt_f[dt_l[, .SD[status=="producing", sum(opEx_oil + opEx_gas)], by=firmID], on="firmID", "cost_O":= V1]
 
     # additional mitigating operating costs
-    dt_f[dt_l[class=="developed" & status=="producing", sum(opEx_csgd), by=firmID], on="firmID", "cost_M":= V1]
+    dt_f[dt_l[, .SD[class=="developed" & status=="producing", sum(opEx_csgd)], by=firmID], on="firmID", "cost_M":= V1]
 
     # capital expenditures which are paid off over the lease lifetime
-    dt_f[, "cost_CE":= 0]
-    dt_f[dt_l[status!="retired", sum(capEx / lifetime), by=firmID], on="firmID", "cost_CE":= V1]
+    dt_f[dt_l[, .SD[status!="retired", sum(capEx / lifetime)], by=firmID], on="firmID", "cost_CE":= V1]
 
 }###--------------------    END OF FUNCTION calc_debits             --------------------###
 
@@ -204,6 +203,8 @@ do_exploration <- function(dt_f, dt_l, ti) {
                     .SD[leaseID %in% retiring_leases, sum(oil_BBL + gas_MCF/6)], by=.EACHI][,
                         sample(firmID, sum(runif(.N) < ti$prob_e * dt_l[.(retiring_leases), sum(oil_BBL+cond_BBL)]),
                                         prob=V1+10, replace=TRUE)]
+    # agents with no assets will discover new ones
+    new_discs <- c(new_discs, setdiff(dt_f[(activity=="exploration") & (gas_output+oil_output==0)]$firmID, new_discs))
 
     new_output <- unique(dt_l[union(retiring_leases, which(status=="stopped"))]$firmID)
 
@@ -238,7 +239,7 @@ do_exploration <- function(dt_f, dt_l, ti) {
     dt_f[dt_l[firmID %in% new_output, .SD[(status=="producing") & (class!="undeveloped"), sum(oil_BBL+cond_BBL)], by=firmID],
             on="firmID", c("oil_output","oil_revenue"):= .(V1, V1 * ti$oil_price)]
 
-    dt_f[firmID %in% new_output, "behavior":= ifelse((gas_flared/oil_output) > ti$threshold, "flaring",
-                                                        ifelse(behavior=="flaring", "economizing", behavior))]
+    dt_f[firmID %in% new_output, "behavior":= ifelse(gas_flared==0 | (gas_flared/oil_output) <= ti$threshold,
+                                                    ifelse(behavior=="flaring", "economizing", behavior), "flaring")]
 
 }###--------------------    END OF FUNCTION do_exploration          --------------------###
