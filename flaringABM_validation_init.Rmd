@@ -12,9 +12,10 @@ library(data.table)
 ## Operating costs per MCF of gas at oil and gas leases  
 ```{r fig.cap="Gas lease operating expenditures are skewed left (cheaper) while oil leases are skewed right"}
 ggplot(leases[gas_MCF+csgd_MCF>0]) +
-    geom_density(aes(x=opEx_pMCF, color=OIL_GAS_CODE)) +
-    labs(color="Oil or Gas lease?") +
-    theme(legend.position = c(0.85, 0.9))
+    geom_density(aes(x=opEx_pMCF + ifelse(csgd_MCF==0, 0, capEx_csgd / csgd_MCF / lifetime), color=OIL_GAS_CODE)) +
+    labs(color="Oil or Gas lease?", x="Average Cost per MCF") +
+    theme(legend.position = c(0.85, 0.9)) +
+    xlim(0, 5)
 ```
 
 ## Operating costs per BBL of oil at oil leases  

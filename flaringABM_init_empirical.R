@@ -83,33 +83,35 @@ setorder(leases_full, percent_flared, -gas_cap)
 leases_full[, "opEx_pMCF":= ifelse(gas_MCF+csgd_MCF>0, 0, NA)]
 while (min(leases_full$opEx_pMCF, na.rm=TRUE) <= 0) {
     leases_full[area=="Eagle Ford" & csgd_MCF>0,                                    # oil
-                    "opEx_pMCF":= sort(rnorm(.N, (1.60+0.85)/2, (1.60-0.85)/4))]
+                    "opEx_pMCF":= sort(rnorm(.N, (1.15*1.60+0.85)/2, (1.15*1.60-0.85)/4))]
     leases_full[area=="Eagle Ford" & gas_MCF>0 & cond_BBL>0,                        # wet gas
                     "opEx_pMCF":= sort(rnorm(.N, (1.60+0.85)/2, (1.60-0.85)/4))]
     leases_full[area=="Eagle Ford" & gas_MCF>0 & cond_BBL==0,                       # dry gas
                     "opEx_pMCF":= sort(rnorm(.N, (1.05+0.55)/2, (1.05-0.55)/4))]
 
     leases_full[area=="Delaware Basin" & csgd_MCF>0,                                # oil
-                    "opEx_pMCF":= sort(rnorm(.N, (2.35+0.85)/2, (2.35-0.85)/4))]
+                    "opEx_pMCF":= sort(rnorm(.N, (1.15*2.35+0.85)/2, (1.15*2.35-0.85)/4))]
     leases_full[area=="Delaware Basin" & gas_MCF>0 & cond_BBL>0,                    # wet gas
                     "opEx_pMCF":= sort(rnorm(.N, (2.35+0.85)/2, (2.35-0.85)/4))]
     leases_full[area=="Delaware Basin" & gas_MCF>0 & cond_BBL==0,                   # dry gas
                     "opEx_pMCF":= sort(rnorm(.N, (1.10+0.60)/2, (1.10-0.60)/4))]
 
     leases_full[area %in% c("Midland Basin","Spraberry") & csgd_MCF>0,              # oil
-                    "opEx_pMCF":= sort(rnorm(.N, (1.70+0.85)/2, (1.70-0.85)/4))]
+                    "opEx_pMCF":= sort(rnorm(.N, (1.15*1.70+0.85)/2, (1.15*1.70-0.85)/4))]
     leases_full[area %in% c("Midland Basin","Spraberry") & gas_MCF>0 & cond_BBL>0,  # wet gas
                     "opEx_pMCF":= sort(rnorm(.N, (1.70+0.85)/2, (1.70-0.85)/4))]
     leases_full[area %in% c("Midland Basin","Spraberry") & gas_MCF>0 & cond_BBL==0, # dry gas
                     "opEx_pMCF":= sort(rnorm(.N, (0.90+0.60)/2, (0.90-0.60)/4))]
 }
 leases_full[is.na(opEx_pMCF), "opEx_pMCF":= 0]
+# cost to install compressor with 5,475 MCF/month capacity at cost of $31,250 [USA EPA, 2016](zotero://select/items/0_VD6GIMT4)
+leases_full[csgd_MCF>0, "capEx_csgd":= 31250 * ceiling(flared_MCF/5475)]
 
 
 leases <- leases_full[, .(oil_BBL, cond_BBL, gas_MCF, csgd_MCF,
                           total_oil_BBL, total_MCF, flared_MCF,
-                          capEx, opEx, opEx_pBBL,opEx_pMCF,
-                           start, expiration, area, DISTRICT_NO, FIELD_NO, OIL_GAS_CODE)]
+                          capEx, capEx_csgd, opEx, opEx_pBBL, opEx_pMCF,
+                          start, expiration, area, DISTRICT_NO, FIELD_NO, OIL_GAS_CODE)]
 
 # calculate lease lifetime in months
 leases[, "lifetime":= .SD[, lapply(.(expiration, start), function(x) 12*trunc(x/100) + x %% 100)][, V1-V2]]
@@ -135,9 +137,6 @@ leases[, "firmID":= NA_integer_]
 leases[, c("t_found","t_switch"):= NA_integer_]
 leases[, c("class","status"):= ""]
 leases[, "time":= Params$t0-1]
-
-# calculate lease operating expenses
-leases[, sprintf("opEx_%s", c("oil","csgd","gas")):= calc_opEx(.SD)]
 
 leases[, "leaseID":= .I]
 setkey(leases, leaseID)
@@ -202,7 +201,15 @@ for (ID in firms[production_MCF>0][order(production_MCF)]$firmID) {
 }
 
 leases[!is.na(firmID), "t_found":= Params$t0 - sample(lifetime-1, 1), by=leaseID]
+
 leases[!is.na(firmID), c("class", "status"):= .(ifelse(csgd_MCF>0, "underdeveloped", "developed"), "producing")]
+# historically (2004-2010), gas prices were much higher (~$7/MCF). Develop leases which are at least 10 years old accordingly
+leases[!is.na(firmID) & csgd_MCF>0 & ((Params$t0 - t_found)>=120),
+        "class":= replace(class, opEx_pMCF + (capEx_csgd / csgd_MCF / lifetime) < 7, "developed")]
+leases[!is.na(firmID) & csgd_MCF>0 & class=="developed", "t_switch":= t_found]
+
+# calculate lease operating expenses
+leases[, sprintf("opEx_%s", c("oil","csgd","gas")):= calc_opEx(.SD)]
 
 
 # assign cash reserves based on CRSP data
@@ -214,8 +221,8 @@ firms[, c("sales","profit"):= 0]
 # initially there is no social pressure
 firms[, "sPressure":= 0]
 
-# initially no firms are capturing casinghead gas
-firms[leases[!is.na(firmID), .(sum(oil_BBL+cond_BBL), sum(gas_MCF), sum(csgd_MCF)), by=firmID], on="firmID",
+# initial flaring intensity
+firms[leases[!is.na(firmID), .(sum(oil_BBL+cond_BBL), sum(gas_MCF), sum(csgd_MCF[class=="underdeveloped"])), by=firmID], on="firmID",
         c("oil_output", "gas_output", "gas_flared"):= .(V1, V2, V3)]
 firms[, "behavior":= ifelse(gas_flared/oil_output > Params$threshold, "flaring", "economizing")]
 

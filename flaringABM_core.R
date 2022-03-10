@@ -65,6 +65,8 @@ calc_debits <- function(dt_f, dt_l) {
 
     # capital expenditures which are paid off over the lease lifetime
     dt_f[dt_l[, .SD[status!="retired", sum(capEx / lifetime)], by=firmID], on="firmID", "cost_CE":= V1]
+    dt_f[dt_l[, .SD[!is.na(t_switch) & status!="retired", sum(capEx_csgd / (lifetime + t_found - t_switch))], by=firmID],
+        on="firmID", "cost_CE":= cost_CE + V1]
 
 }###--------------------    END OF FUNCTION calc_debits             --------------------###
 
@@ -81,12 +83,17 @@ calc_credits <- function(dt_f, ti) {
 }###--------------------    END OF FUNCTION calc_credits            --------------------###
 
 build_permutations <- function(dt_l, market, ti) {
-    dt_p <- dt_l[order(opEx_pMCF),
-                    .("leaseIDs"= .(leaseID[class=="underdeveloped"]), "prod_BBL"= sum(oil_BBL)),
+    # average cost = current opEx including additional capEx required for casinghead gas capture
+    # additional (e.g., infrastructure) cost are assumed to be borne by midstream firms
+    dt_l[, "AC_pMCF":= opEx_pMCF + nafill(capEx_csgd / csgd_MCF / (lifetime + t_found - ti$time), fill=0)]
+
+    dt_p <- dt_l[order(AC_pMCF),
+                    .("leaseIDs"= .(leaseID[class=="underdeveloped"]), "prod_BBL"= sum(oil_BBL),
+                        "base_perm"=list(), "green_perm"=list()),
                 keyby=firmID][lengths(leaseIDs)>0]
 
     # develop leases which would have an operating cost below the conventional market price for gas
-    dt_p[, "base_perm":= dt_l[leaseIDs, .(.(as.numeric(opEx_pMCF<market$prices$dirty)))], by=firmID]
+    dt_p[, "base_perm":= dt_l[leaseIDs, .(.(as.numeric(AC_pMCF<market$prices$dirty)))], by=firmID]
 
     # lowest cost per MCF which meets the green threshold
     # calculate additional gas capture (wrt base) necessary to meet green threshold
@@ -95,9 +102,7 @@ build_permutations <- function(dt_l, market, ti) {
                                 Map(pmax, base_perm, dt_l[leaseIDs, shift(cumsum(csgd_MCF)<K, fill=1)]))), by=firmID]
 
     # calculate the additional cost and output (wrt base) associated with exercising the green option
-    dt_p[, "cost_M_add":= dt_l[leaseIDs, sum((green_perm[[1]] - base_perm[[1]]) * opEx_pMCF * csgd_MCF)], by=firmID]
-    # capital expenditures for gas capture are assumed to be borne by midstream firms
-    dt_p[, "cost_CE_add":= 0]
+    dt_p[, "cost_M_add":= dt_l[leaseIDs, sum((green_perm[[1]] - base_perm[[1]]) * AC_pMCF * csgd_MCF)], by=firmID]
 
     dt_p[, c("base_csgd_MCF", "green_csgd_MCF"):=
         dt_l[leaseIDs, lapply(.(base_perm, green_perm), function(x) sum(x[[1]] * csgd_MCF))], by=firmID]
@@ -107,8 +112,8 @@ build_permutations <- function(dt_l, market, ti) {
     dt_p[, "add_gas_revenue":= (green_csgd_MCF * (market$prices$dirty + market$green_coeff)) -
                                 (base_csgd_MCF * (market$prices$dirty + ifelse(K>0, 0, market$green_coeff)))]
 
+    dt_l[, "AC_pMCF":= NULL]
     setkey(dt_p, firmID)
-
     return(dt_p)
 
 }###--------------------    END OF FUNCTION build_permutations      --------------------###
