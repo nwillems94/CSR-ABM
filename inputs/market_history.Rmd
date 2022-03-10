@@ -5,6 +5,10 @@ author: "Nick Willems"
 
 CHARACTERIZE WELL COST INFLATION.  
 
+CHARACTERIZE HISTORICAL NATURAL GAS AND OIL MARKETS. NAMELY, DETERMINE THE PRICE RELATIONSHIP BETWEEN OIL AND GAS
+AND FORMULATE REPRESENTATIVE NATURAL GAS DEMAND FUNCTIONS.  
+
+CHARACTERIZE GREEN ELECTRICITY DEMAND AS ANALOGY TO GREEN GAS.  
 
 ```{r}
 library(data.table)
@@ -106,3 +110,354 @@ well_cost_index[, "real_index_2014":= real_index_2005 / real_index_2005[year==20
 fwrite(well_cost_index[composite==TRUE, .(year, source, real_index_2014)], "./processed/well_cost_index.csv")
 ```
 
+# Historical Prices
+[Natural gas (Henry Hub)](https://www.eia.gov/dnav/ng/NG_PRI_FUT_S1_M.htm),
+[Oil (West Texas Intermediate)](https://www.eia.gov/dnav/pet/hist/rwtcW.htm)
+```{r}
+HH <- fread("./data/Henry_Hub_Natural_Gas_Spot_Price_weekly.csv")
+HH[, "Day":= as.Date(Day, format='%m/%d/%Y')]
+
+WTI <- fread("./data/Cushing_OK_WTI_Spot_Price_FOB.csv")
+WTI[, "Day":= as.Date(Day, format='%m/%d/%Y')]
+```
+
+```{r}
+daily_prices <- na.omit(WTI[HH, on="Day"])
+
+setnames(daily_prices, "Cushing OK WTI Spot Price FOB  Dollars per Barrel",          "dollars_pBBL")
+setnames(daily_prices, "Henry Hub Natural Gas Spot Price Dollars per Million Btu",   "dollars_pMMBTU")
+
+# Convert million BTU to thousand cubic feet
+daily_prices[, "dollars_pMCF":= 1.037 * dollars_pMMBTU]
+
+daily_prices[, "ratio_BBLpMCF":= dollars_pBBL / dollars_pMCF]
+daily_prices <- daily_prices[ratio_BBLpMCF>0]
+daily_prices[,"year":= as.numeric(format(Day, "%Y"))]
+```
+
+## Natural gas prices
+```{r}
+ggplot(daily_prices, aes(x=Day, y=dollars_pMCF)) +
+    geom_line() +
+    labs(title="Historical natural gas prices", y="$ per MCF")
+```
+
+```{r}
+ggplot(daily_prices[year>2010], aes(x=Day, y=dollars_pMCF)) +
+    geom_line() +
+    geom_hline(aes(yintercept=mean(dollars_pMCF)), color="blue") +
+    labs(title="Natural gas prices since 2010", y="$ per MCF")
+
+print(daily_prices[year>2010,
+                    .("Mean"= mean(dollars_pMCF), "Median"= median(dollars_pMCF), "Std Dev"= sd(dollars_pMCF))])
+```
+
+```{r}
+ggplot(daily_prices[year>2003 & year<2010], aes(x=Day, y=dollars_pMCF)) +
+    geom_line() +
+    geom_hline(yintercept = mean(daily_prices[year>2003 & year<2010]$dollars_pMCF), color="blue") +
+    labs(title="Legacy natural gas prices", y="$ per MCF")
+
+print(daily_prices[year>2003 & year<2010,
+                    .("Mean"= mean(dollars_pMCF), "Median"= median(dollars_pMCF), "Std Dev"= sd(dollars_pMCF))])
+```
+
+```{r}
+daily_prices[year>2010, {hist(dollars_pMCF, freq=FALSE, breaks="scott", main="", xlab="");
+                        title(main="Natural gas prices since 2010", xlab="$ per MCF"); NULL}]
+```
+
+
+## Ratio of oil and natural gas prices
+```{r}
+ggplot(daily_prices, aes(x=Day, y=ratio_BBLpMCF)) +
+    geom_line() +
+    labs(title="Historical Ratio of oil and gas prices", y="$ per BBL / $ per MCF")
+```
+
+```{r}
+ggplot(daily_prices[year>2010], aes(x=Day, y=ratio_BBLpMCF)) +
+    geom_line() +
+    geom_hline(aes(yintercept = mean(ratio_BBLpMCF)), color="blue") +
+    labs(title="Ratio of oil and gas prices since 2010", y="$ per BBL / $ per MCF")
+
+print(daily_prices[year>2010,
+                    .("Mean"= mean(ratio_BBLpMCF), "Median"= median(ratio_BBLpMCF), "Std Dev"= sd(ratio_BBLpMCF))])
+```
+
+```{r}
+daily_prices[year>2010, {hist(ratio_BBLpMCF, freq=FALSE, breaks="scott", main="", xlab="");
+                        curve(dlnorm(x, mean(log(ratio_BBLpMCF)), sd(log(ratio_BBLpMCF))), add=TRUE, col="blue");
+                        title(main="Ratio of natural gas & oil prices since 2010", xlab="$ per BBL / $ per MCF"); NULL}]
+```
+
+
+[Kitzmueller & Shimshack 2012](zotero://select/items/0_PGHV5RK7) cite that consumers paid a premium of about 16% for green power products 
+and furthermore that they are willing to pay a premium of 5-20% for renewable electricity.
+```{r}
+# Lower bound
+print(daily_prices[, summary(dollars_pMCF*1.05)])
+# Upper bound
+print(daily_prices[, summary(dollars_pMCF*1.2)])
+# Average
+print(daily_prices[, summary(dollars_pMCF*1.16)])
+```
+
+Output price data
+```{r}
+fwrite(daily_prices, "./processed/daily_prices.csv")
+```
+
+# Demand Function
+[Natural gas (Henry Hub) prices](https://www.eia.gov/dnav/ng/NG_PRI_FUT_S1_M.htm),
+[Natural gas delivered to consumers](https://www.eia.gov/dnav/ng/ng_cons_sum_dcu_nus_m.htm)
+```{r}
+monthly_price <- fread("./data/Henry_Hub_Natural_Gas_Spot_Price.csv")
+monthly_price[, c("Date","Month"):= .(as.Date(paste0("01", Month), "%d %b %Y"), NULL)]
+
+monthly_quantity <- fread("./data/Natural_Gas_Delivered_to_Consumers_in_the_U.S..csv")
+monthly_quantity[, c("Date","Month"):= .(as.Date(paste0("01", Month), "%d %b %Y"), NULL)]
+```
+
+### Combine historical prices, quantites, & supply
+```{r}
+demand_data <- na.omit(monthly_price[monthly_quantity, on="Date"])
+demand_data[, "year":= as.numeric(format(Date, "%Y"))]
+demand_data[, "month":= factor(format(Date, "%b"),
+                        levels=c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"))]
+
+demand_data[month %in% c("Mar", "Apr", "May"), "season":= "spring"]
+demand_data[month %in% c("Jun", "Jul", "Aug"), "season":= "summer"]
+demand_data[month %in% c("Sep", "Oct", "Nov"), "season":= "fall"]
+demand_data[month %in% c("Dec", "Jan", "Feb"), "season":= "winter"]
+
+setnames(demand_data, "Henry Hub Natural Gas Spot Price Dollars per Million Btu",           "p")
+setnames(demand_data, "Natural Gas Delivered to Consumers in the U.S.  Million Cubic Feet", "q")
+
+demand_data[, "p":= p * 1.037]          # convert to dollars per MCF
+demand_data[, "q":= 1000*as.numeric(q)] # convert to MCF
+```
+
+### Flag time-series outliers
+```{r}
+# price outliers
+demand_data[, "outlier":=
+                    {resid = residuals(loess(p~seq(.N)));
+                    resid.q = quantile(resid, probs = c(0.25, 0.75), na.rm = TRUE);
+                    iqr = diff(resid.q);
+                    limits = resid.q + (iqr * c(-2, 2));
+                    (resid < limits[1]) | (resid > limits[2])}]
+
+# quantity outliers
+demand_data[, "outlier":=
+                    {resid = residuals(loess(q~seq(.N)));
+                    resid.q = quantile(resid, probs = c(0.25, 0.75), na.rm = TRUE);
+                    iqr = diff(resid.q);
+                    limits = resid.q + (iqr * c(-2, 2));
+                    (resid < limits[1]) | (resid > limits[2]) | outlier}]
+
+ggplot(melt(demand_data, measure.vars=c("p","q")), aes(x=Date, y=value, color=outlier)) +
+    geom_point(show.legend=FALSE) +
+    scale_color_manual(values=c("black", "red")) +
+    facet_grid(variable~., scales="free_y", labeller=labeller(variable=c("q"="Quantity (MCF)", "p"="Price ($)"))) +
+    labs(title="Outliers in national historical natural gas prices & quantities", y="")
+```
+
+### Price-quantity relationship
+#### All-time natural gas demand
+```{r}
+ggplot(demand_data, aes(x=q, y=p)) +
+    geom_point() +
+    geom_point(data=demand_data[outlier==TRUE], color="red") +
+    labs(title="Natural gas prices and quantities delivered", x="quantity", y="price")
+```
+
+#### Seasonal natural gas demand
+```{r}
+ggplot(demand_data, aes(x=q, y=p)) +
+    geom_point() +
+    geom_point(data=demand_data[outlier==TRUE], color="red") +
+    facet_wrap(~season) +
+    labs(title="Seasonal natural gas prices and quantities delivered", x="quantity", y="price")
+```
+
+#### Monthly natural gas demand
+```{r}
+ggplot(demand_data, aes(x=q, y=p)) +
+    geom_point() +
+    geom_point(data=demand_data[outlier==TRUE], color="red") +
+    scale_x_continuous(labels = function(x) x/1e6) +
+    facet_wrap(~month) +
+    labs(title="Monthly natural gas prices and quantities delivered", x="quantity (10^6)", y="price")
+```
+
+### Linear fit to cleaned monthly data
+```{r}
+fit_data <- demand_data[outlier==FALSE, .(p, q), by=month]
+curve_data <- fit_data[, .("model"= .(lm(p~q, .SD))), by=month]
+fit_data[curve_data, on="month", "lfit":= predict(model[[1]], .("q"=q)), by=.EACHI]
+
+ggplot(fit_data, aes(x=q, y=p)) +
+    geom_point() +
+    geom_line(aes(y=lfit), color="green") +
+    scale_x_continuous(labels = function(x) x/1e6) +
+    geom_label(data=curve_data[, .("R2"=summary(model[[1]])$r.squared), by=month],
+                aes(label=sprintf("R2: %.4f", R2), x=Inf, y=Inf), hjust=1, vjust=1) +
+    facet_wrap(.~month) +
+    labs(title="Monthly natural gas demand functions", x="quantity (10^6)", y="price")
+```
+
+### Proportion of national demand met by Texas supply
+[Texas natural gas marketed production](https://www.eia.gov/dnav/ng/hist/n9050tx2m.htm)
+```{r}
+supply      <- fread("./data/U.S._Natural_Gas_Marketed_Production.csv")
+supply[, "Date":= as.Date(paste0("01", Month), "%d %b %Y")]
+supply_TX   <- fread("./data/Texas_Natural_Gas_Marketed_Production.csv")
+supply_TX[, "Date":= as.Date(paste0("01", Month), "%d %b %Y")]
+
+demand_data[supply, on="Date", "s":= 1000 * `U.S. Natural Gas Marketed Production  Million Cubic Feet`]
+demand_data[supply_TX, on="Date", "s_TX":= 1000 * `Texas Natural Gas Marketed Production  Million Cubic Feet`]
+```
+
+```{r fig.cap="Texas production meets about ~1/3 of national gas demand"}
+ggplot(demand_data) +
+    geom_boxplot(aes(x=year, y=s_TX/q, group=year)) +
+    geom_hline(aes(yintercept=mean(s_TX/q)), color="blue") +
+    geom_text(aes(x=2002, y=mean(s_TX/q)*0.985,
+                label=sprintf("Mean: %.4f", mean(s_TX/q)))) +
+    geom_hline(aes(yintercept=median(s_TX/q)), color="blue", lty="dashed") +
+    geom_text(aes(x=2003, y=median(s_TX/q)*1.015,
+                label=sprintf("Median: %.4f", median(s_TX/q)))) +
+    geom_hline(yintercept=demand_data[year>2010, mean(s_TX/q)], color="red") +
+    geom_text(data=demand_data[year>2010], aes(x=2010, y=mean(s_TX/q)*1.015,
+                label=sprintf("Mean>2010: %.4f", mean(s_TX/q)))) +
+    geom_hline(yintercept=demand_data[year>2010, median(s_TX/q)], color="red", lty="dashed") +
+    geom_text(data=demand_data[year>2010], aes(x=2011, y=median(s_TX/q)*1.015,
+                label=sprintf("Median>2010: %.4f", median(s_TX/q)))) +
+    labs(title="Ratio of Texas production to national consumption", y="Texas supply as % of demand")
+```
+
+```{r fig.cap="Texas production accounts for about ~1/4 of national gas supply"}
+ggplot(demand_data) +
+    geom_boxplot(aes(x=year, y=s_TX/s, group=year)) +
+    geom_hline(aes(yintercept=mean(s_TX/s)), color="blue") +
+    geom_text(aes(x=2002, y=mean(s_TX/s)*1.01,
+                label=sprintf("Mean: %.4f", mean(s_TX/s)))) +
+    geom_hline(aes(yintercept=median(s_TX/s)), color="blue", lty="dashed") +
+    geom_text(aes(x=2003, y=median(s_TX/s)*0.99,
+                label=sprintf("Median: %.4f", median(s_TX/s)))) +
+    geom_hline(yintercept=demand_data[year>2015, mean(s_TX/s)], color="red") +
+    geom_text(data=demand_data[year>2015], aes(x=2010, y=mean(s_TX/s)*1.01,
+                label=sprintf("Mean>2015: %.4f", mean(s_TX/s)))) +
+    geom_hline(yintercept=demand_data[year>2015, median(s_TX/s)], color="red", lty="dashed") +
+    geom_text(data=demand_data[year>2015], aes(x=2010, y=median(s_TX/s)*0.99,
+                label=sprintf("Median>2015: %.4f", median(s_TX/s)))) +
+    labs(title="Ratio of Texas production to national supply", y="Texas supply as % of total")
+```
+
+Output representative demand data
+```{r}
+fwrite(demand_data[outlier==FALSE & Date>="2010-01-01", .(p, q, s, s_TX), by=.(month,year)],
+        "./processed/historical_NG_demand.csv")
+```
+
+### Consumption by sector (residential, industrial, exported)
+```{r}
+monthly_quantity_sector <- read_xls("./data/NG_CONS_SUM_DCU_NUS_M.xls", sheet="Data 1", skip=2)
+setDT(monthly_quantity_sector)
+
+monthly_quantity_sector[, "Month":= format(Date, "%h %Y")]
+
+# merge quantity exported
+monthly_exports <- fread("./data/U.S._Natural_Gas_Exports.csv")
+
+monthly_quantity_sector[monthly_exports, on="Month", "exported_MMCF":= `U.S. Natural Gas Exports  Million Cubic Feet`]
+
+monthly_quantity_sector[gsub(" .*", "", Date) >= "2001-01-01",
+    c("percent_residential", "percent_industrial", "percent_exported"):=
+    .(`U.S. Natural Gas Residential Consumption (MMcf)` / `Natural Gas Delivered to Consumers in the U.S. (MMcf)`,
+    `U.S. Natural Gas Industrial Consumption (MMcf)` / `Natural Gas Delivered to Consumers in the U.S. (MMcf)`,
+    exported_MMCF / `Natural Gas Delivered to Consumers in the U.S. (MMcf)`)]
+```
+
+```{r}
+monthly_quantity_sector[year(Date)>=2001, {print("Residential:");
+                                            print(summary(percent_residential));
+                                            print("Industrial");
+                                            print(summary(percent_industrial));
+                                            print("Exported");
+                                            summary(percent_exported)}]
+```
+
+Output demand by sector
+```{r}
+fwrite(monthly_quantity_sector, "./processed/monthly_quantity_sector.csv")
+```
+
+## Green electricity premiums
+[Utility prices](https://www.eia.gov/electricity/sales_revenue_price/)
+
+Format names of [major green energy utilities](https://www.nrel.gov/analysis/assets/pdfs/green-pricing-top-10-2020-data-plus-archives.pdf) 
+for which premium data (below) is also available.
+```{r}
+utility_base_price <- read_xlsx("./data/f8612017_table6.xlsx", skip=2)
+setDT(utility_base_price)
+
+# Names of major green energy utilities for which premium data is available
+utility_base_price[Entity=="Portland General Electric Co",      "utility":= "Portland General Electric"]
+utility_base_price[Entity=="PacifiCorp",                        "utility":= "PacifiCorp"]
+utility_base_price[Entity %in% c("Northern States Power Co - Wisconsin", "Northern States Power Co - Minnesota",
+                                "Public Service Co of Colorado",
+                                "Southwestern Public Service Co",
+                                "Cheyenne Light Fuel & Power Co"),
+                    "utility":= "Xcel Energy"]
+utility_base_price[Entity=="Sacramento Municipal Util Dist",    "utility":= "Sacramento Municipal Utility District"]
+utility_base_price[Entity=="Puget Sound Energy Inc",            "utility":= "Puget Sound Energy"]
+utility_base_price[Entity=="Virginia Electric & Power Co",      "utility":= "Dominion"]
+utility_base_price[Entity=="DTE Electric Company",              "utility":= "DTE Energy"]
+utility_base_price[Entity=="Austin Energy",                     "utility":= "Austin Energy"]
+utility_base_price[Entity %in% c("Granite State Electric Co",
+                                "Massachusetts Electric Co",
+                                "Nantucket Electric Co",
+                                "The Narragansett Electric Co"),
+                    "utility":= "National Grid"]
+utility_base_price[Entity %in% c("New York State Elec & Gas Corp", "Rochester Gas & Electric Corp"),
+                    "utility":= "Avangrid"]
+```
+
+Percent premium using the mean residential premium per kWh.  
+```{r}
+utility_base_price[, "approx_percent_premium":= 1.6 / `Average Price (cents/kWh)`]
+
+print(summary(1.6 / utility_base_price[!is.na(utility), `Average Price (cents/kWh)`]))
+
+ggplot(utility_base_price[!is.na(utility)]) +
+    geom_density(aes(approx_percent_premium))
+```
+
+Green power [programs](https://www.nrel.gov/analysis/green-power.html) (2022 pricing data)
+```{r}
+utility_premium_price <- read_xlsx("./data/utility-green-pricing-program-list.xlsx", skip=4)
+setDT(utility_premium_price)
+
+utility_premium_price[, "premium_cpkWh":= as.numeric(gsub(". per kWh", "", .SD[[5]]))]
+# missing values
+utility_premium_price[Utility=="Austin Energy", "premium_cpkWh":= 0.75]
+
+utility_premium_price[utility_base_price[!is.na(utility)], on=c("State", "Utility"="utility"),
+    "base_cpkWh":= `Average Price (cents/kWh)`]
+utility_premium_price[utility_base_price[!is.na(utility)], on=c("State", "Parent Utility"="utility"),
+    "base_cpkWh":= `Average Price (cents/kWh)`]
+# crude matching of Tennessee Valley Authority
+utility_premium_price[utility_base_price, on=c("State", "Utility"="Entity"),
+    "base_cpkWh":= ifelse(grepl("TVA", `Parent Utility`), `Average Price (cents/kWh)`, base_cpkWh)]
+
+utility_premium_price[!is.na(base_cpkWh), "premium_percent":= premium_cpkWh / base_cpkWh]
+```
+
+```{r}
+print(summary(utility_premium_price[!is.na(premium_percent), premium_percent]))
+
+ggplot(utility_premium_price[!is.na(premium_percent)]) +
+    geom_density(aes(premium_percent))
+```
