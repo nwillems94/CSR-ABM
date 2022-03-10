@@ -211,15 +211,15 @@ do_exploration <- function(dt_f, dt_l, ti) {
     # agents with no assets will discover new ones
     new_discs <- c(new_discs, setdiff(dt_f[(activity=="exploration") & (gas_output+oil_output==0)]$firmID, new_discs))
 
-    new_output <- unique(dt_l[union(retiring_leases, which(status=="stopped"))]$firmID)
+    new_output <- unique(dt_l[union(retiring_leases, which(status=="pending"))]$firmID)
 
     # progress leases from previous turns
     #    newly discovered leases are undeveloped
-    #    in the following time step, they progress to underdeveloped with stopped production
+    #    in the following time step, they progress to underdeveloped with pending production
     #    at this point, firms can decide whether to fully develop them
     #    in the following time step, the leases begin production
-    dt_l[status=="stopped", "status":= "producing"]
-    dt_l[class=="undeveloped", c("class", "status"):= .(ifelse(csgd_MCF==0, "developed", "underdeveloped"), "stopped")]
+    dt_l[status=="pending", "status":= "producing"]
+    dt_l[class=="undeveloped", c("class", "status"):= .(ifelse(csgd_MCF==0, "developed", "underdeveloped"), "pending")]
     # retire leases at the end of their lifetime
     dt_l[.(retiring_leases), "status":= "retired"]
 
