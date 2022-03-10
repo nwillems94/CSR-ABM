@@ -40,15 +40,19 @@ flaringABM_main <- function(Params, jobID, Run) {
         #### FIRM ACTIVITIES ####
         # randomly assign either development or exploration activities
         firms[, "activity":= ifelse(runif(.N) < Params$prop_e, "exploration", "development")]
+        # firms with pending, underdeveloped leases do development
+        firms[leases[status=="pending" & class=="underdeveloped"], on="firmID", "activity":= "development"]
 
         ## Exploration
         do_exploration(firms, leases, ti)
 
         ## Development
-        # compare profit maximizing options with and without mitigation by comparing cost to possible harm
-        portfolio_options <- optimize_strategy(firms, leases, industry_revenue, ti)
-        # optimize market value by executing the best portfolio option
-        do_development(firms, leases, portfolio_options, ti)
+        if (leases[firmID %in% firms[activity=="development"]$firmID][status!="retired" & class=="underdeveloped", .N>0]) {
+            # compare profit maximizing options with and without mitigation by comparing cost to possible harm
+            portfolio_options <- optimize_strategy(firms, leases, industry_revenue, ti)
+            # optimize market value by executing the best portfolio option
+            do_development(firms, leases, portfolio_options, ti)
+        }
 
 
         #### MARKETS ####
@@ -78,7 +82,7 @@ flaringABM_main <- function(Params, jobID, Run) {
         fwrite(firms, file=sprintf(agentOuts, Run), append=TRUE)
         fwrite(leases[!is.na(firmID) & status!="retired"], file=sprintf(leaseOuts, Run), append=TRUE)
 
-        rm(portfolio_options)
+        if(exists("portfolio_options")) rm(portfolio_options)
     }
     cat("\n")
 }
