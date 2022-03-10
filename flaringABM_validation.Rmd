@@ -1,0 +1,108 @@
+---
+title: "FlaringABM validation"
+author: "Nick Willems"
+---
+
+## Distributions of operator production volumes
+
+```{r}
+market_shares <- fread("./inputs/processed/firm_market_shares.csv")
+
+sql <- "SELECT %s, %s, model, RunID, time, firmID FROM lease_states 
+        WHERE time IN (SELECT MIN(time) FROM lease_states UNION SELECT 0 UNION SELECT MAX(time) FROM lease_states) 
+        GROUP BY model, RunID, time, firmID"
+prod_vol <- dbGetQuery(db, sprintf(sql, "SUM(total_oil_BBL) AS oil_prod",
+                                        "SUM(CASE WHEN gas_MCF>0 THEN total_MCF ELSE 0 END) AS gas_prod"))
+
+print(head(prod_vol))
+```
+
+```{r, fig.width=9, fig.height=12}
+ggplot(prod_vol, aes(log(oil_prod))) +
+    geom_histogram(aes(y=after_stat(density)/uniqueN(prod_vol$RunID), color=as.factor(RunID)), bins=nclass.scott(prod_vol$oil_prod)) +
+    stat_function(fun=dnorm, args=market_shares[, .("mean"=mean(log(scaled_oil_BBL)), "sd"=sd(log(scaled_oil_BBL)))]) +
+    facet_grid(model~time) +
+    labs(title="Distribution of firm oil production over time", color="RunID", y="density")
+```
+
+```{r, fig.width=9, fig.height=12}
+ggplot(prod_vol, aes(log(gas_prod))) +
+    geom_histogram(aes(y=after_stat(density)/uniqueN(prod_vol$RunID), color=as.factor(RunID)), bins=nclass.scott(prod_vol$gas_prod)) +
+    stat_function(fun=dnorm, args=market_shares[scaled_gas_MCF>0, .("mean"=mean(log(scaled_gas_MCF)), "sd"=sd(log(scaled_gas_MCF)))]) +
+    facet_grid(model~time) +
+    labs(title="Distribution of firm gas production over time", color="RunID", y="density")
+```
+
+## Agent behaviors
+
+```{r}
+ggplot(agent_states[behavior!="flaring", .N, keyby=.(model, RunID, time, behavior)]) +
+    geom_step(aes(x=time, y=N, group=interaction(model,RunID), color=model)) +
+    facet_grid(behavior~., scales="free_y")
+```
+
+## Comparison of model components
+
+```{r}
+ggplot(agent_states[, sum(gas_flared) / sum(gas_output), by=.(model, RunID, time)]) +
+    stat_summary(fun="mean", geom="line", aes(x=time, y=V1, color=model)) +
+    geom_hline(yintercept=0.05, lty=2) +
+    geom_hline(yintercept=0.03, lty=2) +
+    labs(title="Relative impact of model components", x="Time", y="Total Flaring Intensity, gas basis", color="") +
+    theme(legend.position="bottom")
+```
+
+```{r}
+ggplot(agent_states[, sum(gas_flared) / sum(oil_output), by=.(model, RunID, time)]) +
+    stat_summary(fun="mean", geom="line", aes(x=time, y=V1, color=model)) +
+    geom_hline(yintercept=0.1, lty=2) +
+    labs(title="Relative impact of model components", x="Time", y="Total Flaring Intensity, oil basis", color="") +
+    theme(legend.position="bottom")
+```
+
+```{r}
+ggplot(agent_states[, sum(gas_flared) / sum(oil_output), by=.(model, RunID, time)]) +
+    stat_summary(fun="mean", geom="line", aes(x=time, y=V1, color=model)) +
+    geom_hline(yintercept=0.1, lty=2) +
+    labs(title="Relative impact of model components", x="Time", y="Total Flaring Intensity, oil basis", color="") +
+    theme(legend.position="bottom") +
+    coord_cartesian(ylim=c(0, 0.25))
+```
+
+```{r}
+ggplot(agent_states[, sum(gas_flared) / sum(oil_output), by=.(model, RunID, time)]) +
+    geom_smooth(aes(x=time, y=V1, color=model)) +
+    labs(title="Relative impact of model components", x="Time", y="Total Flaring Intensity", color="") +
+    theme(legend.position="bottom") +
+    coord_cartesian(ylim=c(0, 0.25))
+```
+
+
+## Rate of asset retirement and aquisition
+```{r}
+sql <- "SELECT SUM(oil_BBL+cond_BBL) AS %s, model, RunID, time FROM lease_states %s GROUP BY model, RunID, time"
+new_prod <- dbGetQuery(db, sprintf(sql, "new_BBL", "WHERE t_found=time"))
+ret_prod <- dbGetQuery(db, sprintf(sql, "ret_BBL", "WHERE t_found+lifetime-1=time"))
+setDT(new_prod)
+setDT(ret_prod)
+
+prod <- merge(new_prod, ret_prod, all=TRUE, by=c("model","RunID","time"))[,
+            .SD[agent_states[,.("time"=min(time):max(time))], on="time"], by=model]
+
+prod[, c("model","RunID"):= .(as.factor(model), as.factor(RunID))]
+setnafill(prod, fill=0, cols=c("new_BBL","ret_BBL"))
+prod[, "ratio":= new_BBL / ret_BBL]
+
+print(prod)
+```
+
+```{r}
+ggplot(prod[time>min(time)], aes(x=time, y=ratio, group=model)) +
+    geom_line() +
+    geom_hline(yintercept=1.23, lty=3, color="red") +
+    stat_summary(aes(x=1, yintercept=..y..), fun="median", na.rm=TRUE, geom="hline", lty=2) +
+    stat_summary(aes(x=10, label=sprintf("Median: %.02f",..y..)), fun="median", na.rm=TRUE, geom="text", vjust=-2.5) +
+    labs(title="Oil production gained and lost from new and retiring wells", y="Production gained / Production lost") +
+    facet_grid(model~.) + 
+    coord_cartesian(ylim=c(0, 10))
+```
