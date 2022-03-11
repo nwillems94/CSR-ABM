@@ -21,7 +21,7 @@ calc_total_pressure <- function(Ai) {
 
 dist_social_pressure <- function(dt_f, ti, method="even", focus=1) {
     # Determine what proportion of the total social pressure is allocated to each agent
-    a <- calc_total_pressure(ti$Activism) / ti$SRoR
+    a <- calc_total_pressure(ti$Activism)
     dt_f[, "sPressure":= 0]
 
     if (method=="even") {

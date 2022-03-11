@@ -28,11 +28,11 @@ Params <<- list(
     "t0" = -25,
     "tf" = 100,
     # Environmental Variables
-    "Activism" = 1e6,
+    "Activism" = 3e5,
     # Market conditions
-    "SRoR" = 0.5,   # social rate of return:
-                    #     0: no social satisfaction from holding shares or contributing to the activist
-                    #     1: shareholding & activist contributions are perfect substitutes for personal giving
+    "SRoR" = 0.1,   # social rate of return:
+                    #     0: no social satisfaction from holding shares
+                    #     1: shareholding is a perfect substitutes for activist contributions
     "threshold" = 0.5, # max units of gas "green" firms can flare per unit of oil produced
     "market_price_dirty" = 2,
     "market_price_green" = 2*1.16, # from Kitzmueller & Shimshack 16[5,20]% zotero://select/items/0_PGHV5RK7
