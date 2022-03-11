@@ -8,14 +8,14 @@ using namespace Rcpp;
 
 List calc_market_priceC (double pd, double pg) {
     
-    return List::create(_["dirty"] = pd , _["green"] = pg);
+    return List::create(_["grey"] = pd , _["green"] = pg);
 }// --------------------    END OF FUNCTION calc_market_priceC      --------------------###
 
 List calc_market_quantityC (List params) {
     double qg = as<double>(params["market_size"]) * as<double>(params["market_prop_green"]);
     double qd = as<double>(params["market_size"]) - qg;
     
-    return List::create(_["dirty"] = qd , _["green"] = qg);
+    return List::create(_["grey"] = qd , _["green"] = qg);
 }// --------------------    END OF FUNCTION calc_market_quantityC   --------------------###
 
 NumericVector dist_market_quantityC(NumericVector max_units, double total_units) {
@@ -47,13 +47,13 @@ List calc_revenueC (DataFrame agents, List params) {
     NumericVector gas_output = agents["gas_output"];
     NumericVector mitigation = sapply(as<CharacterVector>(agents["behavior"]), [](String x) -> double { return x!="flaring"; });
 
-    List prices = calc_market_priceC(params["market_price_dirty"], params["market_price_green"]);
+    List prices = calc_market_priceC(params["market_price_grey"], params["market_price_green"]);
     List total_units = calc_market_quantityC(params);
     NumericVector green_units = dist_market_quantityC(gas_output * mitigation,  total_units["green"]);
-    NumericVector dirty_units = dist_market_quantityC(gas_output - green_units, total_units["dirty"]);
-    double green_coeff = (as<double>(total_units["green"]) - sum(green_units)) / (as<double>(total_units["dirty"]) + as<double>(total_units["green"]));
-    green_coeff *= as<double>(prices["green"]) - as<double>(prices["dirty"]);
-    return List::create(_["gas_revenue"] = (as<double>(prices["green"]) * green_units) + (as<double>(prices["dirty"]) * dirty_units) , 
+    NumericVector grey_units = dist_market_quantityC(gas_output - green_units, total_units["grey"]);
+    double green_coeff = (as<double>(total_units["green"]) - sum(green_units)) / (as<double>(total_units["grey"]) + as<double>(total_units["green"]));
+    green_coeff *= as<double>(prices["green"]) - as<double>(prices["grey"]);
+    return List::create(_["gas_revenue"] = (as<double>(prices["green"]) * green_units) + (as<double>(prices["grey"]) * grey_units) ,
                         _["green_units"] = green_units, _["prices"] = prices  , _["green_coeff"] = green_coeff);
 }// --------------------    END OF FUNCTION calc_revenueC           --------------------###
 

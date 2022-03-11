@@ -93,7 +93,7 @@ build_permutations <- function(dt_l, market, ti) {
                 keyby=firmID][lengths(leaseIDs)>0]
 
     # develop leases which would have an operating cost below the conventional market price for gas
-    dt_p[, "base_perm":= dt_l[leaseIDs, .(.(as.numeric(AC_pMCF<market$prices$dirty)))], by=firmID]
+    dt_p[, "base_perm":= dt_l[leaseIDs, .(.(as.numeric(AC_pMCF<market$prices$grey)))], by=firmID]
 
     # lowest cost per MCF which meets the green threshold
     # calculate additional gas capture (wrt base) necessary to meet green threshold
@@ -109,8 +109,8 @@ build_permutations <- function(dt_l, market, ti) {
 
 
     # project revenue based on past market conditions
-    dt_p[, "add_gas_revenue":= (green_csgd_MCF * (market$prices$dirty + market$green_coeff)) -
-                                (base_csgd_MCF * (market$prices$dirty + ifelse(K>0, 0, market$green_coeff)))]
+    dt_p[, "add_gas_revenue":= (green_csgd_MCF * (market$prices$grey + market$green_coeff)) -
+                                (base_csgd_MCF * (market$prices$grey + ifelse(K>0, 0, market$green_coeff)))]
 
     dt_l[, "AC_pMCF":= NULL]
     setkey(dt_p, firmID)

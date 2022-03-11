@@ -228,7 +228,7 @@ firms[, "behavior":= ifelse(gas_flared/oil_output > Params$threshold, "flaring",
 
 firms[leases[, sum(opEx_oil + opEx_gas), by=firmID], on="firmID", "cost_O":= V1]
 firms[, c("cost_M", "green_gas_output"):= 0]
-firms[, c("oil_revenue", "gas_revenue"):= .(oil_output * Params$oil_price, gas_output*Params$market_price_dirty)]
+firms[, c("oil_revenue", "gas_revenue"):= .(oil_output * Params$oil_price, gas_output*Params$market_price_grey)]
 
 firms[, "market_value":= (oil_revenue + gas_revenue - cost_O)]
 
