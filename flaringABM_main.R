@@ -57,7 +57,7 @@ flaringABM_main <- function(Params, jobID, Run) {
 
         #### MARKETS ####
         ## Apply Social Pressure to each firm (beginning at time 0)
-        dist_social_pressure(firms, ti)
+        dist_social_pressure(firms, ti, method="oil_output")
 
         ## Expenses
         calc_debits(firms, leases)

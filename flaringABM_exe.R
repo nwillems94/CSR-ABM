@@ -25,24 +25,25 @@ Params <<- list(
     "refID" = NA,
     # TxRRC data shows about 2000 firms producing gas alongside oil operating in any given year since 2010
     "nagents" = 2000,
-    "t0" = -25,
-    "tf" = 100,
+    "t0" = -60,
+    "tf" = 60,
     # Environmental Variables
     "Activism" = 3e5,
     # Market conditions
     "SRoR" = 0.1,   # social rate of return:
                     #     0: no social satisfaction from holding shares
                     #     1: shareholding is a perfect substitutes for activist contributions
-    "threshold" = 0.5, # max units of gas "green" firms can flare per unit of oil produced
+    "threshold" = 0.05, # max units of gas "green" firms can flare per unit of oil produced
     "market_price_grey" = 2,
-    "market_price_green" = 2*1.16, # from Kitzmueller & Shimshack 16[5,20]% zotero://select/items/0_PGHV5RK7
+    "market_price_green" = 2*1.2, # from Kitzmueller & Shimshack 16[5,20]% zotero://select/items/0_PGHV5RK7
     "oil_price" = 60,
     # Activities
     "prop_e" = 11/12, # what proportion of firms engage in exploration activities in a given time step
-    "prob_m" = 1  # probability that a follower will mimic a leader if they observe them mitigating
+    "prob_m" = 1      # probability that a follower will mimic a leader if they observe them mitigating
 )
 Params$Activism <- c(rep(0, -Params$t0), rep(Params$Activism, Params$tf + 1))
 Params$SRoR <- c(rep(0, -Params$t0), rep(Params$SRoR, Params$tf + 1))
+Params$prob_m <- c(rep(0, -Params$t0), rep(Params$prob_m, Params$tf + 1))
 # from OShaughnessy et al. 3% of electricity sales green zotero://select/items/0_HW2MXA38
 Params$market_prop_green <- with(Params, c(rep(0, -t0),
                                         seq(from=0, to=1.5, length.out= 1 + (tf %/% 2)),
@@ -69,7 +70,7 @@ rm(args, update_arg)
 
 ## Start model runs given parameters
 run_time <- Sys.time()
-future_lapply(1:20, function(Run) {
+future_lapply(1:32, function(Run) {
     source("./flaringABM_core.R")
     flaringABM_main(Params, jobID, Run)
 })
