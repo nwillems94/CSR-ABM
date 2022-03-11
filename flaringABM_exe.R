@@ -41,6 +41,7 @@ Params <<- list(
     "prop_e" = 11/12, # what proportion of firms engage in exploration activities in a given time step
     "prob_m" = 1  # probability that a follower will mimic a leader if they observe them mitigating
 )
+Params$Activism <- c(rep(0, -Params$t0), rep(Params$Activism, Params$tf + 1))
 Params$SRoR <- c(rep(0, -Params$t0), rep(Params$SRoR, Params$tf + 1))
 # from OShaughnessy et al. 3% of electricity sales green zotero://select/items/0_HW2MXA38
 Params$market_prop_green <- with(Params, c(rep(0, -t0),
