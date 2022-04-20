@@ -210,13 +210,13 @@ fwrite(daily_prices, "./processed/daily_prices.csv")
 
 # Demand Function
 [Natural gas (Henry Hub) prices](https://www.eia.gov/dnav/ng/NG_PRI_FUT_S1_M.htm),
-[Natural gas delivered to consumers](https://www.eia.gov/dnav/ng/ng_cons_sum_dcu_nus_m.htm)
+[Natural gas marketed production](https://www.eia.gov/dnav/ng/hist/n9050us2m.htm)
 ```{r}
 monthly_price <- fread("./data/Henry_Hub_Natural_Gas_Spot_Price.csv")
 monthly_price[, c("Date","Month"):= .(as.Date(paste0("01", Month), "%d %b %Y"), NULL)]
 
-monthly_quantity <- fread("./data/Natural_Gas_Delivered_to_Consumers_in_the_U.S..csv")
-monthly_quantity[, c("Date","Month"):= .(as.Date(paste0("01", Month), "%d %b %Y"), NULL)]
+monthly_quantity <- fread("./data/U.S._Natural_Gas_Marketed_Production.csv")
+monthly_quantity[, "Date":= as.Date(paste0("01", Month), "%d %b %Y")]
 ```
 
 ### Combine historical prices, quantites, & supply
@@ -231,8 +231,8 @@ demand_data[month %in% c("Jun", "Jul", "Aug"), "season":= "summer"]
 demand_data[month %in% c("Sep", "Oct", "Nov"), "season":= "fall"]
 demand_data[month %in% c("Dec", "Jan", "Feb"), "season":= "winter"]
 
-setnames(demand_data, "Henry Hub Natural Gas Spot Price Dollars per Million Btu",           "p")
-setnames(demand_data, "Natural Gas Delivered to Consumers in the U.S.  Million Cubic Feet", "q")
+setnames(demand_data, "Henry Hub Natural Gas Spot Price Dollars per Million Btu", "p")
+setnames(demand_data, "U.S. Natural Gas Marketed Production  Million Cubic Feet", "q")
 
 demand_data[, "p":= p * 1.037]          # convert to dollars per MCF
 demand_data[, "q":= 1000*as.numeric(q)] # convert to MCF
@@ -240,21 +240,16 @@ demand_data[, "q":= 1000*as.numeric(q)] # convert to MCF
 
 ### Flag time-series outliers
 ```{r}
-# price outliers
-demand_data[, "outlier":=
-                    {resid = residuals(loess(p~seq(.N)));
-                    resid.q = quantile(resid, probs = c(0.25, 0.75), na.rm = TRUE);
-                    iqr = diff(resid.q);
-                    limits = resid.q + (iqr * c(-2, 2));
-                    (resid < limits[1]) | (resid > limits[2])}]
-
-# quantity outliers
-demand_data[, "outlier":=
-                    {resid = residuals(loess(q~seq(.N)));
-                    resid.q = quantile(resid, probs = c(0.25, 0.75), na.rm = TRUE);
-                    iqr = diff(resid.q);
-                    limits = resid.q + (iqr * c(-2, 2));
-                    (resid < limits[1]) | (resid > limits[2]) | outlier}]
+# identify outliers in three windows
+demand_data[between(year, 1997, 2004),
+                "outlier":= {p_limits= boxplot.stats(p)$stats; q_limits= boxplot.stats(q)$stats; # IQR
+                            !between(p, min(p_limits), max(p_limits)) | !between(q, min(q_limits), max(q_limits))}]
+demand_data[between(year, 2005, 2012),
+                "outlier":= {p_limits= boxplot.stats(p)$stats; q_limits= boxplot.stats(q)$stats; # IQR
+                            !between(p, min(p_limits), max(p_limits)) | !between(q, min(q_limits), max(q_limits))}]
+demand_data[between(year, 2013, 2021),
+                "outlier":= {p_limits= boxplot.stats(p)$stats; q_limits= boxplot.stats(q)$stats; # IQR
+                            !between(p, min(p_limits), max(p_limits)) | !between(q, min(q_limits), max(q_limits))}]
 
 ggplot(melt(demand_data, measure.vars=c("p","q")), aes(x=Date, y=value, color=outlier)) +
     geom_point(show.legend=FALSE) +
@@ -269,7 +264,7 @@ ggplot(melt(demand_data, measure.vars=c("p","q")), aes(x=Date, y=value, color=ou
 ggplot(demand_data, aes(x=q, y=p)) +
     geom_point() +
     geom_point(data=demand_data[outlier==TRUE], color="red") +
-    labs(title="Natural gas prices and quantities delivered", x="quantity", y="price")
+    labs(title="Natural gas prices and marketed production", x="Quantity (MCF)", y="Price ($)")
 ```
 
 #### Seasonal natural gas demand
@@ -278,7 +273,7 @@ ggplot(demand_data, aes(x=q, y=p)) +
     geom_point() +
     geom_point(data=demand_data[outlier==TRUE], color="red") +
     facet_wrap(~season) +
-    labs(title="Seasonal natural gas prices and quantities delivered", x="quantity", y="price")
+    labs(title="Seasonal natural gas prices and marketed production", x="Quantity (MCF)", y="Price ($)")
 ```
 
 #### Monthly natural gas demand
@@ -288,12 +283,12 @@ ggplot(demand_data, aes(x=q, y=p)) +
     geom_point(data=demand_data[outlier==TRUE], color="red") +
     scale_x_continuous(labels = function(x) x/1e6) +
     facet_wrap(~month) +
-    labs(title="Monthly natural gas prices and quantities delivered", x="quantity (10^6)", y="price")
+    labs(title="Monthly natural gas prices and marketed production", x="Quantity (MCF 10^6)", y="Price ($)")
 ```
 
 ### Linear fit to cleaned monthly data
 ```{r}
-fit_data <- demand_data[outlier==FALSE, .(p, q), by=month]
+fit_data <- demand_data[year>2010][outlier==FALSE, .(p, q), by=month]
 curve_data <- fit_data[, .("model"= .(lm(p~q, .SD))), by=month]
 fit_data[curve_data, on="month", "lfit":= predict(model[[1]], .("q"=q)), by=.EACHI]
 
@@ -304,60 +299,33 @@ ggplot(fit_data, aes(x=q, y=p)) +
     geom_label(data=curve_data[, .("R2"=summary(model[[1]])$r.squared), by=month],
                 aes(label=sprintf("R2: %.4f", R2), x=Inf, y=Inf), hjust=1, vjust=1) +
     facet_wrap(.~month) +
-    labs(title="Monthly natural gas demand functions", x="quantity (10^6)", y="price")
+    labs(title="Monthly natural gas demand functions", x="Quantity (MCF 10^6)", y="Price ($)")
 ```
 
-### Proportion of national demand met by Texas supply
+### Proportion of national supply from Texas 
 [Texas natural gas marketed production](https://www.eia.gov/dnav/ng/hist/n9050tx2m.htm)
 ```{r}
-supply      <- fread("./data/U.S._Natural_Gas_Marketed_Production.csv")
-supply[, "Date":= as.Date(paste0("01", Month), "%d %b %Y")]
-supply_TX   <- fread("./data/Texas_Natural_Gas_Marketed_Production.csv")
-supply_TX[, "Date":= as.Date(paste0("01", Month), "%d %b %Y")]
+monthly_quantity_TX   <- fread("./data/Texas_Natural_Gas_Marketed_Production.csv")
+monthly_quantity_TX[, "Date":= as.Date(paste0("01", Month), "%d %b %Y")]
 
-demand_data[supply, on="Date", "s":= 1000 * `U.S. Natural Gas Marketed Production  Million Cubic Feet`]
-demand_data[supply_TX, on="Date", "s_TX":= 1000 * `Texas Natural Gas Marketed Production  Million Cubic Feet`]
-```
-
-```{r fig.cap="Texas production meets about ~1/3 of national gas demand"}
-ggplot(demand_data) +
-    geom_boxplot(aes(x=year, y=s_TX/q, group=year)) +
-    geom_hline(aes(yintercept=mean(s_TX/q)), color="blue") +
-    geom_text(aes(x=2002, y=mean(s_TX/q)*0.985,
-                label=sprintf("Mean: %.4f", mean(s_TX/q)))) +
-    geom_hline(aes(yintercept=median(s_TX/q)), color="blue", lty="dashed") +
-    geom_text(aes(x=2003, y=median(s_TX/q)*1.015,
-                label=sprintf("Median: %.4f", median(s_TX/q)))) +
-    geom_hline(yintercept=demand_data[year>2010, mean(s_TX/q)], color="red") +
-    geom_text(data=demand_data[year>2010], aes(x=2010, y=mean(s_TX/q)*1.015,
-                label=sprintf("Mean>2010: %.4f", mean(s_TX/q)))) +
-    geom_hline(yintercept=demand_data[year>2010, median(s_TX/q)], color="red", lty="dashed") +
-    geom_text(data=demand_data[year>2010], aes(x=2011, y=median(s_TX/q)*1.015,
-                label=sprintf("Median>2010: %.4f", median(s_TX/q)))) +
-    labs(title="Ratio of Texas production to national consumption", y="Texas supply as % of demand")
+demand_data[monthly_quantity_TX, on="Date", "q_TX":= 1000 * `Texas Natural Gas Marketed Production  Million Cubic Feet`]
 ```
 
 ```{r fig.cap="Texas production accounts for about ~1/4 of national gas supply"}
 ggplot(demand_data) +
-    geom_boxplot(aes(x=year, y=s_TX/s, group=year)) +
-    geom_hline(aes(yintercept=mean(s_TX/s)), color="blue") +
-    geom_text(aes(x=2002, y=mean(s_TX/s)*1.01,
-                label=sprintf("Mean: %.4f", mean(s_TX/s)))) +
-    geom_hline(aes(yintercept=median(s_TX/s)), color="blue", lty="dashed") +
-    geom_text(aes(x=2003, y=median(s_TX/s)*0.99,
-                label=sprintf("Median: %.4f", median(s_TX/s)))) +
-    geom_hline(yintercept=demand_data[year>2015, mean(s_TX/s)], color="red") +
-    geom_text(data=demand_data[year>2015], aes(x=2010, y=mean(s_TX/s)*1.01,
-                label=sprintf("Mean>2015: %.4f", mean(s_TX/s)))) +
-    geom_hline(yintercept=demand_data[year>2015, median(s_TX/s)], color="red", lty="dashed") +
-    geom_text(data=demand_data[year>2015], aes(x=2010, y=median(s_TX/s)*0.99,
-                label=sprintf("Median>2015: %.4f", median(s_TX/s)))) +
-    labs(title="Ratio of Texas production to national supply", y="Texas supply as % of total")
+    geom_boxplot(aes(x=year, y=q_TX/q, group=year)) +
+    geom_hline(aes(yintercept=mean(q_TX/q)), color="blue") +
+    geom_text(aes(x=2009, y=mean(q_TX/q)*0.99,
+                label=sprintf("Mean: %.4f", mean(q_TX/q)))) +
+    geom_hline(aes(yintercept=median(q_TX/q)), color="blue", lty="dashed") +
+    geom_text(aes(x=2011, y=median(q_TX/q)*0.99,
+                label=sprintf("Median: %.4f", median(q_TX/q)))) +
+    labs(title="Percent of natural gas production from Texas", y="Texas supply / national supply")
 ```
 
 Output representative demand data
 ```{r}
-fwrite(demand_data[outlier==FALSE & Date>="2010-01-01", .(p, q, s, s_TX), by=.(month,year)],
+fwrite(demand_data[outlier==FALSE & year>=2010, .(p, q, q_TX), by=.(month,year)],
         "./processed/historical_NG_demand.csv")
 ```
 
