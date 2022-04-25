@@ -325,7 +325,7 @@ ggplot(demand_data) +
 
 Output representative demand data
 ```{r}
-fwrite(demand_data[outlier==FALSE & year>=2010, .(p, q, q_TX), by=.(month,year)],
+fwrite(demand_data[outlier==FALSE & between(year,2010,2020), .(p, q, q_TX), by= .(month,year)],
         "./processed/historical_NG_demand.csv")
 ```
 

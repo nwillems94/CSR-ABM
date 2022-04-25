@@ -472,7 +472,7 @@ Texas production accounts for about ~1/4 of national gas supply
 </p>
 </div>
 <p>Output representative demand data</p>
-<pre class="r"><code>fwrite(demand_data[outlier==FALSE &amp; year&gt;=2010, .(p, q, q_TX), by=.(month,year)],
+<pre class="r"><code>fwrite(demand_data[outlier==FALSE &amp; between(year,2010,2020), .(p, q, q_TX), by= .(month,year)],
         &quot;./processed/historical_NG_demand.csv&quot;)</code></pre>
 </div>
 <div id="consumption-by-sector-residential-industrial-exported" class="section level3">
