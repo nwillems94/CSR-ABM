@@ -65,22 +65,45 @@ fwrite(EIA_dpr[!is.na(new_BBL), .(date, region, new_BBL, retired_BBL, new_MCF, r
 [Manual](https://portalvhdskzlfb8q9lqr9.blob.core.windows.net/media/47731/pdq-dump-user-manual.pdf)
 ```{r}
 OG_COUNTY_CYCLE <- fread("unzip -p ./data/PDQ_DSV.zip OG_COUNTY_CYCLE_DATA_TABLE.dsv", sep="}", quote="",
-                        select=list(character=c("DISTRICT_NAME"), numeric=c("COUNTY_NO","CYCLE_YEAR"),
+                        select=list(character=c("DISTRICT_NAME"), numeric=c("COUNTY_NO","CYCLE_YEAR","CYCLE_MONTH"),
                                     numeric=c("CNTY_OIL_PROD_VOL","CNTY_GAS_PROD_VOL","CNTY_CSGD_PROD_VOL")))
 
 # which counties are represented in the subset of leases
-OG_COUNTY_CYCLE[, "subset":= FALSE]
-                # Permian
-OG_COUNTY_CYCLE[(DISTRICT_NAME %in% c("7C","08","8A")) |
-                # Eagle Ford
+OG_COUNTY_CYCLE[, "subset":= (COUNTY_NO %in% unique(fread("./processed/wells.csv")$API_COUNTY_CODE))]
+
+# based on TXRRC descriptions of the Permian and Eagle Ford
+OG_COUNTY_CYCLE[subset==TRUE &
+                # [Permian](https://www.rrc.texas.gov/oil-and-gas/major-oil-and-gas-formations/permian-basin/)
+                !((DISTRICT_NAME %in% c("7C","08","8A")) |
+                # [Eagle Ford](https://www.rrc.texas.gov/oil-and-gas/major-oil-and-gas-formations/eagle-ford-shale/)
                 (COUNTY_NO %in% c(13, 21, 25, 41, 51, 123, 127, 149, 163, 177, 185, 255, 283, 285,
-                                287, 289, 297, 311, 313, 323, 331, 395, 471, 477, 479, 493, 507)),
-                "subset":= TRUE]
+                                287, 289, 297, 311, 313, 323, 331, 395, 471, 477, 479, 493, 507))),
+                "subset":= FALSE]
 
 # What proportion of gas comes from areas where we have lease data
 print(OG_COUNTY_CYCLE[CYCLE_YEAR>=2010 & CYCLE_YEAR<2021,
                 lapply(.SD, function(x) sum(x[subset==TRUE]) / sum(x)),
-                by=CYCLE_YEAR, .SDcols=c("CNTY_OIL_PROD_VOL","CNTY_GAS_PROD_VOL","CNTY_CSGD_PROD_VOL")])
+                by=.(CYCLE_MONTH, CYCLE_YEAR), .SDcols=patterns("PROD_VOL$")])
+```
+
+Summary of production in Texas and the subset of areas with lease data
+```{r}
+lease_prod <- OG_COUNTY_CYCLE[CYCLE_YEAR>=2010 & CYCLE_YEAR<2021,
+                            .("oil_total"= sum(CNTY_OIL_PROD_VOL), "oil_subset"= sum(CNTY_OIL_PROD_VOL[subset]),
+                            "gas_total"= sum(CNTY_GAS_PROD_VOL), "gas_subset"= sum(CNTY_GAS_PROD_VOL[subset]),
+                            "csgd_total"= sum(CNTY_CSGD_PROD_VOL), "csgd_subset"= sum(CNTY_CSGD_PROD_VOL[subset])),
+                    by=.(CYCLE_MONTH, CYCLE_YEAR)]
+                    # by=.("Date"= as.Date(paste("01", CYCLE_MONTH, CYCLE_YEAR), format='%d %m %Y'))]
+# lease_prod[, c("year","month"):= .(year(Date), month.abb[month(Date)])]
+lease_prod[, "Date":= as.Date(paste("01", CYCLE_MONTH, CYCLE_YEAR), format='%d %m %Y')]
+
+ggplot(lease_prod, aes(x=Date)) +
+    geom_point(aes(y=gas_subset/gas_total, color="gas")) +
+    geom_point(aes(y=csgd_subset/csgd_total, color="csgd")) +
+    geom_point(aes(y=(gas_subset+csgd_subset)/(gas_total+csgd_total), color="gas+csgd")) +
+    labs(title="Production from counties with lease data", y="% of Texas", color="")
+
+print(summary(lease_prod[, (gas_subset+csgd_subset)/(gas_total+csgd_total)]))
 ```
 
 # Monthly operator production 
@@ -126,15 +149,13 @@ print(OG_OPERATOR_CYCLE[CYCLE_YEAR>=2010 & CYCLE_YEAR<2021,
 ```{r}
 operators <- copy(OG_OPERATOR_CYCLE[firm_type=="associated"])
 
-# median average production
-operators[, "med_oil_BBL":= median(OPER_OIL_PROD_VOL), by=OPERATOR_NO]
-operators[, "med_gas_MCF":= median(OPER_GAS_PROD_VOL), by=OPERATOR_NO]
-operators[, "med_csgd_MCF":= median(OPER_CSGD_PROD_VOL), by=OPERATOR_NO]
+operators[lease_prod, on=c("CYCLE_MONTH", "CYCLE_YEAR"),
+    c("frac_oil", "frac_gas", "frac_csgd"):= .(oil_subset/oil_total, gas_subset/gas_total, csgd_subset/csgd_total)]
 
-# scale according to how much production comes from areas corresponding to lease data
-operators[, "scaled_oil_BBL":= med_oil_BBL   * 0.9129716]
-operators[, "scaled_gas_MCF":= med_gas_MCF   * 0.3928558]
-operators[, "scaled_csgd_MCF":= med_csgd_MCF * 0.8732849]
+# average production scaled according to how much production comes from areas corresponding to lease data
+operators[, "scaled_oil_BBL":= median(OPER_OIL_PROD_VOL * frac_oil), by=OPERATOR_NO]
+operators[, "scaled_gas_MCF":= median(OPER_GAS_PROD_VOL * frac_gas), by=OPERATOR_NO]
+operators[, "scaled_csgd_MCF":= median(OPER_CSGD_PROD_VOL * frac_csgd), by=OPERATOR_NO]
 
 # subset operators who produce above a threshold
 operators <- operators[scaled_oil_BBL > 0]
