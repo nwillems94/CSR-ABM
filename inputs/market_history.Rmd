@@ -240,16 +240,8 @@ demand_data[, "q":= 1000*as.numeric(q)] # convert to MCF
 
 ### Flag time-series outliers
 ```{r}
-# identify outliers in three windows
-demand_data[between(year, 1997, 2004),
-                "outlier":= {p_limits= boxplot.stats(p)$stats; q_limits= boxplot.stats(q)$stats; # IQR
-                            !between(p, min(p_limits), max(p_limits)) | !between(q, min(q_limits), max(q_limits))}]
-demand_data[between(year, 2005, 2012),
-                "outlier":= {p_limits= boxplot.stats(p)$stats; q_limits= boxplot.stats(q)$stats; # IQR
-                            !between(p, min(p_limits), max(p_limits)) | !between(q, min(q_limits), max(q_limits))}]
-demand_data[between(year, 2013, 2021),
-                "outlier":= {p_limits= boxplot.stats(p)$stats; q_limits= boxplot.stats(q)$stats; # IQR
-                            !between(p, min(p_limits), max(p_limits)) | !between(q, min(q_limits), max(q_limits))}]
+demand_data[, "outlier":= {rem = p/q - supsmu(1:.N, p/q)$y; rem_lim = boxplot.stats(rem)$stats;
+                            !between(rem, min(rem_lim), max(rem_lim))}]
 
 ggplot(melt(demand_data, measure.vars=c("p","q")), aes(x=Date, y=value, color=outlier)) +
     geom_point(show.legend=FALSE) +
