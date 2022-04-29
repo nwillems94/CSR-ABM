@@ -1,10 +1,7 @@
 # THIS SCRIPT CONTAINS THE DECISION MAKING FUNCTIONALITY OF THE flaringABM
-# THE FUNCTIONS WHICH INFORM THESE ARE WRITTEN IN C++ & CONTAINED IN flaringABM_core.cpp
 #
 #
 library(data.table)
-library(Rcpp)
-sourceCpp("flaringABM_core.cpp")
 
 
 
@@ -71,58 +68,106 @@ calc_debits <- function(dt_f, dt_l) {
 }###--------------------    END OF FUNCTION calc_debits             --------------------###
 
 
-calc_credits <- function(dt_f, ti) {
-    # determine industry revenues
-    industry_revenue <- calc_revenueC(dt_f, ti)
-    dt_f[, "green_gas_output":= industry_revenue$green_units]
-    dt_f[, "gas_revenue":= industry_revenue$gas_revenue]
-    dt_f[, "oil_revenue":= oil_output * ti$oil_price]
-
-    return(industry_revenue)
+calc_credits <- function(dt_f, market) {
+    dt_f[, "gas_revenue":= gas_output * market$p_grey + green_gas_output * market$p_green]
+    dt_f[, "oil_revenue":= oil_output * market$p_oil]
 
 }###--------------------    END OF FUNCTION calc_credits            --------------------###
-
-build_permutations <- function(dt_l, market, ti) {
-    # average cost = current opEx including additional capEx required for casinghead gas capture
-    # additional (e.g., infrastructure) cost are assumed to be borne by midstream firms
-    dt_l[, "AC_pMCF":= opEx_pMCF + nafill(capEx_csgd / csgd_MCF / (lifetime + t_found - ti$time), fill=0)]
-
-    dt_p <- dt_l[order(AC_pMCF),
-                    .("leaseIDs"= .(leaseID[class=="underdeveloped"]), "prod_BBL"= sum(oil_BBL),
-                        "base_perm"=list(), "green_perm"=list()),
-                keyby=firmID][lengths(leaseIDs)>0]
-
-    # develop leases which would have an operating cost below the conventional market price for gas
-    dt_p[, "base_perm":= dt_l[leaseIDs, .(.(as.numeric(AC_pMCF<market$prices$grey)))], by=firmID]
-
-    # lowest cost per MCF which meets the green threshold
-    # calculate additional gas capture (wrt base) necessary to meet green threshold
-    dt_p[, "K":= dt_l[leaseIDs, sum((1-base_perm[[1]]) * csgd_MCF)] - (ti$threshold * prod_BBL), by=firmID]
-    dt_p[, "green_perm":= .(ifelse(K<=0,  base_perm,
-                                Map(pmax, base_perm, dt_l[leaseIDs, shift(cumsum(csgd_MCF)<K, fill=1)]))), by=firmID]
-
-    # calculate the additional cost and output (wrt base) associated with exercising the green option
-    dt_p[, "cost_M_add":= dt_l[leaseIDs, sum((green_perm[[1]] - base_perm[[1]]) * AC_pMCF * csgd_MCF)], by=firmID]
-
-    dt_p[, c("base_csgd_MCF", "green_csgd_MCF"):=
-        dt_l[leaseIDs, lapply(.(base_perm, green_perm), function(x) sum(x[[1]] * csgd_MCF))], by=firmID]
-
-
-    # project revenue based on past market conditions
-    dt_p[, "add_gas_revenue":= (green_csgd_MCF * (market$prices$grey + market$green_coeff)) -
-                                (base_csgd_MCF * (market$prices$grey + ifelse(K>0, 0, market$green_coeff)))]
-
-    dt_l[, "AC_pMCF":= NULL]
-    setkey(dt_p, firmID)
-    return(dt_p)
-
-}###--------------------    END OF FUNCTION build_permutations      --------------------###
 
 
 
 #*
 #*** FIRM ACTIVITIES ***#
 #*
+market_price <- function(dt_l, demand_schedule, market_segment) {
+    # market price from intersection of supply and demand
+    price <- dt_l[market==market_segment][order(opEx_pMCF)][,
+                    # supply curve
+                    {"p"= c(0,opEx_pMCF); "q"=c(0,cumsum(gas_MCF+csgd_MCF));
+                    # price willing to be paid at every point of supply curve
+                    "p_demand"= demand_schedule(q)[, get(paste0("p_", market_segment))];
+                    # intersection of supply and demand
+                    p_demand[nafill(which(p_demand <= p)[1], fill=.N+1)]}]
+
+    return(price)
+
+}###--------------------     END OF FUNCTION market_price           --------------------###
+
+market_allocation <- function(dt_l, demand_schedule, firmIDs, mp_grey) {
+
+    max_profit <- dt_l[(market=="green") & (firmID %in% firmIDs)][order(opEx_pMCF)][,
+                    .("leaseIDs"= c(NA_integer_, leaseID), "cutoff"= c(0, opEx_pMCF)), by=firmID]
+
+    # Cournot price in the green market at each level of allocation
+    max_profit[, "cp_green":= sapply(1:.N, function(x) market_price(dt_l[!.(leaseIDs[1:x])], demand_schedule, "green")),
+            by=firmID]
+
+    # revenue given output allocation between markets
+    max_profit[, "revenue":= dt_l[firmID==.BY][order(opEx_pMCF),
+                                    c(gas_MCF+csgd_MCF) %*% sapply(1:length(leaseIDs), function(x)
+                                                                ifelse((opEx_pMCF>cutoff[x]) & (opEx_pMCF<=cp_green[x]),
+                                                                    cp_green, ifelse(opEx_pMCF<=mp_grey, mp_grey, 0)))],
+            by=firmID]
+
+    return(max_profit[, .SD[which.max(revenue)], by=firmID])
+
+}###--------------------     END OF FUNCTION market_allocation      --------------------###
+
+clear_gas_markets <- function(dt_f, dt_l, dt_m, demand_schedule, ti) {
+    # consider all developed producing leases
+    dt_l[, "market":= ifelse((class=="developed") & (status=="producing") & (gas_MCF>0 | csgd_MCF>0),
+                        replace(market, is.na(market) | market=="none", "grey"), NA)]
+    dt_l[dt_f[behavior=="flaring"], on="firmID", "market":= replace(market, !is.na(market), "grey")]
+
+    if(ti$market_prop_green>0) {
+        # market conditions under previous market allocations
+        if(dt_l[market=="green", .N==0]) {
+            # first approximation allocates all eligible leases to the green market
+            dt_l[dt_f[behavior!="flaring"], on="firmID", "market":= replace(market, !is.na(market), "green")]
+        }
+
+        # clear the green market first
+        mp0_green <- market_price(dt_l, demand_schedule, "green")
+        # supply not purchased in the green market falls back to the grey market
+        dt_l[(market=="green") & (opEx_pMCF > mp0_green), "market":= "grey"]
+        # clear grey market with remaining supply
+        mp0_grey <- market_price(dt_l, demand_schedule, "grey")
+        dt_l[(market=="grey") & (opEx_pMCF > mp0_grey), "market":= "none"]
+
+        dt_l[dt_f[behavior!="flaring"], on="firmID", "market":= replace(market, market=="none", "green")]
+
+        # determine how to allocate production between green and grey markets
+        if (dt_l[market=="green", .N] > 0) {
+            optimal_allocation <- market_allocation(dt_l, demand_schedule, dt_f$firmID, mp0_grey)
+            dt_l[optimal_allocation, on="firmID",
+                "market":= replace(market, (market=="green") & (opEx_pMCF<=cutoff), "grey"), by=.EACHI]
+        }
+    }
+
+    # determine market prices based on agent allocations
+    # clear green market first
+    mp_green <- market_price(dt_l, demand_schedule, "green")
+    # supply not purchased in the green market falls back to the grey market
+    dt_l[(market=="green") & (opEx_pMCF > mp_green), "market":= "grey"]
+    # clear grey market with remaining supply
+    mp_grey <- market_price(dt_l, demand_schedule, "grey")
+    dt_l[(market=="grey") & (opEx_pMCF > mp_grey), "market":= "none"]
+
+    # defer production to later
+    dt_l[market=="none", "lifetime":= lifetime+1]
+
+    # update firm outputs
+    dt_f[dt_l[, .SD[market=="grey", sum(gas_MCF+csgd_MCF)], by=firmID], on="firmID", "gas_output":= V1]
+    dt_f[dt_l[, .SD[market=="green", sum(gas_MCF+csgd_MCF)], by=firmID], on="firmID", "green_gas_output":= V1]
+
+    # store current market prices and quantities
+    dt_m[.(ti$time), c("p_grey", "p_green"):= .(mp_grey, mp_green)]
+    dt_m[.(ti$time), "q_grey":= dt_f[, sum(gas_output)]]
+    dt_m[.(ti$time), "q_green":= dt_f[, sum(green_gas_output)]]
+    dt_m[.(ti$time), "q_oil":= dt_f[, sum(oil_output)]]
+
+}###--------------------    END OF FUNCTION clear_gas_markets       --------------------###
+
 
 find_imitators <- function(dt_f, ti, success_metric="sales") {
     # determine who is an imitator - less successful followers mimic more successful leaders
@@ -141,49 +186,124 @@ find_imitators <- function(dt_f, ti, success_metric="sales") {
                                 # agents imitate as or more successful agents (besides themselves)
                                 else sample(behavior[-x], 1, prob= pmax(weight[-x] - 0.95*weight[x], 0))!="flaring"),
                         firmID]
+
     return(imitators)
 
 }###--------------------    END OF FUNCTION find_imitators          --------------------###
 
 
-optimize_strategy <- function(dt_f, dt_l, market, ti) {
-    dt_p <- build_permutations(dt_l[firmID %in% dt_f[activity=="development"]$firmID][status!="retired"], market, ti)
+optimize_strategy <- function(dt_f, dt_l, dt_m, demand_schedule, ti) {
+    if(dt_l[dt_f[activity=="development"], on="firmID"][((lifetime + t_found - 1) > ti$time) & (class=="underdeveloped"), .N]==0) {
+        return(setNames(data.table(matrix(nrow=0, ncol=5)),
+                    c("firmID", "option", "economical", "imitation", "devIDs")))
+    }
 
-    # update market conditions
-    dt_p[dt_f, on="firmID", "sPressure":= sPressure]
+    # average cost = current opEx including additional capEx required for casinghead gas capture
+    # additional (e.g., infrastructure) cost are assumed to be borne by midstream firms
+    dt_l[, "AC_pMCF":= opEx_pMCF + nafill(capEx_csgd / csgd_MCF / (lifetime + t_found - ti$time), fill=0)]
+
+    dt_p <- dt_l[firmID %in% dt_f[activity=="development"]$firmID][status!="retired"][
+                order(AC_pMCF),
+                    .("leaseIDs"= .(leaseID[(class=="underdeveloped") & !is.nan(AC_pMCF)]),
+                    # current oil output
+                    "prod_BBL"= sum(oil_BBL),
+                    # historical (pessimistic) grey gas market price
+                    "p_grey"= min(tail(dt_m[time<=ti$time]$p_grey, 12), na.rm=TRUE),
+                    "base_perm"=list(), "green_perm"=list()),
+                keyby=firmID][lengths(leaseIDs)>0]
+
+    # develop leases which would have an average cost below the conventional market price for gas
+    dt_p[, "base_perm":= dt_l[leaseIDs, .(.(as.numeric(AC_pMCF<p_grey)))], by=firmID]
+
+    # calculate additional gas capture (wrt base) necessary to meet green threshold
+    dt_p[, "K":= dt_l[leaseIDs, (1-base_perm[[1]]) %*% csgd_MCF] - (ti$threshold * prod_BBL), by=firmID]
+    dt_p[, "green_perm":= .(ifelse(K<=0,  base_perm,
+                                Map(pmax, base_perm, dt_l[leaseIDs, shift(cumsum(csgd_MCF)<K, fill=1)]))), by=firmID]
+
+    # calculate the additional cost and revenue associated with exercising the green option
+    #   no need to calculate where base and green permutations are the same
+    dt_p[sapply(Map(`==`, base_perm, green_perm), all), c("cost_M_add", "gas_revenue_add"):= 0]
+
+    if(dt_p[is.na(gas_revenue_add), .N]>0) {
+        dt_p[is.na(cost_M_add), "cost_M_add":=
+                dt_l[leaseIDs, (green_perm[[1]] - base_perm[[1]]) %*%
+                            ((opEx_pMCF * csgd_MCF * (lifetime + t_found - ti$time - 1)) + nafill(capEx_csgd, fill=0))],
+            by=firmID]
+
+        # green revenue
+        if(ti$market_prop_green==0) {
+            dt_p[is.na(gas_revenue_add), "green_revenue":=
+                dt_l[(firmID==.BY) & ((lifetime + t_found - 1) > ti$time),
+                                # account for existing and green leases
+                                (nafill(green_perm[[1]][match(leaseID, leaseIDs[[1]])], fill=1)*(gas_MCF+csgd_MCF)) %*%
+                                # account for whether gas is sold
+                                (p_grey*(opEx_pMCF<=p_grey)*
+                                # account for remaining lifetime of leases
+                                (lifetime + t_found - ti$time - 1))], by=firmID]
+        } else {
+            is_green <- dt_l[, (leaseID %in% dt_p[, unlist(leaseIDs)[as.logical(unlist(green_perm))]]) |
+                                ((class=="developed") & ((lifetime + t_found - 1) > ti$time))]
+
+            dt_p[is.na(gas_revenue_add), c("cutoff","cp_green"):=
+                    market_allocation(dt_l[, replace(.SD, "market", ifelse(is_green & (firmID==.BY), "green", market))],
+                                        demand_schedule, .BY, p_grey)[, .(cutoff, cp_green)], by=firmID]
+
+            dt_p[is.na(gas_revenue_add), "green_revenue":=
+                dt_l[(firmID==.BY) & ((lifetime + t_found - 1) > ti$time),
+                                # account for existing and green leases
+                                (nafill(green_perm[[1]][match(leaseID, leaseIDs[[1]])], fill=1)*(gas_MCF+csgd_MCF)) %*%
+                                # account for where gas is sold
+                                (ifelse((opEx_pMCF>cutoff) & (opEx_pMCF<=cp_green), cp_green,
+                                        ifelse(opEx_pMCF<=p_grey, p_grey, 0))*
+                                # account for remaining lifetime of leases
+                                (lifetime + t_found - ti$time - 1))], by=firmID]
+        }
+
+        # calculate revenue under base scenario
+        dt_p[(K>0) & is.na(gas_revenue_add), "base_revenue":=
+            dt_l[(firmID==.BY) & ((lifetime + t_found - 1) > ti$time),
+                            # account for existing and base leases
+                            (nafill(base_perm[[1]][match(leaseID, leaseIDs[[1]])], fill=1)*(gas_MCF+csgd_MCF)) %*%
+                            # account for whether gas is sold
+                            (p_grey*(opEx_pMCF<=p_grey)*
+                            # account for remaining lifetime of leases
+                            (lifetime + t_found - ti$time - 1))], by=firmID]
+
+        # additional revenue from exercising the green option
+        dt_p[is.na(gas_revenue_add), "gas_revenue_add":= green_revenue - base_revenue]
+    }
+    dt_l[, "AC_pMCF":= NULL]
+
+    # additional revenue from exercising the green option
+    dt_p[is.na(gas_revenue_add), "gas_revenue_add":= green_revenue - base_revenue]
+
+
+    # update market conditions weighted by investment horizon
+    dt_p[dt_f, on="firmID", "sPressure":= sPressure * max(dt_l[firmID==.BY, lifetime + t_found - ti$time - 1]), by=.EACHI]
 
     # is casinghead gas capture economical even without social pressure?
-    dt_p[, "economical":= (sapply(Map(`==`, base_perm, green_perm), all) | cost_M_add<=0)]
+    dt_p[, "economical":= ((sapply(Map(`==`, base_perm, green_perm), all) | cost_M_add<=0) & (K<=0))]
     dt_p[, "option":= ifelse(economical==TRUE, "green", NA_character_)]
 
-
     # if the possible threat outweighs the cost, exercise the mitigation option
-    dt_p[is.na(option), "option":= ifelse((cost_M_add * (1-ti$SRoR)) - add_gas_revenue < sPressure, "green", "grey")]
+    dt_p[is.na(option), "option":= ifelse((cost_M_add * (1-ti$SRoR)) - gas_revenue_add < sPressure, "green", "grey")]
 
     # imitators will mitigate even if it is not strictly more economical
-    imitators <- find_imitators(dt_f, ti)
-    dt_p[option=="grey", "imitation":= (firmID %in% imitators) & (economical==FALSE)]
+    dt_p[option=="grey", "imitation":= (firmID %in% find_imitators(dt_f, ti)) & (economical==FALSE)]
     dt_p[imitation==TRUE, "option":= "green"]
-
-
-    # firms participating in exploration activities do no new development
-    dt_p[firmID %in% dt_f[activity=="exploration"], "option":= NA]
 
     # optimal decision for which assets to developed
     dt_p[!is.na(option), "devIDs":= Map(`[`, leaseIDs,
                                             lapply(ifelse(option=="green", green_perm, base_perm), as.logical))]
 
     return(dt_p)
+
 }###--------------------    END OF FUNCTION optimize_strategy       --------------------###
 
-
 do_development <- function(dt_f, dt_l, dt_p, ti) {
-    # which firms are upgrading assets
-    devs <- dt_p[!is.na(option)][lengths(devIDs)>0, firmID]
-
     ## Update lease attributes
     # update lease classes to reflect new development
-    dt_l[.(dt_p[firmID %in% devs, unlist(devIDs)]), c("class", "t_switch"):= .("developed", ti$time)]
+    dt_l[.(dt_p[, unlist(devIDs)]), c("class", "t_switch"):= .("developed", ti$time)]
 
     ## Update firm attributes
     # whether they are mitigating and if they are doing so because of simple economics (besides social pressure)
@@ -191,19 +311,11 @@ do_development <- function(dt_f, dt_l, dt_p, ti) {
     dt_f[dt_p[economical==TRUE], on="firmID", "behavior":= "economizing"]
     dt_f[dt_p[imitation==TRUE], on="firmID", "behavior":= "imitating"]
 
-    # gas output from development
-    dt_l[firmID %in% devs, sprintf("opEx_%s", c("oil","csgd","gas")):= calc_opEx(.SD)]
-    dt_f[dt_l[firmID %in% devs, .SD[(class=="developed") & (status=="producing"), sum(gas_MCF+csgd_MCF)], by=firmID],
-        on="firmID", "gas_output":= V1]
-    dt_f[dt_l[firmID %in% devs, .SD[(class=="underdeveloped") & (status=="producing"), sum(csgd_MCF)], by=firmID],
-        on="firmID", "gas_flared":= V1]
-
-
 }###--------------------    END OF FUNCTION do_development          --------------------###
 
 
 do_exploration <- function(dt_f, dt_l, ti) {
-    retiring_leases <- dt_l[(lifetime + t_found) == ti$time]$leaseID
+    retiring_leases <- dt_l[(lifetime + t_found + 1) == ti$time]$leaseID
     new_discs <- dt_l[dt_f[(activity=="exploration")], on="firmID",
                     .SD[leaseID %in% retiring_leases, sum(oil_BBL + gas_MCF/6)], by=.EACHI][,
                         sample(firmID, sum(runif(.N) < ti$prob_e * dt_l[.(retiring_leases), sum(oil_BBL+cond_BBL)]),
@@ -213,11 +325,8 @@ do_exploration <- function(dt_f, dt_l, ti) {
 
     new_output <- unique(dt_l[union(retiring_leases, which(status=="pending"))]$firmID)
 
-    # progress leases from previous turns
-    #    newly discovered leases are undeveloped
-    #    in the following time step, they progress to underdeveloped with pending production
-    #    at this point, firms can decide whether to fully develop them
-    #    in the following time step, the leases begin production
+    # new discovered leases begin as undeveloped, then progress to underdeveloped with pending production
+    #  (at this point, firms can decide whether to fully develop them), then finally begin production
     dt_l[status=="pending", "status":= "producing"]
     dt_l[class=="undeveloped", c("class", "status"):= .(ifelse(csgd_MCF==0, "developed", "underdeveloped"), "pending")]
     # retire leases at the end of their lifetime
@@ -226,25 +335,17 @@ do_exploration <- function(dt_f, dt_l, ti) {
     # probabilistically discover new leases
     if (length(new_discs)>0) {
         # prevalence of oil and gas leases among new_discs
-        weights <- dt_l[status!="retired"][.("firmID"=new_discs), on="firmID", allow.cartesian=TRUE,
-                        .N, by=OIL_GAS_CODE][, setNames(N, OIL_GAS_CODE)]
+        weights <- dt_l[firmID %in% new_discs, .SD[status!="retired", .N], by=.(firmID, OIL_GAS_CODE)][,
+                        sum(V1*table(new_discs)[as.character(firmID)]), by=OIL_GAS_CODE][, setNames(V1, OIL_GAS_CODE)]
+        weights[setdiff(c("O","G"), names(weights))] <- 0
+        weights <- if(sum(weights)==0) replace(weights, c("O","G"), 1) else weights
+
         new_leases <- dt_l[is.na(firmID)][sample(.N, length(new_discs), prob=weights[OIL_GAS_CODE])]
+
         dt_l[.(new_leases[oil_BBL==0][order(-gas_MCF)]$leaseID), c("firmID", "class", "t_found"):=
                 .(dt_f[.(new_discs)][order(-production_MCF)[1:length(leaseID)], firmID], "undeveloped", ti$time)]
         dt_l[.(new_leases[oil_BBL>0][order(-oil_BBL)]$leaseID), c("firmID", "class", "t_found"):=
                 .(dt_f[.(new_discs)][order(-production_BBL)[1:length(leaseID)], firmID], "undeveloped", ti$time)]
     }
-    ## Update firm attributes
-    # gas output from exploration
-    dt_f[dt_l[firmID %in% new_output, .SD[(status=="producing") & (class=="developed"), sum(gas_MCF+csgd_MCF)], by=firmID],
-            on="firmID", "gas_output":= .(V1)]
-    dt_f[dt_l[firmID %in% new_output, .SD[(status=="producing") & (class=="underdeveloped"), sum(csgd_MCF)], by=firmID],
-            on="firmID", "gas_flared":= V1]
-    # additional oil output from exploration
-    dt_f[dt_l[firmID %in% new_output, .SD[(status=="producing") & (class!="undeveloped"), sum(oil_BBL+cond_BBL)], by=firmID],
-            on="firmID", c("oil_output","oil_revenue"):= .(V1, V1 * ti$oil_price)]
-
-    dt_f[firmID %in% new_output, "behavior":= ifelse(gas_flared==0 | (gas_flared/oil_output) <= ti$threshold,
-                                                    ifelse(behavior=="flaring", "economizing", behavior), "flaring")]
 
 }###--------------------    END OF FUNCTION do_exploration          --------------------###

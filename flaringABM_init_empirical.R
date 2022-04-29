@@ -135,7 +135,7 @@ leases[substr(start, 1, 4) < min(well_cost_index$year),
 # Assign other lease attributes
 leases[, "firmID":= NA_integer_]
 leases[, c("t_found","t_switch"):= NA_integer_]
-leases[, c("class","status"):= ""]
+leases[, c("class","status","market"):= ""]
 leases[, "time":= Params$t0-1]
 
 leases[, "leaseID":= .I]
@@ -202,7 +202,8 @@ for (ID in firms[production_MCF>0][order(production_MCF)]$firmID) {
 
 leases[!is.na(firmID), "t_found":= Params$t0 - sample(lifetime-1, 1), by=leaseID]
 
-leases[!is.na(firmID), c("class", "status"):= .(ifelse(csgd_MCF>0, "underdeveloped", "developed"), "producing")]
+leases[!is.na(firmID), c("class", "status", "market"):=
+        .(ifelse(csgd_MCF>0, "underdeveloped", "developed"), "producing", "grey")]
 # historically (2004-2010), gas prices were much higher (~$7/MCF). Develop leases which are at least 10 years old accordingly
 leases[!is.na(firmID) & csgd_MCF>0 & ((Params$t0 - t_found)>=120),
         "class":= replace(class, opEx_pMCF + (capEx_csgd / csgd_MCF / lifetime) < 7, "developed")]
@@ -228,9 +229,65 @@ firms[, "behavior":= ifelse(gas_flared/oil_output > Params$threshold, "flaring",
 
 firms[leases[, sum(opEx_oil + opEx_gas), by=firmID], on="firmID", "cost_O":= V1]
 firms[, c("cost_M", "green_gas_output"):= 0]
-firms[, c("oil_revenue", "gas_revenue"):= .(oil_output * Params$oil_price, gas_output*Params$market_price_grey)]
 
-firms[, "market_value":= (oil_revenue + gas_revenue - cost_O)]
+
+# create demand function
+cat("Generating representative demand functions\n")
+
+historical_market_data <- fread("./inputs/processed/historical_NG_demand.csv", integer64="numeric")
+historical_market_data[
+        market_shares[, sum(OPER_GAS_PROD_VOL+OPER_CSGD_PROD_VOL), by=.("year"=CYCLE_YEAR, "month"=month.abb[CYCLE_MONTH])],
+        on=c("year","month"), "frac":= leases[!is.na(firmID), sum(gas_MCF+csgd_MCF-flared_MCF)] / V1]
+
+# create an object which encapsulates the necessary demand data and generates demand schedules
+demand <-
+    setRefClass("demand_function",
+        fields =  list(historical_market="data.table"),
+        methods = list(
+            new_schedule = function(prop_green, sample_set=list()) {
+                while (NROW(sample_set) < 1) {
+                    sample_set <- historical_market[runif(.N) < (0.5/.N), .(year, month)]
+                }
+                cat("Generating demand function from:", paste(sample_set[[2]], sample_set[[1]], collapse=", "), "\n")
+
+                # price elasticity of demand
+                ep_grey  <- -0.18
+
+                p0 <- historical_market[sample_set, mean(p)]
+                q0 <- historical_market[sample_set, mean(q)]
+                # the historic qauntity demanded is
+                #    the fraction of gas produced in Texas (q_TX)
+                #    the fraction of Texas gas produced by "associated" operators (~95%)
+                #    the fraction of those operators' gas production actually assigned to firms (frac)
+                #    a factor to keep the combined production volume roughly constant across green and grey markets
+                q0p <- historical_market[sample_set, mean(q_TX * 0.95 * frac * (1-prop_green))]
+
+                # slope of the inverse demand function given ep
+                m <- (p0 / q0) * (1 / ep_grey)
+
+                # price (y) and quantity (x) intercept of grey demand curve
+                b <- p0 - (m * q0p)
+                q_int_grey <- -(b / m)
+
+                # green demand represents a rotation of the demand curve about the quantity intercept
+                #    [Sedjo & Swallow 2002](zotero://select/items/0_GGH3Y8UX)
+                # green electricity consumers pay a premium of [7-30%](./inputs/market_history.html)
+                premium <- runif(1, 1.07, 1.3) * (((m * q0p) + b) / (prop_green * (m * q0p) + b))
+                b_green <- premium * b
+
+                # shift green demand curve to account for max market size
+                q_int_green <- max(prop_green * q_int_grey, 1e-10)
+
+                return(function(q) {
+                            p_grey=  nafill(approx(c(0, q_int_grey),  c(b,        0), q)$y, fill=0)
+                            p_green= nafill(approx(c(0, q_int_green), c(b_green,  0), q)$y, fill=0)
+
+                            return(data.table(q, "p_grey"= if (prop_green==1) 0 else p_grey,
+                                                "p_green"= if (prop_green==0) 0 else p_green))
+                })
+            })
+    )$new(historical_market=na.omit(historical_market_data[, .SD, keyby=.(year, month)]))
+
 
 # generate validation report for this initialization
 cat("Writing validation report\n")
@@ -242,7 +299,7 @@ unlink(sprintf("./outputs/validation/init_%s_%s", jobID, Run), recursive=TRUE)
 
 # done
 cat("Cleaning up\n\t")
-rm(wells, leases_full, ID, market_shares, rem_capacity, finances)
+rm(wells, leases_full, ID, market_shares, rem_capacity, finances, historical_market_data)
 gc()
 
 cat(gsub("Time difference of", "Initialization complete in", capture.output(Sys.time() - init_time)), "\n")

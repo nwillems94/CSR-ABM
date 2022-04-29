@@ -4,11 +4,9 @@ args <- args[substr(args, 1, 2)!="--"]
 
 ## Load libraries
 library(data.table)
-library(Rcpp)
 library(future)
 library(future.apply)
 plan("multisession")
-
 
 ## Stage run
 source("./flaringABM_main.R")
@@ -17,6 +15,7 @@ jobID <- format(Sys.time(), "%m%d%H%M")
 logOuts <- sprintf("./logs/param_log_%s-%%s.csv", jobID)
 agentOuts <- sprintf("./outputs/agent_states_%s-%%s.csv", jobID)
 leaseOuts <- sprintf("./outputs/lease_states_%s-%%s.csv", jobID)
+marketOuts <- sprintf("./outputs/market_states_%s-%%s.csv", jobID)
 
 cat("jobID:", jobID, "\n")
 
@@ -34,8 +33,6 @@ Params <<- list(
                     #     0: no social satisfaction from holding shares
                     #     1: shareholding is a perfect substitutes for activist contributions
     "threshold" = 0.05, # max units of gas "green" firms can flare per unit of oil produced
-    "market_price_grey" = 2,
-    "market_price_green" = 2*1.2, # from Kitzmueller & Shimshack 16[5,20]% zotero://select/items/0_PGHV5RK7
     "oil_price" = 60,
     # Activities
     "prop_e" = 11/12, # what proportion of firms engage in exploration activities in a given time step

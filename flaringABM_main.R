@@ -4,23 +4,31 @@ flaringABM_main <- function(Params, jobID, Run) {
     # Initialize agents, save their initial state
     cat("...Initializing...\n")
     ti <- lapply(Params, `[[` , 1)
+
     if (is.na(Params$refID)) {
         source("./flaringABM_init_empirical.R", local=TRUE)
+        saveRDS(demand, sprintf("./outputs/demand_function_%s.rds", Run))
         firms[, "RunID":= Run]
         leases[, "RunID":= Run]
     } else {
+        demand <- readRDS(sprintf("./outputs/demand_function_%s.rds", Run))
         firms <- fread(cmd=sprintf('grep "RunID$\\|,%d$" ./outputs/agent_states_%s.csv', Run, Params$refID), nrow=Params$nagents,
-                        colClasses=list(numeric=c("cost_CE","cost_M","sPressure"), character="activity"))
+                        colClasses=list(numeric=c("cost_CE","cost_M","sPressure","green_gas_output"), character="activity"))
         setkey(firms, firmID)
         leases <- fread(cmd=sprintf('grep "RunID$\\|,%d$" ./outputs/lease_states_%s.csv', Run, Params$refID), nrow=40060,
                         colClasses=list(integer="t_switch", numeric="opEx_csgd"))
         setkey(leases, leaseID)
     }
     cat("...Running...\n\t")
-    industry_revenue <- with(Params, list("prices"= list("dirty"= market_price_dirty),
-                                    "green_coeff"= (market_price_green - market_price_dirty) * market_prop_green[1]))
+    market_history <- data.table("time"=Params$t0:Params$tf, key="time",
+                                "p_grey"= NA_real_, "p_green"= NA_real_, "p_oil"= Params$oil_price,
+                                "q_grey"= NA_real_, "q_green"= NA_real_, "q_oil"= NA_real_,
+                                "market_prop_green"= Params$market_prop_green,
+                                "RunID"= Run)
 
-    Params$market_size <- leases[status=="producing", 1.2*sum(gas_MCF)]
+    # initialize dummy portfolio options (abuses lack of type-checking)
+    portfolio_options <- optimize_strategy(firms, replace(leases, "class", ""), "", "", list("time"=Params$t0-1))
+
     # with what probability to exploring firms discover a new asset - validated based on EIA DPR
     Params$prob_e <- 0.85 * 1.23 / (Params$nagents * Params$prop_e * leases[is.na(firmID), mean(oil_BBL+cond_BBL)])
 
@@ -37,33 +45,41 @@ flaringABM_main <- function(Params, jobID, Run) {
         firms[, "time":= ti$time]
 
 
-        #### FIRM ACTIVITIES ####
+        #### AGENT ACTIVITIES ####
         # randomly assign either development or exploration activities
         firms[, "activity":= ifelse(runif(.N) < Params$prop_e, "exploration", "development")]
-        # firms with pending, underdeveloped leases do development
-        firms[leases[status=="pending" & class=="underdeveloped"], on="firmID", "activity":= "development"]
 
         ## Exploration
         do_exploration(firms, leases, ti)
 
         ## Development
-        if (leases[firmID %in% firms[activity=="development"]$firmID][status!="retired" & class=="underdeveloped", .N>0]) {
-            # compare profit maximizing options with and without mitigation by comparing cost to possible harm
-            portfolio_options <- optimize_strategy(firms, leases, industry_revenue, ti)
-            # optimize market value by executing the best portfolio option
-            do_development(firms, leases, portfolio_options, ti)
-        }
+        # optimize market value by executing the best portfolio option
+        do_development(firms, leases, portfolio_options, ti)
+        rm(portfolio_options)
 
+        # Update firm outputs
+        firms[leases[, .SD[(status=="producing") & (class!="undeveloped"), sum(oil_BBL+cond_BBL)], by=firmID],
+            on="firmID", "oil_output":= V1]
+        firms[leases[, .SD[(status=="producing") & (class=="underdeveloped"), sum(csgd_MCF)], by=firmID],
+                on="firmID", "gas_flared":= V1]
+        firms[, "behavior":= ifelse((gas_flared==0) | ((gas_flared/oil_output) <= ti$threshold),
+                                 ifelse(behavior=="flaring", "economizing", behavior), "flaring")]
 
-        #### MARKETS ####
+        #### MARKET CONDITIONS ####
+        # generate a new representative demand schedule
+        demand_schedule <- demand$new_schedule(ti$market_prop_green)
+        clear_gas_markets(firms, leases, market_history, demand_schedule, ti)
+
         ## Apply Social Pressure to each firm (beginning at time 0)
         dist_social_pressure(firms, ti, method="oil_output")
 
+
+        #### EXECUTE TRANSACTIONS ####
         ## Expenses
         calc_debits(firms, leases)
 
         ## Revenues
-        industry_revenue <- calc_credits(firms, ti)
+        calc_credits(firms, market_history[.(ti$time)])
 
         ## Assess value
         # net cashflow from oil and gas operations
@@ -71,16 +87,22 @@ flaringABM_main <- function(Params, jobID, Run) {
         firms[, "sales":= oil_revenue + gas_revenue]
         firms[, "profit":= sales - (cost_O + cost_M + cost_CE)]
         firms[, "cash":= cash + profit]
-        # calculates the market value based on Baron's formulation zotero://select/items/0_I7NL6RPA
+        # calculates the market value based on [Baron's formulation](zotero://select/items/0_I7NL6RPA)
         # market_value = profit + dprofit - Ai - cost*xi + cost*xi*SRoR
         firms[, "market_value":= ((oil_revenue + gas_revenue) - (cost_O + cost_M)) +    # Net income
                                 ((cost_M * ti$SRoR) - sPressure)]                       # Net social value
 
+
+
+        #### AGENT RESPONSE ####
+        # compare profit maximizing options with and without mitigation by comparing cost to possible harm
+        portfolio_options <- optimize_strategy(firms, leases, market_history, demand_schedule, ti)
+
         #### OUTPUT STATES ####
         fwrite(firms, file=sprintf(agentOuts, Run), append=TRUE)
-        fwrite(leases[!is.na(firmID) & status!="retired"], file=sprintf(leaseOuts, Run), append=TRUE)
-
-        if(exists("portfolio_options")) rm(portfolio_options)
+        fwrite(leases[(lifetime + t_found+1) >= ti$time], file=sprintf(leaseOuts, Run), append=TRUE)
     }
+    setnafill(market_history, fill=0)
+    fwrite(market_history, file=sprintf(marketOuts, Run))
     cat("\n")
 }
