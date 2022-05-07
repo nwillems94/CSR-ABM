@@ -308,6 +308,8 @@ do_development <- function(dt_f, dt_l, dt_p, ti) {
     ## Update lease attributes
     # update lease classes to reflect new development
     dt_l[.(dt_p[, unlist(devIDs)]), c("class", "t_switch"):= .("developed", ti$time)]
+    # update the break down of operating costs
+    dt_l[, sprintf("opEx_%s", c("oil","csgd","gas")):= calc_opEx(.SD)]
 
     ## Update firm attributes
     # whether they are mitigating and if they are doing so because of simple economics (besides social pressure)
