@@ -78,20 +78,16 @@ ggplot(agent_states[, sum(gas_flared) / sum(oil_output), by=.(model, RunID, time
 ```
 
 
-## Rate of asset retirement and aquisition
+## Rate of asset retirement and acquisition
 ```{r}
-sql <- "SELECT SUM(oil_BBL+cond_BBL) AS %s, model, RunID, time FROM lease_states %s GROUP BY model, RunID, time"
-new_prod <- dbGetQuery(db, sprintf(sql, "new_BBL", "WHERE t_found=time"))
-ret_prod <- dbGetQuery(db, sprintf(sql, "ret_BBL", "WHERE t_found+lifetime-1=time"))
-setDT(new_prod)
-setDT(ret_prod)
+sql <- sprintf("SELECT %1$s, %1$s, model, RunID, time FROM lease_states GROUP BY model, RunID, time",
+                "SUM(CASE WHEN %s THEN oil_BBL+cond_BBL ELSE 0 END) AS %s")
 
-prod <- merge(new_prod, ret_prod, all=TRUE, by=c("model","RunID","time"))[,
-            .SD[agent_states[,.("time"=min(time):max(time))], on="time"], by=model]
+prod <- dbGetQuery(db, sprintf(sql, "status='retired'", "ret_BBL", "t_found=time", "new_BBL"))
 
-prod[, c("model","RunID"):= .(as.factor(model), as.factor(RunID))]
-setnafill(prod, fill=0, cols=c("new_BBL","ret_BBL"))
+setDT(prod)
 prod[, "ratio":= new_BBL / ret_BBL]
+prod[(new_BBL==0) & (ret_BBL==0), "ratio":= 0]
 
 print(prod)
 ```
@@ -103,6 +99,6 @@ ggplot(prod[time>min(time)], aes(x=time, y=ratio, group=model)) +
     stat_summary(aes(x=1, yintercept=..y..), fun="median", na.rm=TRUE, geom="hline", lty=2) +
     stat_summary(aes(x=10, label=sprintf("Median: %.02f",..y..)), fun="median", na.rm=TRUE, geom="text", vjust=-2.5) +
     labs(title="Oil production gained and lost from new and retiring wells", y="Production gained / Production lost") +
-    facet_grid(model~.) + 
+    facet_grid(model~.) +
     coord_cartesian(ylim=c(0, 10))
 ```
