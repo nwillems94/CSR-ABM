@@ -133,3 +133,60 @@ hist(log(firms[, cash]), breaks="scott", freq=FALSE,
     main="Generated", xlab="log(Dollars)", xlim=c(-6,4), ylim=c(0,0.5))
 finances[CI>0, .(log(CI))][, {curve(dnorm(x, mean(V1), sd(V1)), col="blue", add=TRUE); NULL}]
 ```
+
+# Market conditions
+## Oil
+### Supply curve
+```{r}
+ggplot(leases[!is.na(firmID) & oil_BBL>0][order(opEx_pBBL)]) +
+    geom_line(aes(x=cumsum(oil_BBL), y=opEx_pBBL)) +
+    scale_y_log10() +
+    labs(x="Q", y="P", title="Oil supply curve")
+```
+
+## Natural gas supply and demand
+### Supply curve
+```{r}
+ggplot(leases[class=="developed"][order(opEx_pMCF)]) +
+    geom_line(aes(x=cumsum(gas_MCF), y=opEx_pMCF, color="Only un-associated gas")) +
+    geom_line(aes(x=cumsum(csgd_MCF + gas_MCF), y=opEx_pMCF, color="Including casinghead gas")) +
+    theme(legend.position=c(0.2, 0.8), legend.background=element_blank()) +
+    labs(x="Q (MCF / month)", y="Marginal Cost ($)", title="Natural gas supply curve", color="")
+```
+
+### Demand curve
+```{r fig.cap="Sample demand curves using single months. Model demand curves use samples of one or more months"}
+ggplot(demand$historical_market, aes(color=factor(month, levels=month.abb))) +
+    geom_point(aes(x=q, y=p), shape=4) +
+    geom_line(data= function(x) {x[sample(.N, 5), {"shift"= q - (q_TX*frac*0.95);
+                                                    cbind(shift, demand$new_schedule(0, sample_set=.BY)(x$q - shift))},
+                                    by=.(year, month)][p_grey>0]},
+            aes(x=q+shift, y=p_grey, group=interaction(year, month)), show.legend=FALSE) +
+    geom_text(aes(q, p, label=substr(year,3,4)), size=3, hjust=0) +
+    labs(title="Sampling of representative demand curves", x="Quantity (MCF)", y="Price ($/MCF)", color="month")
+```
+
+### Emergent market
+```{r}
+ggplot(leases[!is.na(firmID)][order(opEx_pMCF)]) +
+    geom_line(aes(x=cumsum(gas_MCF), y=opEx_pMCF, color="Only un-associated gas")) +
+    geom_line(aes(x=cumsum(csgd_MCF + gas_MCF), y=opEx_pMCF, color="Including casinghead gas"),
+                data=leases[class=="developed"][order(opEx_pMCF)]) +
+    geom_line(aes(x=cumsum(csgd_MCF + gas_MCF), y=opEx_pMCF, color="Assuming 100%\ncasinghead gas capture")) +
+    geom_line(data= function(x) {rbindlist(lapply(1:5, function(z) demand$new_schedule(0)(x[, cumsum(gas_MCF+csgd_MCF)])), idcol=TRUE)},
+                aes(x=q, y=p_grey, group=.id, color="Sample demand")) +
+    theme(legend.position=c(0.85, 0.15), legend.background=element_blank()) +
+    ylim(0,7) +
+    labs(x="Q (MCF / month)", y="Price ($)", title="Natural gas market", color="")
+```
+
+```{r}
+ggplot(leases[firms[behavior!="flaring"], on="firmID"][order(opEx_pMCF)]) +
+    geom_line(aes(x=cumsum(gas_MCF), y=opEx_pMCF, color="Only un-associated gas")) +
+    geom_line(aes(x=cumsum(csgd_MCF + gas_MCF), y=opEx_pMCF, color="Assuming 100%\ncasinghead gas capture")) +
+    geom_line(data= function(x) {rbindlist(lapply(1:5, function(z) demand$new_schedule(0.1)(x[, cumsum(gas_MCF+csgd_MCF)])), idcol=TRUE)},
+                aes(x=q, y=p_green, group=.id, color="Sample green demand")) +
+    theme(legend.position=c(0.85, 0.15), legend.background=element_blank()) +
+    ylim(0,7) +
+    labs(x="Q (MCF / month)", y="Price ($)", title="Green natural gas market", color="")
+```

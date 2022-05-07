@@ -10,6 +10,7 @@ jobIDs <- lapply(strsplit(args, "="), `[[`, 2)
 names(jobIDs) <- gsub("\\n", "\n", sapply(strsplit(args, "="), `[[`, 1), fixed=TRUE)
 print(jobIDs)
 
+market_history <- fread(sprintf("./outputs/processed/market_states_%s.csv.gz", paste(jobIDs, collapse="-")))
 agent_states <- fread(sprintf("./outputs/processed/agent_states_%s.csv.gz", paste(jobIDs, collapse="-")))
 db <- dbConnect(RSQLite::SQLite(), sprintf("./outputs/processed/all_states_%s.sqlite", paste(jobIDs, collapse="-")))
 
@@ -29,6 +30,12 @@ if (agent_states[!(behavior %in% c("flaring", "economizing", "imitating")) & tim
 if (agent_states[abs(gas_flared-gas_flared_calc) > 0.01, .N>0]) {
     print("Model gas flared does not match calculated value")
     print(agent_states[gas_flared!=gas_flared_calc])
+}
+
+## Green price below grey price
+if (market_history[p_green>0][p_grey > p_green, .N>0]) {
+    print("Grey price is higher than green price")
+    print(market_history[p_green>0][p_grey > p_green])
 }
 
 

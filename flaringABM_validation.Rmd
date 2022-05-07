@@ -102,3 +102,91 @@ ggplot(prod[time>min(time)], aes(x=time, y=ratio, group=model)) +
     facet_grid(model~.) +
     coord_cartesian(ylim=c(0, 10))
 ```
+
+## Market Dynamics
+```{r}
+sql <- "SELECT gas_MCF, csgd_MCF, opEx_pMCF, market, RunID, model FROM lease_states
+        WHERE time=(SELECT MAX(time) FROM lease_states) AND market IN ('green','grey') AND (gas_MCF>0 OR csgd_MCF>0)
+        ORDER BY opEx_pMCF ASC"
+gas_supply <- dbGetQuery(db, sql)
+setDT(gas_supply)
+gas_supply[, "q_sup":= cumsum(gas_MCF+csgd_MCF), by=.(model, RunID, market)]
+gas_supply[market_history, on=c("model","RunID"), "max_prop_green":= market_prop_green]
+
+gas_demand <- readRDS(sprintf("./outputs/demand_function_%s.rds", 1))
+
+gas_supply[, c("p_grey","p_green"):= gas_demand$new_schedule(first(max_prop_green))(q_sup)[, .(p_grey,p_green)], by=model]
+```
+
+```{r, fig.height=12}
+ggplot(gas_supply, aes(x=q_sup, color=market)) +
+    geom_line(aes(y=opEx_pMCF, group=RunID)) +
+    geom_line(aes(y=ifelse(market=="green", p_green, p_grey), color="Sample demand"), linetype="dashed") +
+    scale_color_manual(values=c("grey"="grey40", "green"="darkgreen", "Sample demand"="black"), guide="none") +
+    facet_grid(model~market, scales="free_x") +
+    labs(x="Q (MCF / month)", y="Price ($)", title="Natural gas market", color="")
+```
+
+### Emergent gas market prices
+```{r}
+ggplot(market_history, aes(x=time, group=RunID)) +
+    geom_line(aes(y=p_grey, color="grey"), alpha=0.4) +
+    geom_line(aes(y=p_green, color="green"), alpha=0.4) +
+    scale_color_manual(values=c("grey"="grey40", "green"="darkgreen")) +
+    facet_grid(model~.) +
+    labs(title="Gas market price", y="$ / MCF", color="Market")
+```
+
+Expect:
+$$1.07 P_{grey} <= P_{green} <= 1.3 P_{grey}$$
+```{r}
+ggplot(market_history[p_green>0], aes(x=time, group=RunID, color=as.factor(RunID))) +
+    geom_point(aes(y=p_green/p_grey), alpha=0.4) +
+    geom_hline(yintercept=c(1.07, 1.3), color="grey40", linetype="dashed") +
+    facet_grid(model~.) +
+    labs(title="Green gas premium", y=expression(P[green] / P[grey]), color="RunID")
+```
+
+### Comparison with emprical values
+```{r}
+monthly_prices <- fread("./inputs/processed/historical_NG_demand.csv")
+monthly_prices[, "Date":= as.Date(paste("01", month, year), format='%d %b %Y')]
+
+ggplot(monthly_prices[year>2010], aes(x=Date, y=p)) +
+    geom_line() +
+    geom_hline(aes(yintercept=mean(p)), color="blue") +
+    labs(title="Empirical monthly natural gas prices since 2010", y="$ per MCF")
+```
+
+```{r}
+ggplot(market_history, aes(x=time, y=p_grey, group=RunID, color=as.factor(RunID))) +
+    geom_line() +
+    geom_hline(aes(yintercept=mean(p_grey)), color="blue") +
+    facet_grid(model~.) +
+    labs(title="Gas market price", y="$ / MCF", color="RunID")
+```
+
+```{r fig.width=10}
+boxplot(data.table(matrix(nrow=0, ncol=5)), boxfill=NA, border=NA, ylim=c(1,6), ylab="$ / MCF", xaxt="n")
+title("Emprical & modeled distribution of conventional gas prices")
+abline(h=1:6, col = "grey", lty = "dotted")
+boxplot(monthly_prices[year>2010]$p, boxwex=1.6, add=TRUE, at=1)
+axis(1, at=1, labels="empirical", col.axis="blue")
+boxplot(p_grey~gsub("\\n", " ", model), data=market_history[time<0], add=TRUE, at=2:5)
+```
+
+### Gas market size
+```{r}
+ggplot(market_history, aes(x=time, group=RunID, color=as.factor(RunID))) +
+    geom_point(aes(y=q_green/(q_grey+q_green)), alpha=0.4) +
+    geom_line(aes(y=market_prop_green), linetype="dashed", color="black") +
+    facet_grid(model~.) +
+    labs(title="Green gas market size", y="% of total sales", color="RunID")
+```
+
+```{r}
+ggplot(market_history, aes(x=time, group=RunID, color=as.factor(RunID))) +
+    geom_point(aes(y=q_green+q_grey), alpha=0.4) +
+    facet_grid(model~.) +
+    labs(title="Total gas sold", y="MCF", color="RunID")
+```
