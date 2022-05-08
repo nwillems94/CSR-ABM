@@ -210,7 +210,7 @@ leases[!is.na(firmID) & csgd_MCF>0 & ((Params$t0 - t_found)>=120),
 leases[!is.na(firmID) & csgd_MCF>0 & class=="developed", "t_switch":= t_found]
 
 # calculate lease operating expenses
-leases[, sprintf("opEx_%s", c("oil","csgd","gas")):= calc_opEx(.SD)]
+leases[, sprintf("opEx_%s", c("oil","csgd","gas")):= lease_opEx(.SD)]
 
 
 # assign cash reserves based on CRSP data

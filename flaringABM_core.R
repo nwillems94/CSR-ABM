@@ -1,4 +1,5 @@
 # THIS SCRIPT CONTAINS THE DECISION MAKING FUNCTIONALITY OF THE flaringABM
+# VERBS (e.g., calc_debits) MODIFY (data.table's) IN-PLACE, NOUNS RETURN OBJECTS
 #
 #
 library(data.table)
@@ -9,16 +10,16 @@ library(data.table)
 #*** SOCIAL PRESSURE ***#
 #*
 
-calc_total_pressure <- function(Ai) {
+total_pressure <- function(Ai) {
     # Calculate the total social pressure
 
     return(Ai)
-}###--------------------    END OF FUNCTION calc_total_pressure     --------------------###
+}###--------------------    END OF FUNCTION total_pressure          --------------------###
 
 
 dist_social_pressure <- function(dt_f, ti, method="even", focus=1) {
     # Determine what proportion of the total social pressure is allocated to each agent
-    a <- calc_total_pressure(ti$Activism)
+    a <- total_pressure(ti$Activism)
     dt_f[, "sPressure":= 0]
 
     if (method=="even") {
@@ -43,14 +44,17 @@ dist_social_pressure <- function(dt_f, ti, method="even", focus=1) {
 #*** FIRM VALUATION ***#
 #*
 
-calc_opEx <- function(dt_l) {
+lease_opEx <- function(dt_l) {
     # determine operation costs based on lease outputs
     # MCF to BOE Conversion: https://petrowiki.spe.org/Glossary:Barrels_of_oil_equivalent
-    dt_l[,  {csgd_developed_MCF= ifelse(class %in% "developed", csgd_MCF, 0);
+    dt_l[,  # amount of casinghead gas produced
+            {csgd_developed_MCF= ifelse(class %in% "developed", csgd_MCF, 0);
+            # operating cost in BOE terms
             opEx_pBOE= opEx / (oil_BBL + cond_BBL + (gas_MCF + csgd_developed_MCF)/6);
+            # breakdown of cost by output
             .(cbind("oil"=oil_BBL+cond_BBL, "csgd"=csgd_developed_MCF, "gas"=gas_MCF) *
                 (sapply(c(1, 1/6, 1/6), `*`, opEx_pBOE) + cbind(opEx_pBBL, opEx_pMCF, opEx_pMCF)))}]
-}###--------------------    END OF FUNCTION calc_opEx               --------------------###
+}###--------------------    END OF FUNCTION lease_opEx              --------------------###
 
 
 calc_debits <- function(dt_f, dt_l) {
@@ -169,7 +173,7 @@ clear_gas_markets <- function(dt_f, dt_l, dt_m, demand_schedule, ti) {
 }###--------------------    END OF FUNCTION clear_gas_markets       --------------------###
 
 
-find_imitators <- function(dt_f, ti, success_metric="sales") {
+imitators <- function(dt_f, ti, success_metric="sales") {
     # determine who is an imitator - less successful followers mimic more successful leaders
     # following Leary & Roberts "success" can be defined in terms of sales (market share), profit, or market_value
     imitators <- dt_f[, .(firmID, behavior, activity, "weight"= log(1+get(success_metric)))][
@@ -189,10 +193,10 @@ find_imitators <- function(dt_f, ti, success_metric="sales") {
 
     return(imitators)
 
-}###--------------------    END OF FUNCTION find_imitators          --------------------###
+}###--------------------    END OF FUNCTION imitators               --------------------###
 
 
-optimize_strategy <- function(dt_f, dt_l, dt_m, demand_schedule, ti) {
+optimal_strategy <- function(dt_f, dt_l, dt_m, demand_schedule, ti) {
     # evaluate the economics of pending leases and make green development decisions
     firmIDs <- union(dt_l[(status=="pending") & (class=="underdeveloped"), firmID],
                     dt_f[activity=="development", firmID])
@@ -293,7 +297,7 @@ optimize_strategy <- function(dt_f, dt_l, dt_m, demand_schedule, ti) {
     dt_p[is.na(option), "option":= ifelse((cost_M_add * (1-ti$SRoR)) - gas_revenue_add < sPressure, "green", "grey")]
 
     # imitators will mitigate even if it is not strictly more economical
-    dt_p[option=="grey", "imitation":= (firmID %in% find_imitators(dt_f, ti)) & (economical==FALSE)]
+    dt_p[option=="grey", "imitation":= (firmID %in% imitators(dt_f, ti)) & (economical==FALSE)]
     dt_p[imitation==TRUE, "option":= "green"]
 
     # optimal decision for which assets to developed
@@ -302,14 +306,14 @@ optimize_strategy <- function(dt_f, dt_l, dt_m, demand_schedule, ti) {
 
     return(dt_p)
 
-}###--------------------    END OF FUNCTION optimize_strategy       --------------------###
+}###--------------------    END OF FUNCTION optimal_strategy        --------------------###
 
 do_development <- function(dt_f, dt_l, dt_p, ti) {
     ## Update lease attributes
     # update lease classes to reflect new development
     dt_l[.(dt_p[, unlist(devIDs)]), c("class", "t_switch"):= .("developed", ti$time)]
     # update the break down of operating costs
-    dt_l[, sprintf("opEx_%s", c("oil","csgd","gas")):= calc_opEx(.SD)]
+    dt_l[.(dt_p[, unlist(devIDs)]), sprintf("opEx_%s", c("oil","csgd","gas")):= lease_opEx(.SD)]
 
     ## Update firm attributes
     # whether they are mitigating and if they are doing so because of simple economics (besides social pressure)

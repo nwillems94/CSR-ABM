@@ -27,7 +27,7 @@ flaringABM_main <- function(Params, jobID, Run) {
                                 "RunID"= Run)
 
     # initialize dummy portfolio options (abuses lack of type-checking)
-    portfolio_options <- optimize_strategy(firms, replace(leases, "class", ""), "", "", list("time"=Params$t0-1))
+    portfolio_options <- optimal_strategy(firms, replace(leases, "class", ""), "", "", list("time"=Params$t0-1))
 
     # with what probability to exploring firms discover a new asset - validated based on EIA DPR
     Params$prob_e <- 0.85 * 1.23 / (Params$nagents * Params$prop_e * leases[is.na(firmID), mean(oil_BBL+cond_BBL)])
@@ -96,7 +96,7 @@ flaringABM_main <- function(Params, jobID, Run) {
 
         #### AGENT RESPONSE ####
         # compare profit maximizing options with and without mitigation by comparing cost to possible harm
-        portfolio_options <- optimize_strategy(firms, leases, market_history, demand_schedule, ti)
+        portfolio_options <- optimal_strategy(firms, leases, market_history, demand_schedule, ti)
 
         #### OUTPUT STATES ####
         fwrite(firms, file=sprintf(agentOuts, Run), append=TRUE)
