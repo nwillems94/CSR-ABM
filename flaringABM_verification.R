@@ -15,9 +15,9 @@ agent_states <- fread(sprintf("./outputs/processed/agent_states_%s.csv.gz", past
 db <- dbConnect(RSQLite::SQLite(), sprintf("./outputs/processed/all_states_%s.sqlite", paste(jobIDs, collapse="-")))
 
 ## Check for flarers who are selling green gas
-if (agent_states[behavior=="flaring" & green_gas_output!=0, .N] > 0) {
+if (agent_states[behavior=="flaring" & green_gas_sold!=0, .N] > 0) {
     print("Agents who are flaring are still participating in the green market")
-    print(agent_states[behavior=="flaring" & green_gas_output!=0])
+    print(agent_states[behavior=="flaring" & green_gas_sold!=0])
 }
 
 ## Agents mitigating before social pressure starts

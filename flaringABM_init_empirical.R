@@ -148,7 +148,7 @@ firms <- data.table("firmID"= 1:Params$nagents, key= "firmID",
                     # how much oil (BBL) and gas (MCF) does the firm produce each time step
                     "oil_output"= NA_real_, "oil_revenue"= NA_real_,
                     "gas_output"= NA_real_, "gas_revenue"= NA_real_,
-                    "green_gas_output"= NA_real_, "gas_flared"= NA_real_,
+                    "grey_gas_sold"= NA_real_, "green_gas_sold"= NA_real_, "gas_flared"= NA_real_,
                     # Valuations; costs include Operating, Mitigation, Capital Expenditures
                     "cash"= NA_real_, "market_value"= NA_real_,
                     "cost_O"= NA_real_, "cost_M"= NA_real_, "cost_CE"= NA_real_, "sPressure"= NA_real_,
@@ -228,7 +228,7 @@ firms[leases[!is.na(firmID), .(sum(oil_BBL+cond_BBL), sum(gas_MCF), sum(csgd_MCF
 firms[, "behavior":= ifelse(gas_flared/oil_output > Params$threshold, "flaring", "economizing")]
 
 firms[leases[, sum(opEx_oil + opEx_gas), by=firmID], on="firmID", "cost_O":= V1]
-firms[, c("cost_M", "green_gas_output"):= 0]
+firms[, c("cost_M", "green_gas_sold"):= 0]
 
 
 # create demand function

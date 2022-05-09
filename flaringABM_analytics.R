@@ -73,7 +73,7 @@ ggplot(agent_states, aes(x=time, y=gas_flared)) +
     geom_line(stat="summary", fun="sum", color="green", aes(y=gas_flared/length(unique(RunID)))) +
     labs(x="Time", y="Total Gas Flared (MCF)")
 
-ggplot(agent_states[, .(sum(green_gas_output), sum(gas_flared)/sum(oil_output)), by=.(RunID, time)]) +
+ggplot(agent_states[, .(sum(green_gas_sold), sum(gas_flared)/sum(oil_output)), by=.(RunID, time)]) +
     geom_smooth(aes(x=V1, y=V2)) +
     labs(x="Green Market Size (MCF)", y="Total Flaring Intensity")
 

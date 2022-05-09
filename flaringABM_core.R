@@ -73,7 +73,7 @@ calc_debits <- function(dt_f, dt_l) {
 
 
 calc_credits <- function(dt_f, market) {
-    dt_f[, "gas_revenue":= gas_output * market$p_grey + green_gas_output * market$p_green]
+    dt_f[, "gas_revenue":= grey_gas_sold * market$p_grey + green_gas_sold * market$p_green]
     dt_f[, "oil_revenue":= oil_output * market$p_oil]
 
 }###--------------------    END OF FUNCTION calc_credits            --------------------###
@@ -161,13 +161,14 @@ clear_gas_markets <- function(dt_f, dt_l, dt_m, demand_schedule, ti) {
     dt_l[market=="none", "lifetime":= lifetime+1]
 
     # update firm outputs
-    dt_f[dt_l[, .SD[market=="grey", sum(gas_MCF+csgd_MCF)], by=firmID], on="firmID", "gas_output":= V1]
-    dt_f[dt_l[, .SD[market=="green", sum(gas_MCF+csgd_MCF)], by=firmID], on="firmID", "green_gas_output":= V1]
+    dt_f[dt_l[, .SD[market=="grey", sum(gas_MCF+csgd_MCF)], by=firmID], on="firmID", "grey_gas_sold":= V1]
+    dt_f[dt_l[, .SD[market=="green", sum(gas_MCF+csgd_MCF)], by=firmID], on="firmID", "green_gas_sold":= V1]
+    dt_f[, "gas_output":= grey_gas_sold + green_gas_sold]
 
     # store current market prices and quantities
     dt_m[.(ti$time), c("p_grey", "p_green"):= .(mp_grey, mp_green)]
-    dt_m[.(ti$time), "q_grey":= dt_f[, sum(gas_output)]]
-    dt_m[.(ti$time), "q_green":= dt_f[, sum(green_gas_output)]]
+    dt_m[.(ti$time), "q_grey":= dt_f[, sum(grey_gas_sold)]]
+    dt_m[.(ti$time), "q_green":= dt_f[, sum(green_gas_sold)]]
     dt_m[.(ti$time), "q_oil":= dt_f[, sum(oil_output)]]
 
 }###--------------------    END OF FUNCTION clear_gas_markets       --------------------###
