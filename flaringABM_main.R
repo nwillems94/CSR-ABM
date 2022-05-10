@@ -21,7 +21,8 @@ flaringABM_main <- function(Params, jobID, Run) {
     }
     cat("...Running...\n\t")
     market_history <- data.table("time"=Params$t0:Params$tf, key="time",
-                                "p_grey"= NA_real_, "p_green"= NA_real_, "p_oil"= Params$oil_price,
+                                "p_grey"= NA_real_, "p_green"= NA_real_,
+                                "p_oil_mult"= with(Params, rlnorm(1+tf-t0, oil_price_mean, oil_price_sd)),
                                 "q_grey"= NA_real_, "q_green"= NA_real_, "q_oil"= NA_real_,
                                 "market_prop_green"= Params$market_prop_green,
                                 "RunID"= Run)

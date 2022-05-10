@@ -74,7 +74,7 @@ calc_debits <- function(dt_f, dt_l) {
 
 calc_credits <- function(dt_f, market) {
     dt_f[, "gas_revenue":= grey_gas_sold * market$p_grey + green_gas_sold * market$p_green]
-    dt_f[, "oil_revenue":= oil_output * market$p_oil]
+    dt_f[, "oil_revenue":= oil_output * (market$p_grey * market$p_oil_mult)]
 
 }###--------------------    END OF FUNCTION calc_credits            --------------------###
 

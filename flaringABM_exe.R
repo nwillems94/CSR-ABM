@@ -33,7 +33,6 @@ Params <<- list(
                     #     0: no social satisfaction from holding shares
                     #     1: shareholding is a perfect substitutes for activist contributions
     "threshold" = 0.05, # max units of gas "green" firms can flare per unit of oil produced
-    "oil_price" = 60,
     # Activities
     "prop_e" = 11/12, # what proportion of firms engage in exploration activities in a given time step
     "prob_m" = 1      # probability that a follower will mimic a leader if they observe them mitigating
@@ -45,6 +44,11 @@ Params$prob_m <- c(rep(0, -Params$t0), rep(Params$prob_m, Params$tf + 1))
 Params$market_prop_green <- with(Params, c(rep(0, -t0),
                                         seq(from=0, to=1.5, length.out= 1 + (tf %/% 2)),
                                         rep(1.5, tf - (tf %/% 2)))) * 0.12
+
+# Oil price multiplier based on historical distribution
+daily_prices <- fread("./inputs/processed/daily_prices.csv")
+Params$oil_price_mean <- daily_prices[year>2010, mean(log(ratio_BBLpMCF))]
+Params$oil_price_sd   <- daily_prices[year>2010,   sd(log(ratio_BBLpMCF))]
 
 # update parameters from command-line arguments
 for (update_arg in strsplit(args, "=")) {
@@ -63,7 +67,7 @@ for (update_arg in strsplit(args, "=")) {
     }
 }
 
-rm(args, update_arg)
+rm(args, update_arg, daily_prices)
 
 ## Start model runs given parameters
 run_time <- Sys.time()
