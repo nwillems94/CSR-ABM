@@ -193,32 +193,40 @@ find_imitators <- function(dt_f, ti, success_metric="sales") {
 
 
 optimize_strategy <- function(dt_f, dt_l, dt_m, demand_schedule, ti) {
-    if(dt_l[dt_f[activity=="development"], on="firmID"][((lifetime + t_found - 1) > ti$time) & (class=="underdeveloped"), .N]==0) {
+    # evaluate the economics of pending leases and make green development decisions
+    firmIDs <- union(dt_l[(status=="pending") & (class=="underdeveloped"), firmID],
+                    dt_f[activity=="development", firmID])
+
+    if(dt_l[firmID %in% firmIDs][((lifetime + t_found - 1) > ti$time) & (class=="underdeveloped"), .N]==0) {
         return(setNames(data.table(matrix(nrow=0, ncol=5)),
                     c("firmID", "option", "economical", "imitation", "devIDs")))
     }
 
     # average cost = current opEx including additional capEx required for casinghead gas capture
     # additional (e.g., infrastructure) cost are assumed to be borne by midstream firms
-    dt_l[, "AC_pMCF":= opEx_pMCF + nafill(capEx_csgd / csgd_MCF / (lifetime + t_found - ti$time), fill=0)]
+    AC_pMCF <- dt_l[, opEx_pMCF + nafill(capEx_csgd / csgd_MCF / (lifetime + t_found - ti$time - 1), fill=0)]
 
-    dt_p <- dt_l[firmID %in% dt_f[activity=="development"]$firmID][status!="retired"][
-                order(AC_pMCF),
-                    .("leaseIDs"= .(leaseID[(class=="underdeveloped") & !is.nan(AC_pMCF)]),
+    dt_p <- dt_l[order(AC_pMCF)][firmID %in% firmIDs][((lifetime + t_found - 1) > ti$time) & (class=="underdeveloped"),
+                    .("leaseIDs"= .(leaseID),
                     # current oil output
                     "prod_BBL"= sum(oil_BBL),
                     # historical (pessimistic) grey gas market price
                     "p_grey"= min(tail(dt_m[time<=ti$time]$p_grey, 12), na.rm=TRUE),
                     "base_perm"=list(), "green_perm"=list()),
                 keyby=firmID][lengths(leaseIDs)>0]
+    # firms not doing development only consider pending leases
+    dt_p[dt_f[activity=="exploration"], on="firmID",
+        "leaseIDs":= .(.(dt_l[(firmID==.BY) & (status=="pending") & (class=="underdeveloped"), leaseID])), by=.EACHI]
 
     # develop leases which would have an average cost below the conventional market price for gas
-    dt_p[, "base_perm":= dt_l[leaseIDs, .(.(as.numeric(AC_pMCF<p_grey)))], by=firmID]
+    dt_p[, "base_perm":= cbind(dt_l, AC_pMCF)[leaseIDs, .(.(as.numeric(AC_pMCF<p_grey)))], by=firmID]
 
-    # calculate additional gas capture (wrt base) necessary to meet green threshold
+    # for firms doing development, calculate additional gas capture (wrt base) necessary to meet green threshold
     dt_p[, "K":= dt_l[leaseIDs, (1-base_perm[[1]]) %*% csgd_MCF] - (ti$threshold * prod_BBL), by=firmID]
-    dt_p[, "green_perm":= .(ifelse(K<=0,  base_perm,
-                                Map(pmax, base_perm, dt_l[leaseIDs, shift(cumsum(csgd_MCF)<K, fill=1)]))), by=firmID]
+    dt_p[dt_f[activity=="exploration"], on="firmID", "green_perm":= base_perm, by=.EACHI]
+    dt_p[lengths(green_perm)<lengths(base_perm),
+        "green_perm":= .(ifelse(K<=0, base_perm,
+                            Map(pmax, base_perm, dt_l[leaseIDs, shift(cumsum(csgd_MCF)<K, fill=1)]))), by=firmID]
 
     # calculate the additional cost and revenue associated with exercising the green option
     #   no need to calculate where base and green permutations are the same
@@ -272,11 +280,6 @@ optimize_strategy <- function(dt_f, dt_l, dt_m, demand_schedule, ti) {
         # additional revenue from exercising the green option
         dt_p[is.na(gas_revenue_add), "gas_revenue_add":= green_revenue - base_revenue]
     }
-    dt_l[, "AC_pMCF":= NULL]
-
-    # additional revenue from exercising the green option
-    dt_p[is.na(gas_revenue_add), "gas_revenue_add":= green_revenue - base_revenue]
-
 
     # update market conditions weighted by investment horizon
     dt_p[dt_f, on="firmID", "sPressure":= sPressure * max(dt_l[firmID==.BY, lifetime + t_found - ti$time - 1]), by=.EACHI]
@@ -284,6 +287,7 @@ optimize_strategy <- function(dt_f, dt_l, dt_m, demand_schedule, ti) {
     # is casinghead gas capture economical even without social pressure?
     dt_p[, "economical":= ((sapply(Map(`==`, base_perm, green_perm), all) | cost_M_add<=0) & (K<=0))]
     dt_p[, "option":= ifelse(economical==TRUE, "green", NA_character_)]
+    dt_p[dt_f[activity=="exploration"], on="firmID", "option":= replace(option, is.na(option), "grey")]
 
     # if the possible threat outweighs the cost, exercise the mitigation option
     dt_p[is.na(option), "option":= ifelse((cost_M_add * (1-ti$SRoR)) - gas_revenue_add < sPressure, "green", "grey")]
