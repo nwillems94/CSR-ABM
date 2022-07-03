@@ -11,14 +11,11 @@ wells <- fread("./inputs/processed/wells.csv")
 # assume costs are normally distributed (with 95% within range) and increase with well depth
 cat("\tAssigning well capital expenses\n\t")
 setorder(wells, depth)
-wells[, "capExMM":= 0]
-while (min(wells$capExMM) <= 0) {
-    wells[area=="Eagle Ford",       "capExMM":= sort(rnorm(.N, (9.6 + 5.9)/2, (9.6 - 5.9)/1.282/2))]
-    wells[area=="Delaware Basin",   "capExMM":= sort(rnorm(.N, (8.5 + 5.0)/2, (8.5 - 5.0)/1.282/2))]
-    wells[area=="Midland Basin",    "capExMM":= sort(rnorm(.N, (8.6 + 5.5)/2, (8.6 - 5.5)/1.282/2))]
-    # only the mean (2.5) is given for Spraberry. Assume a coefficient of variation of 0.2
-    wells[area=="Spraberry",        "capExMM":= sort(rnorm(.N, 2.5, 0.5))]
-}
+wells[area=="Eagle Ford",       "capExMM":= sort(rlnorm(.N, log(9.6*5.9)/2, log(9.6/5.9)/1.282/2))]
+wells[area=="Delaware Basin",   "capExMM":= sort(rlnorm(.N, log(8.5*5.0)/2, log(8.5/5.0)/1.282/2))]
+wells[area=="Midland Basin",    "capExMM":= sort(rlnorm(.N, log(8.6*5.5)/2, log(8.6/5.5)/1.282/2))]
+# only the average (2.5) is given for Spraberry. Assume a coefficient of variation of 0.2
+wells[area=="Spraberry",        "capExMM":= sort(rlnorm(.N, log(2.5), sqrt(log(1+0.2^2))))]
 
 # Lease capital expenditure is the sum of well costs (in millions of dollars)
 leases_full[wells[, .(sum(capExMM), .N), by=.(DISTRICT_NO, LEASE_NO)], on=c("DISTRICT_NO", "LEASE_NO"),
@@ -36,74 +33,76 @@ leases_full <- leases_full[!(gas_MCF>0 & (flared_MCF / gas_MCF)>0.25 & cond_BBL 
 #  values estimated from [US EIA, 2016](zotero://select/items/0_EJYISQT4)
 #  using [Webplotdigitizer](zotero://select/items/0_UW7H7HAP)
 cat("\tAssigning lease operating expenses per barrel of oil equivalent\n\t")
-leases_full[, "BOE":= oil_BBL + (gas_MCF + csgd_MCF - flared_MCF)/6]
-setorder(leases_full, -BOE)
-leases_full[, "opEx_pBOE":= 0]
-while (min(leases_full$opEx_pBOE) <= 0) {
-    leases_full[area=="Eagle Ford" & oil_BBL>0,                 "opEx_pBOE":=                             # oil
-                                                                sort(rnorm(.N, (15.2+9.3)/2, (15.2-9.3)/4))]
-    leases_full[area=="Eagle Ford" & gas_MCF>0 & cond_BBL>0,    "opEx_pBOE":=                             # wet gas
-                                                                sort(rnorm(.N, (13.5+6.7)/2, (13.5-6.7)/4))]
-    leases_full[area=="Eagle Ford" & gas_MCF>0 & cond_BBL==0,   "opEx_pBOE":=                             # dry gas
-                                                                sort(rnorm(.N, (10.3+5.3)/2, (10.3-5.3)/4))]
-    leases_full[area=="Delaware Basin",                         "opEx_pBOE":=
-                                                                sort(rnorm(.N, (16.1+7.7)/2, (16.1-7.7)/4))]
-    leases_full[area %in% c("Midland Basin","Spraberry"),       "opEx_pBOE":=
-                                                                sort(rnorm(.N, (16.1+7.9)/2, (16.1-7.9)/4))]
-}
+leases_full[, "BOE":= oil_BBL + cond_BBL + (gas_MCF + csgd_MCF - flared_MCF)/6]
+leases_full[, "oil_perc":= (oil_BBL + cond_BBL) / BOE]
+setorder(leases_full, oil_perc, -BOE)
+
+leases_full[area=="Eagle Ford" & oil_BBL>0,                                                         # oil
+                "opEx_pBOE":= sort(rlnorm(.N, log(15.2*9.3)/2, log(15.2/9.3)/1.282/2))]
+leases_full[area=="Eagle Ford" & gas_MCF>0 & cond_BBL>0,                                            # wet gas
+                "opEx_pBOE":= sort(rlnorm(.N, log(13.5*6.7)/2, log(13.5/6.7)/1.282/2))]
+leases_full[area=="Eagle Ford" & gas_MCF>0 & cond_BBL==0,                                           # dry gas
+                    "opEx_pBOE":= sort(rlnorm(.N, log(10.3*5.3)/2, log(10.3/5.3)/1.282/2))]
+leases_full[area=="Delaware Basin",
+                "opEx_pBOE":= sort(rlnorm(.N, log(16.1*7.7)/2, log(16.1/7.7)/1.282/2))]
+leases_full[area %in% c("Midland Basin","Spraberry"),
+                "opEx_pBOE":= sort(rlnorm(.N, log(16.1*7.9)/2, log(16.1/7.9)/1.282/2))]
+
 # Use the empirical BOEs sold to calculate the baseline operating cost
 leases_full[, "opEx" := opEx_pBOE * BOE]
+
 
 # oil (pBBL):   Short Transportation, Long Transportation (ordered by how oil moves & distance from crude pipelines)
 # cond (pBBL):  Long Transportation, NGL fractionation (ordered by how oil moves & distance from crude pipelines)
 cat("\tAssigning lease operating expenses per barrel of oil\n\t")
 setorder(leases_full, -pipe_frac, -rail_frac, crude_dist)
-leases_full[, "opEx_pBBL":= ifelse(oil_BBL>0 | cond_BBL>0, 0, NA)]
-while (min(leases_full$opEx_pBBL, na.rm=TRUE) <= 0) {
-    leases_full[area=="Eagle Ford" & oil_BBL>0,                 "opEx_pBBL":=
-                                                                sort(rnorm(.N, (6+3.75)/2, (6-3.75)/4))]
-    leases_full[area=="Eagle Ford" & cond_BBL>0,                "opEx_pBBL":=
-                                                                sort(rnorm(.N, (5.64+4.72)/2, (5.64-4.72)/4))]
-    leases_full[area=="Delaware Basin" & oil_BBL>0,             "opEx_pBBL":=
-                                                                sort(rnorm(.N, (16+4.25)/2, (16-4.25)/4))]
-    leases_full[area=="Delaware Basin" & cond_BBL>0,            "opEx_pBBL":=
-                                                                sort(rnorm(.N, (13.78+6.13)/2, (13.78-6.13)/4))]
-    leases_full[area %in% c("Midland Basin","Spraberry") & oil_BBL>0, "opEx_pBBL":=
-                                                                sort(rnorm(.N, (15.5+4.25)/2, (15.5-4.25)/4))]
-    leases_full[area %in% c("Midland Basin","Spraberry") & cond_BBL>0, "opEx_pBBL":=
-                                                                sort(rnorm(.N, (13.38+5.29)/2, (13.38-5.29)/4))]
-}
-leases_full[is.na(opEx_pBBL), "opEx_pBBL":= 0]
+
+leases_full[area=="Eagle Ford" & oil_BBL>0,
+                "opEx_pBBL":= sort(rlnorm(.N, log(6*3.75)/2, log(6/3.75)/1.282/2))]
+leases_full[area=="Eagle Ford" & cond_BBL>0,
+                "opEx_pBBL":= sort(rlnorm(.N, log(5.64*4.72)/2, log(5.64/4.72)/1.282/2))]
+leases_full[area=="Delaware Basin" & oil_BBL>0,
+                "opEx_pBBL":= sort(rlnorm(.N, log(16*4.25)/2, log(16/4.25)/1.282/2))]
+leases_full[area=="Delaware Basin" & cond_BBL>0,
+                "opEx_pBBL":= sort(rlnorm(.N, log(13.78*6.13)/2, log(13.78/6.13)/1.282/2))]
+leases_full[area %in% c("Midland Basin","Spraberry") & oil_BBL>0,
+                "opEx_pBBL":= sort(rlnorm(.N, log(15.5*4.25)/2, log(15.5/4.25)/1.282/2))]
+leases_full[area %in% c("Midland Basin","Spraberry") & cond_BBL>0,
+                "opEx_pBBL":= sort(rlnorm(.N, log(13.38*5.29)/2, log(13.38/5.29)/1.282/2))]
+
+leases_full[oil_BBL+cond_BBL==0, "opEx_pBBL":= 0]
+
 
 # gas (pMCF):   Gathering & Transportation, Processing (ordered by % flared & inverse-square distance weighted capacity)
 # There is not gas processing fee for dry gas
 cat("\tAssigning lease operating expenses per thousand cubic feet of gas\n\t")
 leases_full[gas_MCF+csgd_MCF>0, "percent_flared":=  round(flared_MCF / (gas_MCF+csgd_MCF), 2)]
 setorder(leases_full, percent_flared, -gas_cap)
-leases_full[, "opEx_pMCF":= ifelse(gas_MCF+csgd_MCF>0, 0, NA)]
-while (min(leases_full$opEx_pMCF, na.rm=TRUE) <= 0) {
-    leases_full[area=="Eagle Ford" & csgd_MCF>0,                                    # oil
-                    "opEx_pMCF":= sort(rnorm(.N, (1.15*1.60+0.85)/2, (1.15*1.60-0.85)/4))]
-    leases_full[area=="Eagle Ford" & gas_MCF>0 & cond_BBL>0,                        # wet gas
-                    "opEx_pMCF":= sort(rnorm(.N, (1.60+0.85)/2, (1.60-0.85)/4))]
-    leases_full[area=="Eagle Ford" & gas_MCF>0 & cond_BBL==0,                       # dry gas
-                    "opEx_pMCF":= sort(rnorm(.N, (1.05+0.55)/2, (1.05-0.55)/4))]
 
-    leases_full[area=="Delaware Basin" & csgd_MCF>0,                                # oil
-                    "opEx_pMCF":= sort(rnorm(.N, (1.15*2.35+0.85)/2, (1.15*2.35-0.85)/4))]
-    leases_full[area=="Delaware Basin" & gas_MCF>0 & cond_BBL>0,                    # wet gas
-                    "opEx_pMCF":= sort(rnorm(.N, (2.35+0.85)/2, (2.35-0.85)/4))]
-    leases_full[area=="Delaware Basin" & gas_MCF>0 & cond_BBL==0,                   # dry gas
-                    "opEx_pMCF":= sort(rnorm(.N, (1.10+0.60)/2, (1.10-0.60)/4))]
+leases_full[area=="Eagle Ford" & csgd_MCF>0,                                                        # oil
+                "opEx_pMCF":= sort(rlnorm(.N, log(1.25*1.60*0.85)/2, log(1.25*1.60/0.85)/1.282/2))]
+leases_full[area=="Eagle Ford" & gas_MCF>0 & cond_BBL>0,                                            # wet gas
+                "opEx_pMCF":= sort(rlnorm(.N, log(1.60*0.85)/2, log(1.60/0.85)/1.282/2))]
+leases_full[area=="Eagle Ford" & gas_MCF>0 & cond_BBL==0,                                           # dry gas
+                "opEx_pMCF":= sort(rlnorm(.N, log(1.05*0.55)/2, log(1.05/0.55)/1.282/2))]
 
-    leases_full[area %in% c("Midland Basin","Spraberry") & csgd_MCF>0,              # oil
-                    "opEx_pMCF":= sort(rnorm(.N, (1.15*1.70+0.85)/2, (1.15*1.70-0.85)/4))]
-    leases_full[area %in% c("Midland Basin","Spraberry") & gas_MCF>0 & cond_BBL>0,  # wet gas
-                    "opEx_pMCF":= sort(rnorm(.N, (1.70+0.85)/2, (1.70-0.85)/4))]
-    leases_full[area %in% c("Midland Basin","Spraberry") & gas_MCF>0 & cond_BBL==0, # dry gas
-                    "opEx_pMCF":= sort(rnorm(.N, (0.90+0.60)/2, (0.90-0.60)/4))]
-}
-leases_full[is.na(opEx_pMCF), "opEx_pMCF":= 0]
+leases_full[area=="Delaware Basin" & csgd_MCF>0,                                                    # oil
+                "opEx_pMCF":= sort(rlnorm(.N, log(1.25*2.35*0.85)/2, log(1.25*2.35/0.85)/1.282/2))]
+leases_full[area=="Delaware Basin" & gas_MCF>0 & cond_BBL>0,                                        # wet gas
+                "opEx_pMCF":= sort(rlnorm(.N, log(2.35*0.85)/2, log(2.35/0.85)/1.282/2))]
+leases_full[area=="Delaware Basin" & gas_MCF>0 & cond_BBL==0,                                       # dry gas
+                "opEx_pMCF":= sort(rlnorm(.N, log(1.10*0.60)/2, log(1.10/0.60)/1.282/2))]
+
+leases_full[area %in% c("Midland Basin","Spraberry") & csgd_MCF>0,                                  # oil
+                "opEx_pMCF":= sort(rlnorm(.N, log(1.25*1.70*0.85)/2, log(1.25*1.70/0.85)/1.282/2))]
+leases_full[area %in% c("Midland Basin","Spraberry") & gas_MCF>0 & cond_BBL>0,                      # wet gas
+                "opEx_pMCF":= sort(rlnorm(.N, log(1.70*0.85)/2, log(1.70/0.85)/1.282/2))]
+leases_full[area %in% c("Midland Basin","Spraberry") & gas_MCF>0 & cond_BBL==0,                     # dry gas
+                "opEx_pMCF":= sort(rlnorm(.N, log(0.90*0.60)/2, log(0.90/0.60)/1.282/2))]
+
+leases_full[gas_MCF+csgd_MCF==0, "opEx_pMCF":= 0]
+
+
 # cost to install compressor with 5,475 MCF/month capacity at cost of $31,250 [USA EPA, 2016](zotero://select/items/0_VD6GIMT4)
 leases_full[csgd_MCF>0, "capEx_csgd":= 31250 * ceiling(flared_MCF/5475)]
 
@@ -175,7 +174,7 @@ for (ID in firms[order(production_BBL)]$firmID) {
     while (rem_capacity - min(leases[is.na(firmID) & (oil_BBL>0)]$total_oil_BBL) > 0) {
         leases[sample(.N, 1, prob=(is.na(firmID) & (oil_BBL>0) & (rem_capacity - total_oil_BBL > 0)) / log(2+csgd_MCF)), "firmID":= ID]
         rem_capacity <- firms[ID, production_BBL] - leases[firmID==ID, sum(total_oil_BBL)]
-   }
+    }
 }
 
 # assign gas leases to agents according to their total production
@@ -197,7 +196,7 @@ for (ID in firms[production_MCF>0][order(production_MCF)]$firmID) {
     while (rem_capacity - min(leases[is.na(firmID) & (gas_MCF>0)]$total_MCF) > 0) {
         leases[sample(.N, 1, prob=is.na(firmID) & (gas_MCF>0) & (rem_capacity - total_MCF > 0)), "firmID":= ID]
         rem_capacity <- firms[ID, production_MCF] - leases[firmID==ID & gas_MCF>0, sum(total_MCF)]
-   }
+    }
 }
 
 leases[!is.na(firmID), "t_found":= Params$t0 - sample(lifetime-1, 1), by=leaseID]
@@ -207,7 +206,7 @@ leases[!is.na(firmID), c("class", "status", "market"):=
 # historically (2004-2010), gas prices were much higher (~$7/MCF). Develop leases which are at least 10 years old accordingly
 leases[!is.na(firmID) & csgd_MCF>0 & ((Params$t0 - t_found)>=120),
         "class":= replace(class, opEx_pMCF + (capEx_csgd / csgd_MCF / lifetime) < 7, "developed")]
-leases[!is.na(firmID) & csgd_MCF>0 & class=="developed", "t_switch":= t_found]
+leases[!is.na(firmID) & (csgd_MCF>0) & (class=="developed"), "t_switch":= t_found]
 
 # calculate lease operating expenses
 leases[, sprintf("opEx_%s", c("oil","csgd","gas")):= lease_opEx(.SD)]
