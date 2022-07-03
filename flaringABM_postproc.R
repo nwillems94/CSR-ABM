@@ -34,11 +34,21 @@ jobIDs <- lapply(strsplit(args, "="), `[[`, 2)
 names(jobIDs) <- gsub("\\n", "\n", sapply(strsplit(args, "="), `[[`, 1), fixed=TRUE)
 print(jobIDs)
 
+if("refID" %in% names(jobIDs)) {
+    file_name <- gsub("^all_states_(.*).sqlite$", "\\1",
+                    list.files(path="./outputs/processed/", pattern=sprintf("^all_states_%s-.*.sqlite$", jobIDs$refID)))
+} else {
+    file_name <- paste(jobIDs, collapse="-")
+    jobIDs <- c(jobIDs, "refID"=NA)
+}
+if(length(file_name)>1) {
+    print("Error with database name")
+    q()
+}
 
-all_states <- dbConnect(RSQLite::SQLite(),
-                sprintf("./outputs/processed/all_states_%s.sqlite", paste(jobIDs, collapse="-")))
+all_states <- dbConnect(RSQLite::SQLite(), sprintf("./outputs/processed/all_states_%s.sqlite", file_name))
 
-lapply(seq(jobIDs), function(i) write_outputs(all_states, paste(jobIDs, collapse="-"), jobIDs[i], i!=1))
+lapply(seq(jobIDs)[-which(names(jobIDs)=="refID")], function(i) write_outputs(all_states, file_name, jobIDs[i], i!=1))
 
 dbDisconnect(all_states)
 

@@ -167,12 +167,14 @@ ggplot(market_history, aes(x=time, y=p_grey, group=RunID, color=as.factor(RunID)
 ```
 
 ```{r fig.width=10}
-boxplot(data.table(matrix(nrow=0, ncol=5)), boxfill=NA, border=NA, ylim=c(1,6), ylab="$ / MCF", xaxt="n")
+boxplot(data.table(matrix(nrow=0, ncol=market_history[time<0, uniqueN(model) + 1])),
+        boxfill=NA, border=NA, ylim=c(1,6), ylab="$ / MCF", xaxt="n")
 title("Emprical & modeled distribution of conventional gas prices")
 abline(h=1:6, col = "grey", lty = "dotted")
 boxplot(monthly_prices[year>2010]$p, boxwex=1.6, add=TRUE, at=1)
 axis(1, at=1, labels="empirical", col.axis="blue")
-boxplot(p_grey~gsub("\\n", " ", model), data=market_history[time<0], add=TRUE, at=2:5)
+boxplot(p_grey~gsub("\\n", " ", model), data=market_history[time<0],
+    add=TRUE, at=c(seq(market_history[time<0, uniqueN(model)]) + 1))
 ```
 
 ### Gas market size
