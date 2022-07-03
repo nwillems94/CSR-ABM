@@ -24,6 +24,8 @@ dist_social_pressure <- function(dt_f, ti, method="even", focus=1) {
 
     if (method=="even") {
         dt_f[behavior=="flaring", "sPressure":= a / .N]
+    } else if (method=="flaring") {
+        dt_f[behavior=="flaring", "sPressure":= a * gas_flared / sum(gas_flared)]
     } else if (method=="focused") {
         dt_f[(firmID %in% focus) & behavior=="flaring", "sPressure":= a / .N]
     } else if (method=="gas_output") {
@@ -35,6 +37,9 @@ dist_social_pressure <- function(dt_f, ti, method="even", focus=1) {
     else if (method=="leaders") {
         dt_f[market_value > quantile(market_value, 2/3), "sPressure":= a / .N]
     }
+
+    # the effect on market value can be up to 20% [King and Soule, 2007](zotero://select/items/0_TWS6EB4J)
+    dt_f[, "sPressure":= pmin(sPressure, market_value*0.2, na.rm=TRUE)]
 
 }###--------------------    END OF FUNCTION dist_social_pressure    --------------------###
 
