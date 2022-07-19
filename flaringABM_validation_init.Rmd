@@ -80,7 +80,7 @@ par(mfrow=c(1,2))
 hist(log(market_shares$scaled_oil_BBL), breaks="scott", freq=FALSE,
     main="Empirical", xlab="log(Oil (BBL))", xlim=c(0,20), ylim=c(0,0.2))
 market_shares[, {curve(dnorm(x, mean(log(scaled_oil_BBL)), sd(log(scaled_oil_BBL))), col="blue", add=TRUE); NULL}]
-hist(log(leases[!is.na(firmID), sum(total_oil_BBL), by=firmID]$V1), breaks="scott", freq=FALSE,
+hist(log(leases[!is.na(firmID), sum(oil_BBL), by=firmID]$V1), breaks="scott", freq=FALSE,
     main="Generated", xlab="log(Oil (BBL))", xlim=c(0,20), ylim=c(0,0.2))
 market_shares[, {curve(dnorm(x, mean(log(scaled_oil_BBL)), sd(log(scaled_oil_BBL))), col="blue", add=TRUE); NULL}]
 ```
@@ -90,7 +90,7 @@ par(mfrow=c(1,2))
 hist(log(market_shares$scaled_gas_MCF), breaks="scott", freq=FALSE,
     main="Empirical", xlab="log(Gas (MCF))", xlim=c(0,29), ylim=c(0,0.2))
 market_shares[scaled_gas_MCF>0, .(log(scaled_gas_MCF))][, {curve(dnorm(x, mean(V1), sd(V1)), col="blue", add=TRUE); NULL}]
-hist(log(leases[!is.na(firmID), sum(total_MCF[gas_MCF>0]), by=firmID]$V1), breaks="scott", freq=FALSE,
+hist(log(leases[!is.na(firmID), sum(gas_MCF), by=firmID]$V1), breaks="scott", freq=FALSE,
     main="Generated", xlab="log(Gas (MCF))", xlim=c(0,20), ylim=c(0,0.2))
 market_shares[scaled_gas_MCF>0, .(log(scaled_gas_MCF))][, {curve(dnorm(x, mean(V1), sd(V1)), col="blue", add=TRUE); NULL}]
 ```
@@ -100,7 +100,7 @@ Joint density of oil and gas outputs
 ggplot(market_shares, aes(x=scaled_oil_BBL, y=scaled_gas_MCF)) +
     stat_density_2d(geom="raster", aes(fill=after_stat(density)), contour=FALSE) +
     scale_fill_viridis_c() +
-    geom_point(data=leases[!is.na(firmID), .(sum(total_oil_BBL), sum(total_MCF[gas_MCF>0])), by=firmID][V1>0 & V2>0],
+    geom_point(data=leases[!is.na(firmID), .(sum(oil_BBL), sum(gas_MCF)), by=firmID][V1>0 & V2>0],
                 aes(x=V1, y=V2, color="red"), alpha=0.8, shape=1, size=2) +
     scale_color_manual(labels="Generated", values="red") +
     scale_x_log10() +
@@ -114,7 +114,7 @@ Joint density of oil and casinghead gas outputs
 ggplot(market_shares, aes(x=scaled_oil_BBL, y=scaled_csgd_MCF)) +
     stat_density_2d(geom="raster", aes(fill=after_stat(density)), contour=FALSE) +
     scale_fill_viridis_c() +
-    geom_point(data=leases[!is.na(firmID), .(sum(total_oil_BBL), sum(csgd_MCF)), by=firmID][V1>0 & V2>0],
+    geom_point(data=leases[!is.na(firmID), .(sum(oil_BBL), sum(csgd_MCF)), by=firmID][V1>0 & V2>0],
                 aes(x=V1, y=V2, color="red"), alpha=0.8, shape=1, size=2) +
     scale_color_manual(labels="Generated", values="red") +
     scale_x_log10() +

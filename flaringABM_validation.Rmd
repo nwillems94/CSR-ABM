@@ -11,8 +11,7 @@ market_shares <- fread("./inputs/processed/firm_market_shares.csv")
 sql <- "SELECT %s, %s, model, RunID, time, firmID FROM lease_states 
         WHERE time IN (SELECT MIN(time) FROM lease_states UNION SELECT 0 UNION SELECT MAX(time) FROM lease_states) 
         GROUP BY model, RunID, time, firmID"
-prod_vol <- dbGetQuery(db, sprintf(sql, "SUM(total_oil_BBL) AS oil_prod",
-                                        "SUM(CASE WHEN gas_MCF>0 THEN total_MCF ELSE 0 END) AS gas_prod"))
+prod_vol <- dbGetQuery(db, sprintf(sql, "SUM(oil_BBL) AS oil_prod", "SUM(gas_MCF) AS gas_prod"))
 
 print(head(prod_vol))
 ```
