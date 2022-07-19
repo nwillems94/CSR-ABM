@@ -162,6 +162,9 @@ clear_gas_markets <- function(dt_f, dt_l, dt_m, demand_schedule, ti) {
     mp_grey <- market_price(dt_l, demand_schedule, "grey")
     dt_l[(market=="grey") & (opEx_pMCF > mp_grey), "market":= "none"]
 
+    # increment remaining gas production
+    dt_l[market %in% c("green", "grey"), "ERR_MCF":= ERR_MCF - (gas_MCF+csgd_MCF)]
+
     # defer production to later
     dt_l[market=="none", "lifetime":= lifetime+1]
 
@@ -213,11 +216,11 @@ optimal_strategy <- function(dt_f, dt_l, dt_m, demand_schedule, ti) {
     }
 
     # average cost = current opEx including additional capEx required for casinghead gas capture
-    # additional (e.g., infrastructure) cost are assumed to be borne by midstream firms
-    AC_pMCF <- dt_l[, opEx_pMCF + nafill(capEx_csgd / csgd_MCF / (lifetime + t_found - ti$time - 1), fill=0)]
+    ## additional (e.g., infrastructure) cost are assumed to be borne by midstream firms
+    AC_pMCF <- dt_l[, opEx_pMCF + nafill(capEx_csgd / ERR_MCF, fill=0)]
 
-    dt_p <- dt_l[order(AC_pMCF)][firmID %in% firmIDs][((lifetime + t_found - 1) > ti$time) & (class=="underdeveloped"),
-                    .("leaseIDs"= .(leaseID),
+    dt_p <- dt_l[order(AC_pMCF)][firmID %in% firmIDs][(lifetime + t_found - 1) > ti$time,
+                    .("leaseIDs"= .(leaseID[class=="underdeveloped"]),
                     # current oil output
                     "prod_BBL"= sum(oil_BBL),
                     # historical (pessimistic) grey gas market price
@@ -245,7 +248,7 @@ optimal_strategy <- function(dt_f, dt_l, dt_m, demand_schedule, ti) {
     if(dt_p[is.na(gas_revenue_add), .N]>0) {
         dt_p[is.na(cost_M_add), "cost_M_add":=
                 dt_l[leaseIDs, (green_perm[[1]] - base_perm[[1]]) %*%
-                            ((opEx_pMCF * csgd_MCF * (lifetime + t_found - ti$time - 1)) + nafill(capEx_csgd, fill=0))],
+                            ((opEx_pMCF * ERR_MCF) + nafill(capEx_csgd, fill=0))],
             by=firmID]
 
         # green revenue
@@ -253,11 +256,9 @@ optimal_strategy <- function(dt_f, dt_l, dt_m, demand_schedule, ti) {
             dt_p[is.na(gas_revenue_add), "green_revenue":=
                 dt_l[(firmID==.BY) & ((lifetime + t_found - 1) > ti$time),
                                 # account for existing and green leases
-                                (nafill(green_perm[[1]][match(leaseID, leaseIDs[[1]])], fill=1)*(gas_MCF+csgd_MCF)) %*%
+                                (nafill(green_perm[[1]][match(leaseID, leaseIDs[[1]])], fill=1) * ERR_MCF) %*%
                                 # account for whether gas is sold
-                                (p_grey*(opEx_pMCF<=p_grey)*
-                                # account for remaining lifetime of leases
-                                (lifetime + t_found - ti$time - 1))], by=firmID]
+                                (p_grey * (opEx_pMCF<=p_grey))], by=firmID]
         } else {
             is_green <- dt_l[, (leaseID %in% dt_p[, unlist(leaseIDs)[as.logical(unlist(green_perm))]]) |
                                 ((class=="developed") & ((lifetime + t_found - 1) > ti$time))]
@@ -269,23 +270,19 @@ optimal_strategy <- function(dt_f, dt_l, dt_m, demand_schedule, ti) {
             dt_p[is.na(gas_revenue_add), "green_revenue":=
                 dt_l[(firmID==.BY) & ((lifetime + t_found - 1) > ti$time),
                                 # account for existing and green leases
-                                (nafill(green_perm[[1]][match(leaseID, leaseIDs[[1]])], fill=1)*(gas_MCF+csgd_MCF)) %*%
+                                (nafill(green_perm[[1]][match(leaseID, leaseIDs[[1]])], fill=1) * ERR_MCF) %*%
                                 # account for where gas is sold
                                 (ifelse((opEx_pMCF>cutoff) & (opEx_pMCF<=cp_green), cp_green,
-                                        ifelse(opEx_pMCF<=p_grey, p_grey, 0))*
-                                # account for remaining lifetime of leases
-                                (lifetime + t_found - ti$time - 1))], by=firmID]
+                                        ifelse(opEx_pMCF<=p_grey, p_grey, 0)))], by=firmID]
         }
 
         # calculate revenue under base scenario
         dt_p[(K>0) & is.na(gas_revenue_add), "base_revenue":=
             dt_l[(firmID==.BY) & ((lifetime + t_found - 1) > ti$time),
                             # account for existing and base leases
-                            (nafill(base_perm[[1]][match(leaseID, leaseIDs[[1]])], fill=1)*(gas_MCF+csgd_MCF)) %*%
+                            (nafill(base_perm[[1]][match(leaseID, leaseIDs[[1]])], fill=1) * ERR_MCF) %*%
                             # account for whether gas is sold
-                            (p_grey*(opEx_pMCF<=p_grey)*
-                            # account for remaining lifetime of leases
-                            (lifetime + t_found - ti$time - 1))], by=firmID]
+                            (p_grey * (opEx_pMCF<=p_grey))], by=firmID]
 
         # additional revenue from exercising the green option
         dt_p[is.na(gas_revenue_add), "gas_revenue_add":= green_revenue - base_revenue]

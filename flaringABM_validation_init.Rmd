@@ -9,6 +9,17 @@ library(data.table)
 ```
 
 # Lease expenses
+## Capital costs  
+Gas leases should have only one well
+```{r}
+print(leases_emp[OIL_GAS_CODE=="G", summary(N)])
+```
+
+Expect a capital expenditures to be about [$7/BOE](zotero://select/items/0_BSNIWDAF)
+```{r}
+leases_emp[, cat("All leases:", sum(capEx) / sum(EUR), "\t Assigned leases:", .SD[!is.na(firmID), sum(capEx) / sum(EUR)])]
+```
+
 ## Operating costs per MCF of gas at oil and gas leases  
 ```{r fig.cap="Gas lease operating expenditures are skewed left (cheaper) while oil leases are skewed right"}
 ggplot(leases[gas_MCF+csgd_MCF>0]) +
@@ -48,6 +59,22 @@ print(leases[is.na(firmID), .N, by=OIL_GAS_CODE])
 ### Number of leases left to be discovered  
 ```{r}
 print(leases[!is.na(firmID), .N, by=OIL_GAS_CODE])
+```
+
+### Lifetime estimation
+Goodness of fit among historical leases
+```{r}
+leases_emp[(expiration<201912) & (start>199301),
+            .("R2"= summary(lm(log(m_rem)~log(q_i/q_curve)))$r.squared), by=area]
+```
+
+```{r}
+ggplot(leases_emp, aes(x=q_i/EUR, y=lifetime)) +
+    geom_point(aes(color=ifelse((expiration<201912) & (start>199301),"Observed","Predicted")), alpha=0.3) +
+    scale_x_log10() + scale_y_log10() +
+    theme_bw() + theme(plot.title=element_text(hjust=0.5)) +
+    facet_grid(.~area) +
+    labs(title="Lease lifetimes based on production profile", color="")
 ```
 
 ### Expiring & new production

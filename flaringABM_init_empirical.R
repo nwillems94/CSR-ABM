@@ -1,11 +1,15 @@
 # EACH LEASE HAS THE FOLLOWING PROPERTIES
 #   1. AVERAGE MONTHLY OIL PRODUCTION (`oil_BBL`)
 #   2. AVERAGE MONTHLY GAS PRODUCTION (`gas_MCF`, `csgd_MCF`)
-#   3. CAPITAL EXPENDITURE (`capEx`)
-#   4. OPERATING EXPENSES:
+#   3. REMAINING TOTAL GAS PRODUCTION (`ERR_MCF`)
+#   4. TOTAL LIFETIME PRODUCTION (ESTIMATED ULTIMATE RECOVERY `EUR`)
+#   5. CAPITAL EXPENDITURE (`capEx`,`capEx_csgd`)
+#   6. OPERATING EXPENSES:
 #       - Base: dollars based on the barrel of oil equivalent production (`opEx`)
 #       - Oil: per barrel of oil (`opEx_pBBL`)
 #       - Gas: per thousand cubic feet of gas (`opEx_pMCF`)
+#
+# Production volumes are estimated using EIA production [decline curves](zotero://select/items/0_BS9HFHYN).
 #
 # Cost parameters are assigned by matching leases to areas and sampling data from:
 # [US EIA. (2016)](zotero://select/items/0_EJYISQT4).
@@ -50,6 +54,9 @@ wells[(year < min(well_cost_index$year)) | is.na(start),
 # stacked multilaterals have one cost
 wells[!leases_emp, on=c("DISTRICT_NO", "LEASE_NO"), "capExMM":= replace(capExMM, !is.na(stacked), 0)]
 
+# wells drilled after the peak production time do not contribute to the EUR used here
+wells[leases_emp[expiration>=201912], on=c("DISTRICT_NO", "LEASE_NO"),
+        "capExMM":= replace(capExMM, if(isTRUE(all(start>t_i))) -which.max(start) else (start>t_i), 0), by=.EACHI]
 
 # Lease capital expenditure is the sum of well costs (in millions of dollars)
 # wells drilled later than Nov. 2019 do not contribute to the average production over 2010-2019
@@ -79,8 +86,6 @@ leases_emp[area=="Delaware Basin",
 leases_emp[area %in% c("Midland Basin","Spraberry"),
                 "opEx_pBOE":= sort(rlnorm(.N, log(16.1*7.9)/2, log(16.1/7.9)/1.282/2))]
 
-# Use the empirical BOEs sold to calculate the baseline operating cost
-leases_emp[, "opEx" := opEx_pBOE * BOE]
 
 
 # oil (pBBL):   Short Transportation, Long Transportation (ordered by how oil moves & distance from crude pipelines)
@@ -133,10 +138,72 @@ leases_emp[area %in% c("Midland Basin","Spraberry") & gas_avg>0 & cond_avg==0,  
 
 leases_emp[gas_avg+csgd_avg==0, "opEx_pMCF":= 0]
 
+
+## Estimate average production using decline curves
+decline_params <- fread("./inputs/processed/decline_params.csv")
+leases_emp[decline_params[, .(.(`Hyperbolic parameter`)), by=area], on="area", "param0":= sapply(V1, sample, 1)]
+# match on counties where possible
+leases_emp[decline_params, on=c("county", "area"), "param0":= `Hyperbolic parameter`]
+
+# recalibrate initial production decline where necessary
+leases_emp[!between(param, min(param0), max(param0)),
+        "qdel_i":= optimize(function(x) (q_fit - eval(parse(text=decline_fun))(x, -m_shift+1, param0))^2,
+                    c(0, q_i), tol=10)$minimum, by=.(DISTRICT_NO, LEASE_NO)]
+
+leases_emp[!between(param, min(param0), max(param0)),
+        "param":= optimize(function(x) (q_fit - eval(parse(text=decline_fun))(qdel_i, -m_shift+1, x))^2,
+                    c(0, 1))$minimum, by=.(DISTRICT_NO, LEASE_NO)]
+
+# historical data range, maximally, from Jan 2010 - Dec 2019
+#    determine number of additional months to estimate in order to average over entire model run
+leases_emp[, "len_est":= .SD[, lapply(.(pmin(expiration, 201912), pmax(start, 201001)),
+                            function(x) 12*trunc(x/100) + x %% 100)][, (V2 + (Params$tf-Params$t0)) - V1]]
+leases_emp[len_est<0, "len_est":= 0]
+
+# number of years to average over
+leases_emp[, "len_avg":= (Params$tf-Params$t0) - ifelse(expiration<201912, len_est-1, 0)]
+
+# scale production to average over model runtime
+leases_emp[(expiration>=201912) & (len_est>0) & (decline_fun!=""),
+        "mult":= ((eval(parse(text=decline_fun))(qdel_i, len_est, param) + qcum_i_BBL + qcum_i_MCF/6) / len_avg) /
+                    (total_oil_avg + cond_avg + total_MCF_avg/6),
+        by=.(DISTRICT_NO, LEASE_NO)]
+
+# project the Estimated Ultimate Recovery (EUR) (over 360 months following EIA decline curves)
+leases_emp[(expiration>=201912) & (decline_fun!=""),
+            "EUR":= (eval(parse(text=decline_fun))(qdel_i, 360, param) +
+                    (qcum_0_BBL + qcum_i_BBL + (qcum_0_MCF + qcum_i_MCF)/6)), by=.(DISTRICT_NO, LEASE_NO)]
+#     no need to estimate production for leases which have already expired
+leases_emp[(expiration<201912) | is.na(mult),
+            c("mult", "EUR"):= .(1, (qcum_0_BBL + qcum_i_BBL) + (qcum_0_MCF + qcum_i_MCF)/6)]
+
+leases_emp[, "EUR_MCF":= 6 * (EUR * ((csgd_avg + gas_avg)/6) / (oil_avg + cond_avg + (csgd_avg + gas_avg)/6))]
+leases_emp[, "EUR_BBL":= (EUR * (oil_avg + cond_avg) / (oil_avg + cond_avg + (csgd_avg + gas_avg)/6))]
+
+leases_emp[, "EUR_MCF":= pmax(EUR_MCF, qcum_0_MCF+qcum_i_MCF)]
+leases_emp[, "EUR_BBL":= pmax(EUR_BBL, qcum_0_BBL+qcum_i_BBL)]
+leases_emp[, "EUR":= EUR_BBL + EUR_MCF/6]
+
+# project the Estimated Remaining Recovery (ERR) of gas
+leases_emp[, "ERR_MCF":= EUR_MCF - qcum_0_MCF]
+leases_emp[start>=201001, "ERR_MCF":= EUR_MCF]
+leases_emp[expiration<201912, "ERR_MCF":= qcum_i_MCF]
+
+leases_emp[, c("model_oil_BBL", "model_cond_BBL", "model_gas_MCF", "model_csgd_MCF", "flared_MCF"):=
+            .(oil_avg,          cond_avg,           gas_avg,        csgd_avg,       flared_MCF_avg)]
+leases_emp[total_MCF_avg>0, "model_gas_MCF":=  pmin(EUR_MCF/len_avg,  gas_avg * mult)]
+leases_emp[total_MCF_avg>0, "model_csgd_MCF":= pmin(EUR_MCF/len_avg, csgd_avg * mult)]
+leases_emp[total_oil_avg>0, "model_oil_BBL":=  pmin(EUR_BBL/len_avg, oil_avg * mult)]
+
+leases_emp[total_MCF_avg>0,
+    "flared_MCF":= (model_gas_MCF + model_csgd_MCF) * flared_MCF_avg / (gas_avg + csgd_avg)]
+leases_emp[(model_gas_MCF + model_csgd_MCF)==0, "flared_MCF":= 0]
+
+
 # cost to install $31,250 compressor with 5,475 MCF/month capacity [USA EPA, 2016](zotero://select/items/0_VD6GIMT4)
-leases_emp[csgd_avg>0, "capEx_csgd":= 31250 * nafill(N, fill=1) * ceiling(flared_MCF_avg/5475/nafill(N, fill=1))]
+leases_emp[model_csgd_MCF>0, "capEx_csgd":= 31250 * nafill(N, fill=1) * ceiling(flared_MCF/5475/nafill(N, fill=1))]
 # each compressor costs $7,350 per year to operate
-leases_emp[capEx_csgd>0, "opEx_pMCF":= opEx_pMCF + (612.5 * (capEx_csgd / 31250) / csgd_avg)]
+leases_emp[model_csgd_MCF>0, "opEx_pMCF":= opEx_pMCF + (612.5 * (capEx_csgd / 31250) / model_csgd_MCF)]
 
 
 # initialize firms
@@ -196,31 +263,52 @@ for (ID in firms[production_MCF>0][order(production_MCF)]$firmID) {
     leases_emp[is.na(firmID) & gas_avg>0, "firmID":= replace(firmID, which.min(gas_avg), ID)]
 }
 
+# calculate lease lifetime in months
+
+# estimate lifetime based on remaining recoverable resource
+# estimate lifetime based on initial production rate at t_i and total production since t_i
+leases_emp[(expiration>=201912) & (decline_fun!=""),
+            "q_curve":= (eval(parse(text=decline_fun))(qdel_i, -m_shift+1, param) + EUR -
+                    (qcum_0_BBL + qcum_i_BBL + (qcum_0_MCF + qcum_i_MCF)/6)), by=.(DISTRICT_NO, LEASE_NO)]
+leases_emp[expiration<201912, "q_curve":= q_fit]
+
+# number of months of production after t_i
+leases_emp[, "m_rem":= .SD[, lapply(.(expiration, t_i), function(x) 12*trunc(x/100) + x %% 100)][, 1+V1-V2]]
+leases_emp[order(-log(q_i/q_curve) * runif(.N, 0.5, 1.5)),
+       "m_rem":= ifelse(expiration<201912, m_rem,
+                                sort(sample(m_rem[(start>199301) & (expiration<201912)], .N, replace=TRUE))), by=area]
+
+
+# extend lifetime by the predicted remaing months
+leases_emp[, "lifetime":= .SD[, lapply(.(t_i, start, expiration), function(x) 12*trunc(x/100) + x %% 100)][,
+                            pmax(1+V3-V2, m_rem + V1-V2)]]
+
+
+# offest for delay between lease discovery and becoming operational
+leases_emp[!is.na(firmID), "lifetime":= lifetime+2]
+
 # extract modeled data from the empirical lease data
 leases <- leases_emp[, .(area, DISTRICT_NO, OIL_GAS_CODE,
-                        "oil_BBL"= oil_avg, "cond_BBL"= cond_avg,
-                        "gas_MCF"= gas_avg, "csgd_MCF"= csgd_avg,
-                        capEx, capEx_csgd, opEx, opEx_pBBL, opEx_pMCF,
+                        "oil_BBL"= model_oil_BBL, "cond_BBL"= model_cond_BBL,
+                        "gas_MCF"= model_gas_MCF, "csgd_MCF"= model_csgd_MCF, ERR_MCF, EUR,
+                        capEx, capEx_csgd, opEx_pBBL, opEx_pMCF,
+                        # empirical BOEs sold to calculate the baseline operating cost
+                        "opEx"= opEx_pBOE * (model_oil_BBL + cond_avg + (model_gas_MCF + model_csgd_MCF - flared_MCF)/6),
                         "opEx_oil"= NA_real_, "opEx_csgd"= NA_real_, "opEx_gas"= NA_real_,
-                        "class"= "","status"= "", "market"= "",
-                        start, expiration, lifetime= NA_integer_,
+                        "class"= "", "status"= "", "market"= "",
+                        start, expiration, lifetime,
                         "t_found"= NA_integer_, "t_switch"= NA_integer_, "time"= Params$t0-1,
                         firmID)]
 
 leases[, "leaseID":= .I]
 setkey(leases, leaseID)
 
-# calculate lease lifetime in months
-leases[, "lifetime":= .SD[, lapply(.(expiration, start), function(x) 12*trunc(x/100) + x %% 100)][, 1+V1-V2]]
-#   for leases that are still operating, estimate a lifetime based on historical distribution
-leases[expiration>=201912,
-        "lifetime":= sapply(lifetime, function(x)
-            leases[(OIL_GAS_CODE==.BY) & (lifetime>=x) & (expiration<201912), max(x, sample(c(lifetime, x), 1))]),
-        by=OIL_GAS_CODE]
-
 leases[!is.na(firmID), "t_found":= Params$t0 - sample(lifetime-1, 1), by=leaseID]
 leases[!is.na(firmID) & (expiration<201912),
         "t_found":= .SD[, lapply(.(expiration, 201001), function(x) 12*trunc(x/100) + x %% 100)][, 1+V1-V2] - lifetime]
+
+# offset for first time step
+leases[!is.na(firmID) & ERR_MCF>0, "ERR_MCF":= ERR_MCF + (gas_MCF+csgd_MCF)]
 
 leases[!is.na(firmID), c("class", "status", "market"):=
         .(ifelse(csgd_MCF>0, "underdeveloped", "developed"), "producing", "grey")]
@@ -246,11 +334,10 @@ firms[, c("cost_M", "green_gas_sold"):= 0]
 
 # create demand function
 cat("Generating representative demand functions\n")
-
 historical_market_data <- fread("./inputs/processed/historical_NG_demand.csv", integer64="numeric")
 historical_market_data[
         market_shares[, sum(OPER_GAS_PROD_VOL+OPER_CSGD_PROD_VOL), by=.("year"=CYCLE_YEAR, "month"=month.abb[CYCLE_MONTH])],
-        on=c("year","month"), "frac":= leases_emp[!is.na(firmID), sum(gas_avg+csgd_avg-flared_MCF_avg)] / V1]
+        on=c("year","month"), "frac":= leases_emp[!is.na(firmID), sum(model_gas_MCF+model_csgd_MCF-flared_MCF)] / V1]
 
 # create an object which encapsulates the necessary demand data and generates demand schedules
 demand <-
@@ -312,7 +399,7 @@ unlink(sprintf("./outputs/validation/init_%s_%s", jobID, Run), recursive=TRUE)
 
 # done
 cat("Cleaning up\n\t")
-rm(wells, leases_emp, ID, market_shares, rem_capacity, historical_market_data)
+rm(wells, leases_emp, ID, market_shares, rem_capacity, historical_market_data, decline_params)
 gc()
 
 cat(gsub("Time difference of", "Initialization complete in", capture.output(Sys.time() - init_time)), "\n")

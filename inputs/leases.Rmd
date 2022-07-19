@@ -554,6 +554,61 @@ OG_LEASE_AVG[, sprintf("LEASE_OIL_DISPCD%02d_VOL", 0:2) := NULL]
 cat(uniqueN(OG_LEASE_AVG, by=c("DISTRICT_NO", "LEASE_NO")), "leases have data after 2010", "\n")
 ```
 
+# Estimate the total recoverable gas using EIA decline curves
+Typical well production in areas of interest  
+```{r}
+decline_params <- read_xlsx("./data/decline_curves.xlsx", sheet="decline parameters", skip=2, n_max=195)
+setDT(decline_params)
+
+setnames(decline_params, gsub("\r\n", " ", names(decline_params)))
+setnames(decline_params, gsub("  ", " ", names(decline_params)))
+
+decline_params[, "area":= gsub("(.*)-.*", "\\1", Play)]
+decline_params[area=="Bonespring", "area":= "Delaware Basin"]
+decline_params[area=="Wolfcamp", area:= ifelse(County %in% c("Culberson","Pecos","Reeves","Ward","Winkler","Loving"),
+                                                "Delaware Basin", "Midland Basin")]
+decline_params[State!="TX", "area":= NA]
+decline_params[, "county":= toupper(County)]
+decline_params[county=="DEWITT", county:= "DE WITT"]
+
+decline_params[, "ratio":= (`Estimated ultimate recovery of dry natural gas (MMcf/well)` * 1000) /
+                            (`Initial dry natural gas production rate (Mcf/d)` * 30.4)]
+decline_params[, "scaled_ratio":= ratio * `Initial decline rate`]
+
+decline_params[area %in% c("Eagle Ford", "Spraberry", "Delaware Basin", "Midland Basin"),
+            {boxplot(`Hyperbolic parameter`~area, main="Decline curve hyperbolic parameters",
+                    ylab=expression(alpha)); NULL}]
+
+decline_params[area %in% c("Eagle Ford", "Spraberry", "Delaware Basin", "Midland Basin"),
+            {boxplot(scaled_ratio~area, main=expression("Initial production (" * Q[1] * ") & Ultimate Recovery (EUR)"),
+                    ylab=expression(Delta * Q[1] %*% "EUR" ~~ "/" ~~ Q[1])); NULL}]
+
+fwrite(decline_params[area %in% c("Eagle Ford", "Spraberry", "Delaware Basin", "Midland Basin")],
+        "./processed/decline_params.csv")
+```
+
+Store decline functions as strings to evaluate given parameters  
+```{r}
+# offset from peak time to last data point (after which decline function is used)
+OG_LEASE_AVG[, "m_shift":= .SD[, lapply(.(t_i, pmin(expiration, 201912)),
+                            function(x) 12*trunc(x/100) + x %% 100)][, V2-V1]]
+OG_LEASE_AVG[m_shift<0, "m_shift":= 0]
+
+# calibrate hyperbolic parameter
+OG_LEASE_AVG[!is.na(qdel_i) & ((total_oil_avg + cond_avg + total_MCF_avg/6)>0) & (q_fit>0),
+        "param":= optimize(function(x) (q_fit - sum(sapply(seq(m_shift+1) - 1,
+                                                    function(m) q_i / (1 + (m * x * (qdel_i / q_i)))^(1/x))))^2,
+                    c(0, 1))$minimum, by=.(DISTRICT_NO, LEASE_NO)]
+
+OG_LEASE_AVG[!is.na(q_i) & !is.na(qdel_i) & ((total_oil_avg + cond_avg + total_MCF_avg/6)>0),
+            "decline_fun":= sprintf("function(dqi, len, param) 
+                                        sum(sapply(%1$d + seq(len) - 1, function(m) 
+                                            %2$f / (1 + (m * param * (dqi / %2$f)))^(1/param)))", m_shift, q_i)]
+
+# clean up formatting
+OG_LEASE_AVG[, "decline_fun":= gsub("\n|  ", "", decline_fun)]
+```
+
 ### Determine distances from infrastructure to leases as ordering variable for costs
 ```{r}
 cat("CRS ok:", st_crs(spatial_data$gas_plants) == st_crs(spatial_data$crude_pipelines), "\n")
