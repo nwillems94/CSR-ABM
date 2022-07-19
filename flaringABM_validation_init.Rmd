@@ -123,16 +123,6 @@ ggplot(market_shares, aes(x=scaled_oil_BBL, y=scaled_csgd_MCF)) +
     labs(color="", fill="Emprical")
 ```
 
-# Distributions of operator cash
-```{r}
-par(mfrow=c(1,2))
-hist(log(finances[CI>0, CI]), breaks="scott", freq=FALSE,
-    main="Empirical", xlab="log(Dollars))", xlim=c(-6,4), ylim=c(0,0.5))
-finances[CI>0, .(log(CI))][, {curve(dnorm(x, mean(V1), sd(V1)), col="blue", add=TRUE); NULL}]
-hist(log(firms[, cash]), breaks="scott", freq=FALSE,
-    main="Generated", xlab="log(Dollars)", xlim=c(-6,4), ylim=c(0,0.5))
-finances[CI>0, .(log(CI))][, {curve(dnorm(x, mean(V1), sd(V1)), col="blue", add=TRUE); NULL}]
-```
 
 # Market conditions
 ## Oil

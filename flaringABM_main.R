@@ -87,7 +87,6 @@ flaringABM_main <- function(Params, jobID, Run) {
         #    (revenue from oil + gas operations) - (baseline costs + additional costs spent on mitigation)
         firms[, "sales":= oil_revenue + gas_revenue]
         firms[, "profit":= sales - (cost_O + cost_M + cost_CE)]
-        firms[, "cash":= cash + profit]
         # calculates the market value based on [Baron's formulation](zotero://select/items/0_I7NL6RPA)
         # market_value = profit + dprofit - Ai - cost*xi + cost*xi*SRoR
         firms[, "market_value":= ((oil_revenue + gas_revenue) - (cost_O + cost_M)) +    # Net income

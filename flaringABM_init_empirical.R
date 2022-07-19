@@ -149,7 +149,7 @@ firms <- data.table("firmID"= 1:Params$nagents, key= "firmID",
                     "gas_output"= NA_real_, "gas_revenue"= NA_real_,
                     "grey_gas_sold"= NA_real_, "green_gas_sold"= NA_real_, "gas_flared"= NA_real_,
                     # Valuations; costs include Operating, Mitigation, Capital Expenditures
-                    "cash"= NA_real_, "market_value"= NA_real_,
+                    "sales"= 0, "profit"= 0, "market_value"= NA_real_,
                     "cost_O"= NA_real_, "cost_M"= NA_real_, "cost_CE"= NA_real_, "sPressure"= NA_real_,
                     # activities: exploration, development; behaviors: flaring, mitigating, economizing, imitating
                     "activity"= NA_character_, "behavior"= NA_character_,
@@ -210,13 +210,6 @@ leases[!is.na(firmID) & (csgd_MCF>0) & (class=="developed"), "t_switch":= t_foun
 
 # calculate lease operating expenses
 leases[, sprintf("opEx_%s", c("oil","csgd","gas")):= lease_opEx(.SD)]
-
-
-# assign cash reserves based on CRSP data
-cat("\tAssigning cash reserves to firms\n\t")
-finances <- fread("./inputs/processed/firm_finances.csv")
-firms[, "cash":= rlnorm(.N, mean(log(finances[CI>0, CI])), sd(log(finances[CI>0, CI])))]
-firms[, c("sales","profit"):= 0]
 
 # initially there is no social pressure
 firms[, "sPressure":= 0]
@@ -298,7 +291,7 @@ unlink(sprintf("./outputs/validation/init_%s_%s", jobID, Run), recursive=TRUE)
 
 # done
 cat("Cleaning up\n\t")
-rm(wells, leases_full, ID, market_shares, rem_capacity, finances, historical_market_data)
+rm(wells, leases_emp, ID, market_shares, rem_capacity, historical_market_data)
 gc()
 
 cat(gsub("Time difference of", "Initialization complete in", capture.output(Sys.time() - init_time)), "\n")
