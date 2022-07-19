@@ -199,6 +199,12 @@ leases_emp[total_MCF_avg>0,
     "flared_MCF":= (model_gas_MCF + model_csgd_MCF) * flared_MCF_avg / (gas_avg + csgd_avg)]
 leases_emp[(model_gas_MCF + model_csgd_MCF)==0, "flared_MCF":= 0]
 
+# quantity of gas flared for safety and operational reasons
+leases_emp[total_MCF_avg>0 & OIL_GAS_CODE=="G",
+    "sopf_MCF":= flared_MCF]
+leases_emp[leases_emp[model_gas_MCF>0, sum(sopf_MCF) / sum(model_gas_MCF), by=area], on="area",
+    "sopf_MCF":= ifelse((total_MCF_avg>0) & (OIL_GAS_CODE=="O"), model_csgd_MCF * V1, sopf_MCF)]
+leases_emp[is.na(sopf_MCF), "sopf_MCF":= 0]
 
 # cost to install $31,250 compressor with 5,475 MCF/month capacity [USA EPA, 2016](zotero://select/items/0_VD6GIMT4)
 leases_emp[model_csgd_MCF>0, "capEx_csgd":= 31250 * nafill(N, fill=1) * ceiling(flared_MCF/5475/nafill(N, fill=1))]
@@ -290,10 +296,10 @@ leases_emp[!is.na(firmID), "lifetime":= lifetime+2]
 # extract modeled data from the empirical lease data
 leases <- leases_emp[, .(area, DISTRICT_NO, OIL_GAS_CODE,
                         "oil_BBL"= model_oil_BBL, "cond_BBL"= model_cond_BBL,
-                        "gas_MCF"= model_gas_MCF, "csgd_MCF"= model_csgd_MCF, ERR_MCF, EUR,
-                        capEx, capEx_csgd, opEx_pBBL, opEx_pMCF,
+                        "gas_MCF"= model_gas_MCF, "csgd_MCF"= model_csgd_MCF, sopf_MCF, ERR_MCF, EUR,
                         # empirical BOEs sold to calculate the baseline operating cost
                         "opEx"= opEx_pBOE * (model_oil_BBL + cond_avg + (model_gas_MCF + model_csgd_MCF - flared_MCF)/6),
+                        capEx, capEx_csgd, opEx_pBBL, opEx_pMCF,
                         "opEx_oil"= NA_real_, "opEx_csgd"= NA_real_, "opEx_gas"= NA_real_,
                         "class"= "", "status"= "", "market"= "",
                         start, expiration, lifetime,
@@ -324,7 +330,7 @@ leases[, sprintf("opEx_%s", c("oil","csgd","gas")):= lease_opEx(.SD)]
 firms[, "sPressure":= 0]
 
 # initial flaring intensity
-firms[leases[!is.na(firmID), .(sum(oil_BBL+cond_BBL), sum(gas_MCF), sum(csgd_MCF[class=="underdeveloped"])), by=firmID], on="firmID",
+firms[leases[!is.na(firmID), .(sum(oil_BBL+cond_BBL), sum(gas_MCF), sum(csgd_MCF[class=="underdeveloped"]) + sum(sopf_MCF)), by=firmID], on="firmID",
         c("oil_output", "gas_output", "gas_flared"):= .(V1, V2, V3)]
 firms[, "behavior":= ifelse(gas_flared/oil_output > Params$threshold, "flaring", "economizing")]
 

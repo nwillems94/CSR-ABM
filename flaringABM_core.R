@@ -223,6 +223,8 @@ optimal_strategy <- function(dt_f, dt_l, dt_m, demand_schedule, ti) {
                     .("leaseIDs"= .(leaseID[class=="underdeveloped"]),
                     # current oil output
                     "prod_BBL"= sum(oil_BBL),
+                    # current saftey flaring
+                    "sopf_MCF"= sum(sopf_MCF),
                     # historical (pessimistic) grey gas market price
                     "p_grey"= min(tail(dt_m[time<=ti$time]$p_grey, 12), na.rm=TRUE),
                     "base_perm"=list(), "green_perm"=list()),
@@ -235,10 +237,12 @@ optimal_strategy <- function(dt_f, dt_l, dt_m, demand_schedule, ti) {
     dt_p[, "base_perm":= cbind(dt_l, AC_pMCF)[leaseIDs, .(.(as.numeric(AC_pMCF<p_grey)))], by=firmID]
 
     # for firms doing development, calculate additional gas capture (wrt base) necessary to meet green threshold
-    dt_p[, "K":= dt_l[leaseIDs, (1-base_perm[[1]]) %*% csgd_MCF] - (ti$threshold * prod_BBL), by=firmID]
+    dt_p[, "K":= sopf_MCF + dt_l[leaseIDs, (1-base_perm[[1]]) %*% csgd_MCF] - (ti$threshold * prod_BBL), by=firmID]
+    dt_p[sopf_MCF > (ti$threshold * prod_BBL), "K":= NA]
+
     dt_p[dt_f[activity=="exploration"], on="firmID", "green_perm":= base_perm, by=.EACHI]
     dt_p[lengths(green_perm)<lengths(base_perm),
-        "green_perm":= .(ifelse(K<=0, base_perm,
+        "green_perm":= .(ifelse(K<=0 | is.na(K), base_perm,
                             Map(pmax, base_perm, dt_l[leaseIDs, shift(cumsum(csgd_MCF)<K, fill=1)]))), by=firmID]
 
     # calculate the additional cost and revenue associated with exercising the green option
@@ -292,8 +296,8 @@ optimal_strategy <- function(dt_f, dt_l, dt_m, demand_schedule, ti) {
     dt_p[dt_f, on="firmID", "sPressure":= sPressure * max(dt_l[firmID==.BY, lifetime + t_found - ti$time - 1]), by=.EACHI]
 
     # is casinghead gas capture economical even without social pressure?
-    dt_p[, "economical":= ((sapply(Map(`==`, base_perm, green_perm), all) | cost_M_add<=0) & (K<=0))]
-    dt_p[, "option":= ifelse(economical==TRUE, "green", NA_character_)]
+    dt_p[, "economical":= ((K<=0) | (gas_revenue_add > cost_M_add))]
+    dt_p[, "option":= fifelse(economical==TRUE, "green", NA_character_, na=NA_character_)]
     dt_p[dt_f[activity=="exploration"], on="firmID", "option":= replace(option, is.na(option), "grey")]
 
     # if the possible threat outweighs the cost, exercise the mitigation option

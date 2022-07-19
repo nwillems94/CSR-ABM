@@ -61,7 +61,7 @@ flaringABM_main <- function(Params, jobID, Run) {
         # Update firm outputs
         firms[leases[, .SD[(status=="producing") & (class!="undeveloped"), sum(oil_BBL+cond_BBL)], by=firmID],
             on="firmID", "oil_output":= V1]
-        firms[leases[, .SD[(status=="producing") & (class=="underdeveloped"), sum(csgd_MCF)], by=firmID],
+        firms[leases[, .SD[(status=="producing"), sum(csgd_MCF[class=="underdeveloped"]) + sum(sopf_MCF)], by=firmID],
                 on="firmID", "gas_flared":= V1]
         firms[, "behavior":= ifelse((gas_flared==0) | ((gas_flared/oil_output) <= ti$threshold),
                                  ifelse(behavior=="flaring", "economizing", behavior), "flaring")]
