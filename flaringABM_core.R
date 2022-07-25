@@ -49,30 +49,37 @@ dist_social_pressure <- function(dt_f, ti, method="even", focus=1) {
 #*** FIRM VALUATION ***#
 #*
 
-lease_opEx <- function(dt_l) {
+lease_costs <- function(dt_l) {
     # determine operation costs based on lease outputs
     # MCF to BOE Conversion: https://petrowiki.spe.org/Glossary:Barrels_of_oil_equivalent
     dt_l[,  # amount of casinghead gas produced
-            {csgd_developed_MCF= ifelse(class %in% "developed", csgd_MCF, 0);
-            # operating cost in BOE terms
-            opEx_pBOE= opEx / (oil_BBL + cond_BBL + (gas_MCF + csgd_developed_MCF)/6);
-            # breakdown of cost by output
+            {csgd_developed_MCF= fifelse(class=="developed", csgd_MCF, 0, na=0);
+            # operating cost per BOE actually produced
+            BOE_base= oil_BBL + cond_BBL + gas_MCF/6;
+            opEx_pBOE_mod= opEx_pBOE * BOE_emp / (BOE_base + csgd_developed_MCF/6);
+            # capital expenditures paid off over lease lifetime
+            capEx_pBOE= capEx / lifetime / BOE_base;
+            capEx_csgd_pMCF= nafill(capEx_csgd / (lifetime + t_found - t_switch) / csgd_developed_MCF, fill=0);
+            #   production
             .(cbind("oil"=oil_BBL+cond_BBL, "csgd"=csgd_developed_MCF, "gas"=gas_MCF) *
-                (sapply(c(1, 1/6, 1/6), `*`, opEx_pBOE) + cbind(opEx_pBBL, opEx_pMCF, opEx_pMCF)))}]
-}###--------------------    END OF FUNCTION lease_opEx              --------------------###
+            #   fixed operating costs
+                (cbind(opEx_pBOE_mod,       opEx_pBOE_mod/6,            opEx_pBOE_mod/6) +
+            #   plus variable operating costs
+                cbind(opEx_pBBL,            opEx_pMCF,                  opEx_pMCF) +
+            #   plus capital costs
+                cbind(capEx_pBOE,           capEx_csgd_pMCF,            capEx_pBOE/6)))}]
+
+}###--------------------    END OF FUNCTION lease_costs             --------------------###
 
 
 calc_debits <- function(dt_f, dt_l) {
-    # baseline operating costs
-    dt_f[dt_l[, .SD[status=="producing", sum(opEx_oil + opEx_gas)], by=firmID], on="firmID", "cost_O":= V1]
+    # baseline cost of production
+    dt_f[dt_l[, .SD[(is.na(market) | market!="none") & (status=="producing"),
+                    sum(cost_oil + cost_gas)], by=firmID], on="firmID", "cost_P":= V1]
 
-    # additional mitigating operating costs
-    dt_f[dt_l[, .SD[class=="developed" & status=="producing", sum(opEx_csgd)], by=firmID], on="firmID", "cost_M":= V1]
-
-    # capital expenditures which are paid off over the lease lifetime
-    dt_f[dt_l[, .SD[status!="retired", sum(capEx / lifetime)], by=firmID], on="firmID", "cost_CE":= V1]
-    dt_f[dt_l[, .SD[!is.na(t_switch) & status!="retired", sum(capEx_csgd / (lifetime + t_found - t_switch))], by=firmID],
-        on="firmID", "cost_CE":= cost_CE + V1]
+    # additional costs from mitigating
+    dt_f[dt_l[, .SD[(market!="none") & (status=="producing") & (class=="developed"),
+                    sum(cost_csgd)], by=firmID], on="firmID", "cost_M":= V1]
 
 }###--------------------    END OF FUNCTION calc_debits             --------------------###
 
@@ -320,7 +327,7 @@ do_development <- function(dt_f, dt_l, dt_p, ti) {
     # update lease classes to reflect new development
     dt_l[.(dt_p[, unlist(devIDs)]), c("class", "t_switch"):= .("developed", ti$time)]
     # update the break down of operating costs
-    dt_l[.(dt_p[, unlist(devIDs)]), sprintf("opEx_%s", c("oil","csgd","gas")):= lease_opEx(.SD)]
+    dt_l[.(dt_p[, unlist(devIDs)]), sprintf("cost_%s", c("oil","csgd","gas")):= lease_costs(.SD)]
 
     ## Update firm attributes
     # whether they are mitigating and if they are doing so because of simple economics (besides social pressure)

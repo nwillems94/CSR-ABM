@@ -13,10 +13,10 @@ flaringABM_main <- function(Params, jobID, Run) {
     } else {
         demand <- readRDS(sprintf("./outputs/demand_function_%s.rds", Run))
         firms <- fread(cmd=sprintf('grep "RunID$\\|,%d$" ./outputs/agent_states_%s.csv', Run, Params$refID), nrow=Params$nagents,
-                        colClasses=list(numeric=c("cost_CE","cost_M","sPressure","grey_gas_sold","green_gas_sold"), character="activity"))
+                        colClasses=list(numeric=c("cost_M","sPressure","grey_gas_sold","green_gas_sold"), character="activity"))
         setkey(firms, firmID)
         leases <- fread(cmd=sprintf('grep "RunID$\\|,%d$" ./outputs/lease_states_%s.csv', Run, Params$refID), nrow=34787,
-                        colClasses=list(integer="t_switch", numeric="opEx_csgd"))
+                        colClasses=list(integer="t_switch", numeric="cost_csgd"))
         setkey(leases, leaseID)
     }
     cat("...Running...\n\t")
@@ -86,10 +86,10 @@ flaringABM_main <- function(Params, jobID, Run) {
         # net cashflow from oil and gas operations
         #    (revenue from oil + gas operations) - (baseline costs + additional costs spent on mitigation)
         firms[, "sales":= oil_revenue + gas_revenue]
-        firms[, "profit":= sales - (cost_O + cost_M + cost_CE)]
+        firms[, "profit":= sales - (cost_P + cost_M)]
         # calculates the market value based on [Baron's formulation](zotero://select/items/0_I7NL6RPA)
         # market_value = profit + dprofit - Ai - cost*xi + cost*xi*SRoR
-        firms[, "market_value":= ((oil_revenue + gas_revenue) - (cost_O + cost_M)) +    # Net income
+        firms[, "market_value":= ((oil_revenue + gas_revenue) - (cost_P + cost_M)) +    # Net income
                                 ((cost_M * ti$SRoR) - sPressure)]                       # Net social value
 
 

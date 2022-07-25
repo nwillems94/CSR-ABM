@@ -33,7 +33,7 @@ ggplot(leases[gas_MCF+csgd_MCF>0]) +
 ```{r}
 ggplot(leases[oil_BBL>0]) +
     geom_density(data= function(x) {x[,"area":= ifelse(area=="Spraberry", "Midland Basin", area)]},
-                aes(x=opEx_oil/oil_BBL, color=area)) +
+                aes(x=cost_oil/oil_BBL, color=area)) +
     scale_x_log10() +
     labs(x="$ / barrel", main="Operating expenses per barrel of oil")
 ```

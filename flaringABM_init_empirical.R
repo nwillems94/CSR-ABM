@@ -109,11 +109,10 @@ leases_emp[area %in% c("Midland Basin","Spraberry") & cond_avg>0,
 leases_emp[oil_avg+cond_avg==0, "opEx_pBBL":= 0]
 
 
-# gas (pMCF):   Gathering & Transportation, Processing (ordered by % flared & inverse-square distance weighted capacity)
-# There is not gas processing fee for dry gas
+# gas (pMCF):   Gathering & Transportation, Processing (inverse-square distance weighted gas processing capacity)
+# There is no gas processing fee for dry gas
 cat("\tAssigning lease operating expenses per thousand cubic feet of gas\n\t")
-leases_emp[gas_avg+csgd_avg>0, "percent_flared":=  round(flared_MCF_avg / (gas_avg+csgd_avg), 2)]
-setorder(leases_emp, percent_flared, -gas_cap)
+setorder(leases_emp, -gas_cap)
 
 leases_emp[area=="Eagle Ford" & csgd_avg>0,                                                         # oil
                 "opEx_pMCF":= sort(rlnorm(.N, log(1.60*0.85)/2, log(1.60/0.85)/1.282/2))]
@@ -221,7 +220,7 @@ firms <- data.table("firmID"= 1:Params$nagents, key= "firmID",
                     "grey_gas_sold"= NA_real_, "green_gas_sold"= NA_real_, "gas_flared"= NA_real_,
                     # Valuations; costs include Operating, Mitigation, Capital Expenditures
                     "sales"= 0, "profit"= 0, "market_value"= NA_real_,
-                    "cost_O"= NA_real_, "cost_M"= NA_real_, "cost_CE"= NA_real_, "sPressure"= NA_real_,
+                    "cost_P"= NA_real_, "cost_M"= NA_real_, "sPressure"= NA_real_,
                     # activities: exploration, development; behaviors: flaring, mitigating, economizing, imitating
                     "activity"= NA_character_, "behavior"= NA_character_,
                     "time"= Params$t0-1)
@@ -298,9 +297,9 @@ leases <- leases_emp[, .(area, DISTRICT_NO, OIL_GAS_CODE,
                         "oil_BBL"= model_oil_BBL, "cond_BBL"= model_cond_BBL,
                         "gas_MCF"= model_gas_MCF, "csgd_MCF"= model_csgd_MCF, sopf_MCF, ERR_MCF, EUR,
                         # empirical BOEs sold to calculate the baseline operating cost
-                        "opEx"= opEx_pBOE * (model_oil_BBL + cond_avg + (model_gas_MCF + model_csgd_MCF - flared_MCF)/6),
-                        capEx, capEx_csgd, opEx_pBBL, opEx_pMCF,
-                        "opEx_oil"= NA_real_, "opEx_csgd"= NA_real_, "opEx_gas"= NA_real_,
+                        "BOE_emp"= model_oil_BBL + cond_avg + (model_gas_MCF + model_csgd_MCF - flared_MCF)/6,
+                        capEx, capEx_csgd, opEx_pBOE, opEx_pBBL, opEx_pMCF,
+                        "cost_oil"= NA_real_, "cost_csgd"= NA_real_, "cost_gas"= NA_real_,
                         "class"= "", "status"= "", "market"= "",
                         start, expiration, lifetime,
                         "t_found"= NA_integer_, "t_switch"= NA_integer_, "time"= Params$t0-1,
@@ -324,7 +323,7 @@ leases[!is.na(firmID) & csgd_MCF>0 & ((Params$t0 - t_found)>=120),
 leases[!is.na(firmID) & (csgd_MCF>0) & (class=="developed"), "t_switch":= t_found]
 
 # calculate lease operating expenses
-leases[, sprintf("opEx_%s", c("oil","csgd","gas")):= lease_opEx(.SD)]
+leases[, sprintf("cost_%s", c("oil","csgd","gas")):= lease_costs(.SD)]
 
 # initially there is no social pressure
 firms[, "sPressure":= 0]
@@ -334,7 +333,7 @@ firms[leases[!is.na(firmID), .(sum(oil_BBL+cond_BBL), sum(gas_MCF), sum(csgd_MCF
         c("oil_output", "gas_output", "gas_flared"):= .(V1, V2, V3)]
 firms[, "behavior":= ifelse(gas_flared/oil_output > Params$threshold, "flaring", "economizing")]
 
-firms[leases[, sum(opEx_oil + opEx_gas), by=firmID], on="firmID", "cost_O":= V1]
+firms[leases[, sum(cost_oil + cost_gas), by=firmID], on="firmID", "cost_P":= V1]
 firms[, c("cost_M", "green_gas_sold"):= 0]
 
 
