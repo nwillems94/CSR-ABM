@@ -24,6 +24,19 @@ write_outputs <- function(db, csv, ID, append_file) {
     lease_states[, "model":= names(ID)]
     agent_states[, "model":= names(ID)]
 
+    # calculate the amount of gas deposited and withdrawn from storage due to excess supply
+    lease_states[, "dw":= any(market=="none") * fifelse(market=="none", 1, -1, na=0), by=.(model, RunID, leaseID)]
+    lease_states[, "net_dw":= cumsum(dw), by=.(model, RunID, leaseID)]
+    while(min(lease_states$net_dw)<0) {
+        lease_states[(dw<0) & (net_dw<0), "dw":= replace(dw, which.min(time), 0), by=.(model, RunID, leaseID)]
+        lease_states[, "net_dw":= cumsum(dw), by=.(model, RunID, leaseID)]
+    }
+    market_states[lease_states[dw!=0, sum((gas_MCF + csgd_MCF) * dw), by=.(model, RunID, time)],
+        on=c("model", "RunID", "time"), "q_stored":= V1]
+    market_states[, "frac":= median(readRDS(sprintf("./outputs/demand_function_%s.rds", .BY))$historical_market$frac), by=RunID]
+    setcolorder(market_states, c("time", "p_grey", "p_green", "p_oil_mult", "q_grey", "q_green", "q_stored", "q_oil",
+                                "market_prop_green", "frac", "RunID", "model"))
+
     agent_states[
         lease_states[(status=="producing"), sum(csgd_MCF[class=="underdeveloped"]) + sum(sopf_MCF),
             by=.(model, RunID, time, firmID)],

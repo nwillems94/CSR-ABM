@@ -191,3 +191,15 @@ ggplot(market_history, aes(x=time, group=RunID, color=as.factor(RunID))) +
     facet_grid(model~.) +
     labs(title="Total gas sold", y="MCF", color="RunID")
 ```
+
+Storage and withdrawls compared to scaled [Texas capacity](https://www.eia.gov/dnav/ng/ng_sum_lsum_dcu_STX_m.htm)
+```{r, fig.height=7.5}
+ggplot(market_history[order(time), .(time, "net"= cumsum(q_stored), "frac"= mean(frac)), by=.(model, RunID)]) +
+    geom_line(aes(x=time, y=net, group=RunID, color=as.factor(RunID)), alpha=0.4) +
+    geom_hline(aes(yintercept= mean(frac) * 400000 * 1000), color='darkred', linetype='dashed') +
+    annotate("text", x=0, y=0.9*400000*1000*mean(market_history$frac),
+            label="Scaled Working Gas Storage", color='darkred', hjust=1) +
+    facet_grid(model~.) +
+    labs(title="Net gas stored and withdrawn", y="MCF", color="RunID") +
+    theme_bw() + theme(plot.title=element_text(hjust=0.5))
+```
