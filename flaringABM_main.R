@@ -51,10 +51,12 @@ flaringABM_main <- function(Params, jobID, Run) {
         firms[, "activity":= ifelse(runif(.N) < Params$prop_e, "exploration", "development")]
 
         ## Exploration
+        cat("\nExploration,\t")
         do_exploration(firms, leases, ti)
 
         ## Development
         # optimize market value by executing the best portfolio option
+        cat("Development,\t")
         do_development(firms, leases, portfolio_options, ti)
         rm(portfolio_options)
 
@@ -69,6 +71,7 @@ flaringABM_main <- function(Params, jobID, Run) {
         #### MARKET CONDITIONS ####
         # generate a new representative demand schedule
         demand_schedule <- demand$new_schedule(ti$market_prop_green)
+        cat("Markets,\t")
         clear_gas_markets(firms, leases, market_history, demand_schedule, ti)
 
         ## Apply Social Pressure to each firm (beginning at time 0)
@@ -77,6 +80,7 @@ flaringABM_main <- function(Params, jobID, Run) {
 
         #### EXECUTE TRANSACTIONS ####
         ## Expenses
+        cat("Transactions,\t")
         calc_debits(firms, leases)
 
         ## Revenues
@@ -96,6 +100,7 @@ flaringABM_main <- function(Params, jobID, Run) {
 
         #### AGENT RESPONSE ####
         # compare profit maximizing options with and without mitigation by comparing cost to possible harm
+        cat("Options\n")
         portfolio_options <- optimal_strategy(firms, leases, market_history, demand_schedule, ti)
 
         #### OUTPUT STATES ####
