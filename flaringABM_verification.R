@@ -10,6 +10,7 @@ jobIDs <- lapply(strsplit(args, "="), `[[`, 2)
 names(jobIDs) <- gsub("\\n", "\n", sapply(strsplit(args, "="), `[[`, 1), fixed=TRUE)
 print(jobIDs)
 
+params <- fread(sprintf("./logs/params_%s.csv.gz", paste(jobIDs, collapse="-")))
 market_history <- fread(sprintf("./outputs/processed/market_states_%s.csv.gz", paste(jobIDs, collapse="-")))
 agent_states <- fread(sprintf("./outputs/processed/agent_states_%s.csv.gz", paste(jobIDs, collapse="-")))
 db <- dbConnect(RSQLite::SQLite(), sprintf("./outputs/processed/all_states_%s.sqlite", paste(jobIDs, collapse="-")))
@@ -44,3 +45,8 @@ rmarkdown::render("flaringABM_validation.Rmd", output_format="html_document",
                         ifelse(Sys.getenv("WORK")=="", ".", paste0(Sys.getenv("WORK"),"/flaringABM")),
                         paste(jobIDs, collapse="-")),
                 intermediates_dir=sprintf("./outputs/validation/%s", paste(jobIDs, collapse="-")), quiet=TRUE)
+
+# optimize later queries
+dbExecute(db, "PRAGMA analysis_limit=1000;")
+dbExecute(db, "PRAGMA optimize;")
+dbDisconnect(db)
