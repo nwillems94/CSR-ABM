@@ -17,24 +17,24 @@ total_pressure <- function(Ai) {
 }###--------------------    END OF FUNCTION total_pressure          --------------------###
 
 
-dist_social_pressure <- function(dt_f, ti, method="even", focus=1) {
+dist_social_pressure <- function(dt_f, ti, focus=1) {
     # Determine what proportion of the total social pressure is allocated to each agent
     a <- total_pressure(ti$Activism)
     dt_f[, "sPressure":= 0]
 
-    if (method=="even") {
+    if (ti$strategy=="even") {
         dt_f[behavior=="flaring", "sPressure":= a / .N]
-    } else if (method=="flaring") {
+    } else if (ti$strategy=="flaring") {
         dt_f[behavior=="flaring", "sPressure":= a * gas_flared / sum(gas_flared)]
-    } else if (method=="focused") {
+    } else if (ti$strategy=="focused") {
         dt_f[(firmID %in% focus) & behavior=="flaring", "sPressure":= a / .N]
-    } else if (method=="gas_output") {
+    } else if (ti$strategy=="gas_output") {
         dt_f[behavior=="flaring", "sPressure":= a * gas_output / sum(gas_output)]
-    } else if (method=="oil_output") {
+    } else if (ti$strategy=="oil_output") {
         dt_f[behavior=="flaring", "sPressure":= a * oil_output / sum(oil_output)]
     }
     # pressure on leader firms
-    else if (method=="leaders") {
+    else if (ti$strategy=="leaders") {
         dt_f[market_value > quantile(market_value, 2/3), "sPressure":= a / .N]
     }
 

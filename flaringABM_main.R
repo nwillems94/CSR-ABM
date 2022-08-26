@@ -31,8 +31,7 @@ flaringABM_main <- function(Params, jobID, Run) {
     portfolio_options <- optimal_strategy(firms, replace(leases, "class", ""), "", "", list("time"=Params$t0-1))
 
     # with what probability to exploring firms discover a new asset - validated based on EIA DPR
-    Params$prob_e <- 0.85 * 1.23 / (Params$nagents * Params$prop_e * leases[is.na(firmID), mean(oil_BBL+cond_BBL)])
-
+    Params$prob_e <- 0.7 * 1.23 / (Params$nagents * Params$prop_e * leases[is.na(firmID), mean(oil_BBL+cond_BBL)])
     fwrite(as.data.table(t(unlist(Params))), file=sprintf(logOuts, Run))
     fwrite(firms, file=sprintf(agentOuts, Run))
     fwrite(leases, file=sprintf(leaseOuts, Run))
@@ -75,7 +74,7 @@ flaringABM_main <- function(Params, jobID, Run) {
         clear_gas_markets(firms, leases, market_history, demand_schedule, ti)
 
         ## Apply Social Pressure to each firm (beginning at time 0)
-        dist_social_pressure(firms, ti, method="oil_output")
+        dist_social_pressure(firms, ti)
 
 
         #### EXECUTE TRANSACTIONS ####

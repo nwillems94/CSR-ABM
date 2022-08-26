@@ -28,28 +28,19 @@ Params <<- list(
     "t0" = -60,
     "tf" = 60,
     # Environmental Variables
-    "Activism" = 3e5,
+    "Activism" = 5.5e5,
+    "strategy" = "oil_output",
     # Market conditions
-    "SRoR" = 0.1,   # social rate of return:
+    "SRoR" = 0.5,   # social rate of return:
                     #     0: no social satisfaction from holding shares
                     #     1: shareholding is a perfect substitutes for activist contributions
     "threshold" = 0.05, # max units of gas "green" firms can flare per unit of oil produced
+    # New York City residential gas consumption is about ~0.75% of national
+    "market_prop_green" = 0.0075,
     # Activities
     "prop_e" = 11/12, # what proportion of firms engage in exploration activities in a given time step
     "prob_m" = 1      # probability that a follower will mimic a leader if they observe them mitigating
 )
-Params$Activism <- c(rep(0, -Params$t0), rep(Params$Activism, Params$tf + 1))
-Params$SRoR <- c(rep(0, -Params$t0), rep(Params$SRoR, Params$tf + 1))
-Params$prob_m <- c(rep(0, -Params$t0), rep(Params$prob_m, Params$tf + 1))
-# from OShaughnessy et al. 3% of electricity sales green zotero://select/items/0_HW2MXA38
-Params$market_prop_green <- with(Params, c(rep(0, -t0),
-                                        seq(from=0, to=1.5, length.out= 1 + (tf %/% 2)),
-                                        rep(1.5, tf - (tf %/% 2)))) * 0.12
-
-# Oil price multiplier based on historical distribution
-daily_prices <- fread("./inputs/processed/daily_prices.csv")
-Params$oil_price_mean <- daily_prices[year>2010, mean(log(ratio_BBLpMCF))]
-Params$oil_price_sd   <- daily_prices[year>2010,   sd(log(ratio_BBLpMCF))]
 
 # update parameters from command-line arguments
 for (update_arg in strsplit(args, "=")) {
@@ -62,11 +53,25 @@ for (update_arg in strsplit(args, "=")) {
 
     print(update_arg)
     if (is.numeric(Params[[update_arg[1]]])) {
-        Params[[update_arg[1]]] <- ifelse(Params[[update_arg[1]]]==0, 0, as.numeric(update_arg[2]))
+        Params[[update_arg[1]]] <- as.numeric(update_arg[2])
     } else {
         Params[update_arg[1]] <- update_arg[2]
     }
 }
+
+# social influences begin at time 0
+Params$Activism <- c(rep(0, -Params$t0), rep(Params$Activism, Params$tf + 1))
+Params$SRoR <- c(rep(0, -Params$t0), rep(Params$SRoR, Params$tf + 1))
+Params$prob_m <- c(rep(0, -Params$t0), rep(Params$prob_m, Params$tf + 1))
+# from OShaughnessy et al. 3% of electricity sales green zotero://select/items/0_HW2MXA38
+Params$market_prop_green <- with(Params, c(rep(0, -t0),
+                                        seq(from=0, to=1, length.out= 1 + (tf %/% 2)),
+                                        rep(1, tf - (tf %/% 2))) * market_prop_green)
+
+# Oil price multiplier based on historical distribution
+daily_prices <- fread("./inputs/processed/daily_prices.csv")
+Params$oil_price_mean <- daily_prices[year>2010, mean(log(ratio_BBLpMCF))]
+Params$oil_price_sd   <- daily_prices[year>2010,   sd(log(ratio_BBLpMCF))]
 
 rm(args, update_arg, daily_prices)
 
