@@ -12,6 +12,9 @@ flaringABM_main <- function(Params, jobID, Run) {
         leases[, "RunID":= Run]
     } else {
         demand <- readRDS(sprintf("./outputs/demand_function_%s.rds", Run))
+        # update default arguments if necessary
+        with(environment(demand$new_schedule),
+            formals(new_schedule) <-  c(alist(prop_green=, sample_set=list()), Params[c("p_low", "p_high")]))
         firms <- fread(cmd=sprintf('grep "RunID$\\|,%d$" ./outputs/agent_states_%s.csv', Run, Params$refID), nrow=Params$nagents,
                         colClasses=list(numeric=c("cost_M","sPressure","grey_gas_sold","green_gas_sold"), character="activity"))
         setkey(firms, firmID)

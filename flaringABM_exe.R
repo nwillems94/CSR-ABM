@@ -37,6 +37,8 @@ Params <<- list(
     "threshold" = 0.05, # max units of gas "green" firms can flare per unit of oil produced
     # New York City residential gas consumption is about ~0.75% of national
     "market_prop_green" = 0.0075,
+    # green electricity consumers pay a premium of [7-30%](./inputs/market_history.html)
+    "p_low"=1.07, "p_high"=1.3,
     # Activities
     "prop_e" = 11/12, # what proportion of firms engage in exploration activities in a given time step
     "prob_m" = 1      # probability that a follower will mimic a leader if they observe them mitigating

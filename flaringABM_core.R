@@ -95,100 +95,6 @@ calc_credits <- function(dt_f, market) {
 #*
 #*** FIRM ACTIVITIES ***#
 #*
-market_price <- function(dt_l, demand_schedule, market_segment) {
-    # market price from intersection of supply and demand
-    price <- dt_l[market==market_segment][order(opEx_pMCF)][,
-                    # supply curve
-                    {"p"= c(0,opEx_pMCF); "q"=c(0,cumsum(gas_MCF+csgd_MCF));
-                    # price willing to be paid at every point of supply curve
-                    "p_demand"= demand_schedule(q)[, get(paste0("p_", market_segment))];
-                    # intersection of supply and demand
-                    p_demand[nafill(which(p_demand <= p)[1], fill=.N+1)]}]
-
-    return(price)
-
-}###--------------------     END OF FUNCTION market_price           --------------------###
-
-market_allocation <- function(dt_l, demand_schedule, firmIDs, mp_grey) {
-
-    max_profit <- dt_l[(market=="green") & (firmID %in% firmIDs)][order(opEx_pMCF)][,
-                    .("leaseIDs"= c(NA_integer_, leaseID), "cutoff"= c(0, opEx_pMCF)), by=firmID]
-
-    # Cournot price in the green market at each level of allocation
-    max_profit[, "cp_green":= sapply(1:.N, function(x) market_price(dt_l[!.(leaseIDs[1:x])], demand_schedule, "green")),
-            by=firmID]
-
-    # revenue given output allocation between markets
-    max_profit[, "revenue":= dt_l[firmID==.BY][order(opEx_pMCF),
-                                    c(gas_MCF+csgd_MCF) %*% sapply(1:length(leaseIDs), function(x)
-                                                                ifelse((opEx_pMCF>cutoff[x]) & (opEx_pMCF<=cp_green[x]),
-                                                                    cp_green, ifelse(opEx_pMCF<=mp_grey, mp_grey, 0)))],
-            by=firmID]
-
-    return(max_profit[, .SD[which.max(revenue)], by=firmID])
-
-}###--------------------     END OF FUNCTION market_allocation      --------------------###
-
-clear_gas_markets <- function(dt_f, dt_l, dt_m, demand_schedule, ti) {
-    # consider all developed producing leases
-    dt_l[, "market":= ifelse((class=="developed") & (status=="producing") & (gas_MCF>0 | csgd_MCF>0),
-                        replace(market, is.na(market) | market=="none", "grey"), NA)]
-    dt_l[dt_f[behavior=="flaring"], on="firmID", "market":= replace(market, !is.na(market), "grey")]
-
-    if(ti$market_prop_green>0) {
-        # market conditions under previous market allocations
-        if(dt_l[market=="green", .N==0]) {
-            # first approximation allocates all eligible leases to the green market
-            dt_l[dt_f[behavior!="flaring"], on="firmID", "market":= replace(market, !is.na(market), "green")]
-        }
-
-        # clear the green market first
-        mp0_green <- market_price(dt_l, demand_schedule, "green")
-        # supply not purchased in the green market falls back to the grey market
-        dt_l[(market=="green") & (opEx_pMCF > mp0_green), "market":= "grey"]
-        # clear grey market with remaining supply
-        mp0_grey <- market_price(dt_l, demand_schedule, "grey")
-        dt_l[(market=="grey") & (opEx_pMCF > mp0_grey), "market":= "none"]
-
-        dt_l[dt_f[behavior!="flaring"], on="firmID", "market":= replace(market, market=="none", "green")]
-
-        # determine how to allocate production between green and grey markets
-        if (dt_l[market=="green", .N] > 0) {
-            optimal_allocation <- market_allocation(dt_l, demand_schedule, dt_f$firmID, mp0_grey)
-            dt_l[optimal_allocation, on="firmID",
-                "market":= replace(market, (market=="green") & (opEx_pMCF<=cutoff), "grey"), by=.EACHI]
-        }
-    }
-
-    # determine market prices based on agent allocations
-    # clear green market first
-    mp_green <- market_price(dt_l, demand_schedule, "green")
-    # supply not purchased in the green market falls back to the grey market
-    dt_l[(market=="green") & (opEx_pMCF > mp_green), "market":= "grey"]
-    # clear grey market with remaining supply
-    mp_grey <- market_price(dt_l, demand_schedule, "grey")
-    dt_l[(market=="grey") & (opEx_pMCF > mp_grey), "market":= "none"]
-
-    # increment remaining gas production
-    dt_l[market %in% c("green", "grey"), "ERR_MCF":= ERR_MCF - (gas_MCF+csgd_MCF)]
-
-    # defer production to later
-    dt_l[market=="none", "lifetime":= lifetime+1]
-
-    # update firm outputs
-    dt_f[dt_l[, .SD[market=="grey", sum(gas_MCF+csgd_MCF)], by=firmID], on="firmID", "grey_gas_sold":= V1]
-    dt_f[dt_l[, .SD[market=="green", sum(gas_MCF+csgd_MCF)], by=firmID], on="firmID", "green_gas_sold":= V1]
-    dt_f[, "gas_output":= grey_gas_sold + green_gas_sold]
-
-    # store current market prices and quantities
-    dt_m[.(ti$time), c("p_grey", "p_green"):= .(mp_grey, mp_green)]
-    dt_m[.(ti$time), "q_grey":= dt_f[, sum(grey_gas_sold)]]
-    dt_m[.(ti$time), "q_green":= dt_f[, sum(green_gas_sold)]]
-    dt_m[.(ti$time), "q_oil":= dt_f[, sum(oil_output)]]
-
-}###--------------------    END OF FUNCTION clear_gas_markets       --------------------###
-
-
 imitators <- function(dt_f, ti, success_metric="sales") {
     # determine who is an imitator - less successful followers mimic more successful leaders
     # following Leary & Roberts "success" can be defined in terms of sales (market share), profit, or market_value
@@ -373,3 +279,146 @@ do_exploration <- function(dt_f, dt_l, ti) {
     }
 
 }###--------------------    END OF FUNCTION do_exploration          --------------------###
+
+
+
+#*
+#*** MARKETS ***#
+#*
+market_price <- function(dt_l, demand_schedule, market_segment) {
+    # market price from intersection of supply and demand
+    price <- dt_l[market==market_segment][order(opEx_pMCF)][,
+                    # supply curve
+                    {"p"= c(0,opEx_pMCF); "q"=c(0,cumsum(gas_MCF+csgd_MCF));
+                    # price willing to be paid at every point of supply curve
+                    "p_demand"= demand_schedule(q)[, get(paste0("p_", market_segment))];
+                    # intersection of supply and demand
+                    p_demand[nafill(which(p_demand <= p)[1], fill=.N+1)]}]
+
+    return(price)
+
+}###--------------------     END OF FUNCTION market_price           --------------------###
+
+
+market_allocation <- function(dt_l, demand_schedule, firmIDs, mp_grey) {
+
+    max_profit <- dt_l[(market=="green") & (firmID %in% firmIDs)][order(opEx_pMCF)][,
+                    .("leaseIDs"= c(NA_integer_, leaseID), "cutoff"= c(0, opEx_pMCF)), by=firmID]
+
+    # Cournot price in the green market at each level of allocation
+    max_profit[, "cp_green":= sapply(1:.N, function(x) market_price(dt_l[!.(leaseIDs[1:x])], demand_schedule, "green")),
+            by=firmID]
+
+    # revenue given output allocation between markets
+    max_profit[, "revenue":= dt_l[firmID==.BY][order(opEx_pMCF),
+                                    c(gas_MCF+csgd_MCF) %*% sapply(1:length(leaseIDs), function(x)
+                                                                ifelse((opEx_pMCF>cutoff[x]) & (opEx_pMCF<=cp_green[x]),
+                                                                    cp_green, ifelse(opEx_pMCF<=mp_grey, mp_grey, 0)))],
+            by=firmID]
+
+    return(max_profit[, .SD[which.max(revenue)], by=firmID])
+
+}###--------------------     END OF FUNCTION market_allocation      --------------------###
+
+
+clear_gas_markets <- function(dt_f, dt_l, dt_m, demand_schedule, ti) {
+    # consider all developed producing leases
+    dt_l[, "market":= ifelse((class=="developed") & (status=="producing") & (gas_MCF>0 | csgd_MCF>0),
+                        replace(market, is.na(market) | market=="none", "grey"), NA)]
+    dt_l[dt_f[behavior=="flaring"], on="firmID", "market":= replace(market, !is.na(market), "grey")]
+
+    if(ti$market_prop_green>0) {
+        # market conditions under previous market allocations
+        if(dt_l[market=="green", .N==0]) {
+            # first approximation allocates all eligible leases to the green market
+            dt_l[dt_f[behavior!="flaring"], on="firmID", "market":= replace(market, !is.na(market), "green")]
+        }
+
+        # clear the green market first
+        mp0_green <- market_price(dt_l, demand_schedule, "green")
+        # supply not purchased in the green market falls back to the grey market
+        dt_l[(market=="green") & (opEx_pMCF > mp0_green), "market":= "grey"]
+        # clear grey market with remaining supply
+        mp0_grey <- market_price(dt_l, demand_schedule, "grey")
+        dt_l[(market=="grey") & (opEx_pMCF > mp0_grey), "market":= "none"]
+
+        dt_l[dt_f[behavior!="flaring"], on="firmID", "market":= replace(market, market=="none", "green")]
+
+        # determine how to allocate production between green and grey markets
+        if (dt_l[market=="green", .N] > 0) {
+            optimal_allocation <- market_allocation(dt_l, demand_schedule, dt_f$firmID, mp0_grey)
+            dt_l[optimal_allocation, on="firmID",
+                "market":= replace(market, (market=="green") & (opEx_pMCF<=cutoff), "grey"), by=.EACHI]
+        }
+    }
+
+    # determine market prices based on agent allocations
+    # clear green market first
+    mp_green <- market_price(dt_l, demand_schedule, "green")
+    # supply not purchased in the green market falls back to the grey market
+    dt_l[(market=="green") & (opEx_pMCF > mp_green), "market":= "grey"]
+    # clear grey market with remaining supply
+    mp_grey <- market_price(dt_l, demand_schedule, "grey")
+    dt_l[(market=="grey") & (opEx_pMCF > mp_grey), "market":= "none"]
+
+    # increment remaining gas production
+    dt_l[market %in% c("green", "grey"), "ERR_MCF":= ERR_MCF - (gas_MCF+csgd_MCF)]
+
+    # defer production to later
+    dt_l[market=="none", "lifetime":= lifetime+1]
+
+    # update firm outputs
+    dt_f[dt_l[, .SD[market=="grey", sum(gas_MCF+csgd_MCF)], by=firmID], on="firmID", "grey_gas_sold":= V1]
+    dt_f[dt_l[, .SD[market=="green", sum(gas_MCF+csgd_MCF)], by=firmID], on="firmID", "green_gas_sold":= V1]
+    dt_f[, "gas_output":= grey_gas_sold + green_gas_sold]
+
+    # store current market prices and quantities
+    dt_m[.(ti$time), c("p_grey", "p_green"):= .(mp_grey, mp_green)]
+    dt_m[.(ti$time), "q_grey":= dt_f[, sum(grey_gas_sold)]]
+    dt_m[.(ti$time), "q_green":= dt_f[, sum(green_gas_sold)]]
+    dt_m[.(ti$time), "q_oil":= dt_f[, sum(oil_output)]]
+
+}###--------------------    END OF FUNCTION clear_gas_markets       --------------------###
+
+
+demand_sample <- function(prop_green, sample_set, p_low, p_high) {
+    while (NROW(sample_set) < 1) {
+        sample_set <- historical_market[runif(.N) < (0.5/.N), .(year, month)]
+    }
+    cat("Generating demand function from:", paste(sample_set[[2]], sample_set[[1]], collapse=", "), "\n")
+
+    # price elasticity of demand
+    ep_grey  <- -0.18
+
+    p0 <- historical_market[sample_set, mean(p)]
+    q0 <- historical_market[sample_set, mean(q)]
+    # the historic qauntity demanded is
+    #    the fraction of gas produced in Texas (q_TX)
+    #    the fraction of Texas gas produced by "associated" operators (~95%)
+    #    the fraction of those operators' gas production actually assigned to firms (frac)
+    q0p <- historical_market[sample_set, mean(q_TX * 0.95 * frac)]
+
+    # slope of the inverse demand function given ep
+    m <- (p0 / q0) * (1 / ep_grey)
+
+    # price (y) and quantity (x) intercept of grey demand curve
+    b <- p0 - (m * q0p)
+    q_int_grey <- -(b / m) * (1-prop_green)
+
+    # green demand represents a rotation of the demand curve about the quantity intercept
+    #    [Sedjo & Swallow 2002](zotero://select/items/0_GGH3Y8UX)
+    # green electricity consumers pay a premium of [7-30%](./inputs/market_history.html)
+    premium <- runif(1, p_low, p_high) * (((m * q0p) + b) / (prop_green * (m * q0p) + b))
+    b_green <- premium * b
+
+    # shift green demand curve to account for max market size
+    q_int_green <- max(-(b / m) * prop_green, 1e-10)
+
+    return(function(q) {
+                p_grey=  nafill(approx(c(0, q_int_grey),  c(b,        0), q)$y, fill=0)
+                p_green= nafill(approx(c(0, q_int_green), c(b_green,  0), q)$y, fill=0)
+
+                return(data.table(q, "p_grey"= if (prop_green==1) 0 else p_grey,
+                                    "p_green"= if (prop_green==0) 0 else p_green))
+    })
+}###--------------------      END OF FUNCTION demand_sample         --------------------###

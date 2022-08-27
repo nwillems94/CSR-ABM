@@ -347,52 +347,12 @@ historical_market_data[
 # create an object which encapsulates the necessary demand data and generates demand schedules
 demand <-
     setRefClass("demand_function",
-        fields =  list(historical_market="data.table"),
-        methods = list(
-            new_schedule = function(prop_green, sample_set=list()) {
-                while (NROW(sample_set) < 1) {
-                    sample_set <- historical_market[runif(.N) < (0.5/.N), .(year, month)]
-                }
-                cat("Generating demand function from:", paste(sample_set[[2]], sample_set[[1]], collapse=", "), "\n")
-
-                # price elasticity of demand
-                ep_grey  <- -0.18
-
-                p0 <- historical_market[sample_set, mean(p)]
-                q0 <- historical_market[sample_set, mean(q)]
-                # the historic qauntity demanded is
-                #    the fraction of gas produced in Texas (q_TX)
-                #    the fraction of Texas gas produced by "associated" operators (~95%)
-                #    the fraction of those operators' gas production actually assigned to firms (frac)
-                #    a factor to keep the combined production volume roughly constant across green and grey markets
-                q0p <- historical_market[sample_set, mean(q_TX * 0.95 * frac * (1-prop_green))]
-
-                # slope of the inverse demand function given ep
-                m <- (p0 / q0) * (1 / ep_grey)
-
-                # price (y) and quantity (x) intercept of grey demand curve
-                b <- p0 - (m * q0p)
-                q_int_grey <- -(b / m)
-
-                # green demand represents a rotation of the demand curve about the quantity intercept
-                #    [Sedjo & Swallow 2002](zotero://select/items/0_GGH3Y8UX)
-                # green electricity consumers pay a premium of [7-30%](./inputs/market_history.html)
-                premium <- runif(1, 1.07, 1.3) * (((m * q0p) + b) / (prop_green * (m * q0p) + b))
-                b_green <- premium * b
-
-                # shift green demand curve to account for max market size
-                q_int_green <- max(prop_green * q_int_grey, 1e-10)
-
-                return(function(q) {
-                            p_grey=  nafill(approx(c(0, q_int_grey),  c(b,        0), q)$y, fill=0)
-                            p_green= nafill(approx(c(0, q_int_green), c(b_green,  0), q)$y, fill=0)
-
-                            return(data.table(q, "p_grey"= if (prop_green==1) 0 else p_grey,
-                                                "p_green"= if (prop_green==0) 0 else p_green))
-                })
-            })
+        fields =  list(historical_market= "data.table"),
+        methods = list(new_schedule= demand_sample)
     )$new(historical_market=na.omit(historical_market_data[, .SD, keyby=.(year, month)]))
-
+# set default function arguments
+with(environment(demand$new_schedule),
+            formals(new_schedule) <-  c(alist(prop_green=, sample_set=list()), Params[c("p_low", "p_high")]))
 
 # generate validation report for this initialization
 cat("Writing validation report\n")
