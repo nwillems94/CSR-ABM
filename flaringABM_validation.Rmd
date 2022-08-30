@@ -203,3 +203,28 @@ ggplot(market_history[order(time), .(time, "net"= cumsum(q_stored), "frac"= mean
     labs(title="Net gas stored and withdrawn", y="MCF", color="RunID") +
     theme_bw() + theme(plot.title=element_text(hjust=0.5))
 ```
+
+# Shareholder valuation
+```{r}
+agent_states[params, on=c("model","RunID","time"), "SRoR":= SRoR]
+
+agent_states[(cost_M>0) & (time>0) & (model!="no shareholder\nvaluation"),
+                        {MV0i= pmax(market_value - (cost_M*SRoR), 1e-10);
+                        SRoR * (cost_M/MV0i) / cut(cost_M/MV0i, 10, labels=FALSE)}, by=.(RunID, time)][, summary(V1)]
+```
+
+Shareholder valuation ($\theta$) of CSR spending ($C$) should increase market value ($MV$) proportional to CSR rating ($R \in [1-10]$)  
+$$ MV_0 (1 + \alpha R) \simeq MV_0 + \theta C$$  
+[Luo and Bhattacharya, 2006](zotero://select/items/0_LGPMEVGF)  
+```{r}
+ggplot(agent_states[model!="no shareholder\nvaluation",
+                    cbind(.SD, "Ci" = cost_M*SRoR / (time - min(time)))][
+                    (cost_M>0) & (time>0) & (market_value>0),
+                            {"MV0i" = pmax(market_value - Ci, 1e-10);
+                            Ci / MV0i / cut(Ci/SRoR/MV0i, 10, labels=FALSE)}, by=.(RunID, time)]) +
+    geom_boxplot(aes(x=as.factor(RunID), y=V1, color=as.factor(RunID)), outlier.shape=NA, show.legend=FALSE) +
+    geom_hline(yintercept=0.18*0.19, lty=2) +
+    geom_hline(yintercept=0.11+(0.18*0.19), lty=2) +
+    labs(title="Effect of shareholder valuation on market value", x="RunID", y="% Increase in Market Value") +
+    theme_bw() + theme(plot.title=element_text(hjust=0.5)) + coord_cartesian(ylim=c(0,0.5))
+```
