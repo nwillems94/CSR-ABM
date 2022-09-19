@@ -1,8 +1,43 @@
 ---
 title: "FlaringABM firms characteristics"
 author: "Nick Willems"
+output:
+  html_document:
+    code_folding: hide
+  pdf_document:
+    keep_tex: true
+knit: (function(input, ...) { rmarkdown::render(input, output_format='all', ...) })
 ---
 
+```{css, echo=FALSE, eval=knitr::is_html_output()}
+/* avoid displaying title and author in html output */
+.title{
+    display: none;
+}
+.author{
+    display: none;
+}
+```
+
+```{r, echo=FALSE, eval=knitr::is_latex_output()}
+library(formatR)
+knitr::opts_chunk$set(tidy=TRUE,
+                    tidy.opts=list(width.cutoff=40),
+                    fig.path=sub("/", "_tex/", knitr::opts_chunk$get('fig.path')))
+```
+
+```{r, echo=FALSE, include=FALSE}
+library(knitr)
+library(printr)
+# define a method for objects of the class data.table
+registerS3method("knit_print", "data.table", function(x, ...) {
+    if (!shouldPrint(x)) {
+        return(invisible())
+    } else {
+        NextMethod("knit_print") # print as data.frame
+    }
+})
+```
 
 CHARACTERIZE UPSTREAM OIL AND GAS FIRMS WHO PRODUCE GAS ALONGSIDE OIL USING TEXAS RAILROAD COMMISSION DATA.  
 
@@ -14,7 +49,7 @@ library(readxl)
 ```
 
 # Monthly production from new wells
-### (from EIA Drilling productivity report)  
+EIA Drilling productivity report 
 [Source](https://www.eia.gov/petroleum/drilling/archive/2021/10/)  
 ```{r}
 EIA_dpr <- rbindlist(lapply(list("Eagle Ford"="Eagle Ford Region", "Permian"="Permian Region"),
@@ -60,9 +95,9 @@ fwrite(EIA_dpr[!is.na(new_BBL), .(date, region, new_BBL, retired_BBL, new_MCF, r
 ```
 
 # Monthly county production 
-### (from TxRRC Production Data Query Dump)  
-[Source](https://mft.rrc.texas.gov/link/fe3298a2-8788-4234-b2a0-90ee41558d75),
-[Manual](https://portalvhdskzlfb8q9lqr9.blob.core.windows.net/media/47731/pdq-dump-user-manual.pdf)
+From TX RRC Production Data Query Dump 
+ [Source](https://mft.rrc.texas.gov/link/fe3298a2-8788-4234-b2a0-90ee41558d75),
+ [Manual](https://portalvhdskzlfb8q9lqr9.blob.core.windows.net/media/47731/pdq-dump-user-manual.pdf)
 ```{r}
 OG_COUNTY_CYCLE <- fread("unzip -p ./data/PDQ_DSV.zip OG_COUNTY_CYCLE_DATA_TABLE.dsv", sep="}", quote="",
                         select=list(character=c("DISTRICT_NAME"), numeric=c("COUNTY_NO","CYCLE_YEAR","CYCLE_MONTH"),
@@ -93,8 +128,7 @@ lease_prod <- OG_COUNTY_CYCLE[CYCLE_YEAR>=2010 & CYCLE_YEAR<2021,
                             "gas_total"= sum(CNTY_GAS_PROD_VOL), "gas_subset"= sum(CNTY_GAS_PROD_VOL[subset]),
                             "csgd_total"= sum(CNTY_CSGD_PROD_VOL), "csgd_subset"= sum(CNTY_CSGD_PROD_VOL[subset])),
                     by=.(CYCLE_MONTH, CYCLE_YEAR)]
-                    # by=.("Date"= as.Date(paste("01", CYCLE_MONTH, CYCLE_YEAR), format='%d %m %Y'))]
-# lease_prod[, c("year","month"):= .(year(Date), month.abb[month(Date)])]
+
 lease_prod[, "Date":= as.Date(paste("01", CYCLE_MONTH, CYCLE_YEAR), format='%d %m %Y')]
 
 ggplot(lease_prod, aes(x=Date)) +
@@ -103,11 +137,11 @@ ggplot(lease_prod, aes(x=Date)) +
     geom_point(aes(y=(gas_subset+csgd_subset)/(gas_total+csgd_total), color="gas+csgd")) +
     labs(title="Production from counties with lease data", y="% of Texas", color="")
 
-print(summary(lease_prod[, (gas_subset+csgd_subset)/(gas_total+csgd_total)]))
+summary(lease_prod[, (gas_subset+csgd_subset)/(gas_total+csgd_total)])
 ```
 
 # Monthly operator production 
-### (from TxRRC Production Data Query Dump )
+From TX RRC Production Data Query Dump
  [Source](https://mft.rrc.texas.gov/link/fe3298a2-8788-4234-b2a0-90ee41558d75),
  [Manual](https://portalvhdskzlfb8q9lqr9.blob.core.windows.net/media/47731/pdq-dump-user-manual.pdf)
 ```{r}
@@ -135,14 +169,14 @@ OG_OPERATOR_CYCLE[operator_types, on=c("OPERATOR_NO","CYCLE_YEAR"), "firm_type":
 
 ```{r}
 # number of operators
-print(OG_OPERATOR_CYCLE[firm_type=="oil_only", .("N"=uniqueN(OPERATOR_NO)), keyby=CYCLE_YEAR])
-print(OG_OPERATOR_CYCLE[firm_type=="gas_only", .("N"=uniqueN(OPERATOR_NO)), keyby=CYCLE_YEAR])
-print(OG_OPERATOR_CYCLE[firm_type=="associated", .("N"=uniqueN(OPERATOR_NO)), keyby=CYCLE_YEAR])
+OG_OPERATOR_CYCLE[firm_type=="oil_only", .("N"=uniqueN(OPERATOR_NO)), keyby=CYCLE_YEAR]
+OG_OPERATOR_CYCLE[firm_type=="gas_only", .("N"=uniqueN(OPERATOR_NO)), keyby=CYCLE_YEAR]
+OG_OPERATOR_CYCLE[firm_type=="associated", .("N"=uniqueN(OPERATOR_NO)), keyby=CYCLE_YEAR]
 
 # percent of total gas production coming from 'associated' operators
-print(OG_OPERATOR_CYCLE[CYCLE_YEAR>=2010 & CYCLE_YEAR<2021,
+OG_OPERATOR_CYCLE[CYCLE_YEAR>=2010 & CYCLE_YEAR<2021,
                 lapply(.(rowSums(.SD)), function(x) sum(x[firm_type=="associated"], na.rm=TRUE) / sum(x)),
-                by=CYCLE_YEAR, .SDcols=c("OPER_GAS_PROD_VOL","OPER_CSGD_PROD_VOL")])
+                by=CYCLE_YEAR, .SDcols=c("OPER_GAS_PROD_VOL","OPER_CSGD_PROD_VOL")]
 ```
 
 ## Characterize active, 'associated' operators
@@ -162,30 +196,43 @@ operators <- operators[scaled_oil_BBL > 0]
 operators <- operators[(scaled_gas_MCF + scaled_csgd_MCF) > 0]
 ```
 
-```{r fig.cap="Oil production is nearly log-normally distributed"}
+```{r, fig.cap="Oil production is nearly log-normally distributed", results='hide'}
 operators[, .(log(scaled_oil_BBL))][,
-            {hist(V1, breaks="scott", freq=FALSE, main="Distribution of firm oil production", xlab="log(Oil (BBL))");
-            curve(dnorm(x, mean(V1), sd(V1)), col="blue", add=TRUE); NULL}]
+            {"h_data"= hist(V1, breaks="scott", plot=FALSE);
+            plot(exp(h_data$mids), h_data$density, log='x', type='h', lwd=3, lend=2,
+            main="Distribution of firm scaled oil production", xlab="Oil (BBL)", ylab="", ylim=c(0,0.25));
+            curve(dnorm(log(x), mean(V1), sd(V1)), lwd=2, col='blue', add=TRUE); NULL}]
 ```
 
 ```{r}
-print(operators[, sum(scaled_oil_BBL), by=.(CYCLE_YEAR, CYCLE_MONTH)][, as.list(summary(V1)), keyby=CYCLE_YEAR])
+ggplot(operators[OPER_OIL_PROD_VOL>0], aes(log(OPER_OIL_PROD_VOL))) +
+    geom_histogram(aes(y=after_stat(density)), bins=nclass.scott(log(operators[OPER_OIL_PROD_VOL>0]$OPER_OIL_PROD_VOL))) +
+    stat_function(fun=dnorm, args=operators[, .(log(scaled_oil_BBL))][, .("mean"=mean(V1), "sd"=sd(V1))]) +
+    facet_wrap(.~CYCLE_YEAR)
 ```
 
-```{r fig.cap="Gas production is nearly log-normally distributed"}
+```{r}
+operators[, sum(scaled_oil_BBL), by=.(CYCLE_YEAR, CYCLE_MONTH)][, as.list(summary(V1)), keyby=CYCLE_YEAR]
+```
+
+```{r, fig.cap="Gas production is nearly log-normally distributed", results='hide'}
 operators[scaled_gas_MCF>0, .(log(scaled_gas_MCF))][,
-            {hist(V1, breaks="scott", freq=FALSE, main="Distribution of firm gas production", xlab="log(Gas (MCF))");
-            curve(dnorm(x, mean(V1), sd(V1)), col="blue", add=TRUE); NULL}]
+            {"h_data"= hist(V1, breaks="scott", plot=FALSE);
+            plot(exp(h_data$mids), h_data$density, log='x', type='h', lwd=3, lend=2,
+            main="Distribution of firm scaled gas production", xlab="Gas (MCF)", ylab="", ylim=c(0,0.25));
+            curve(dnorm(log(x), mean(V1), sd(V1)), lwd=2, col='blue', add=TRUE); NULL}]
 ```
 
 ```{r}
-print(operators[, sum(scaled_gas_MCF), by=.(CYCLE_YEAR, CYCLE_MONTH)][, as.list(summary(V1)), keyby=CYCLE_YEAR])
+operators[, sum(scaled_gas_MCF), by=.(CYCLE_YEAR, CYCLE_MONTH)][, as.list(summary(V1)), keyby=CYCLE_YEAR]
 ```
 
-```{r fig.cap="Casinghead gas production is not log-normally distributed"}
+```{r, fig.cap="Casinghead gas production is not log-normally distributed", results='hide'}
 operators[scaled_csgd_MCF>0, .(log(scaled_csgd_MCF))][,
-            {hist(V1, breaks="scott", freq=FALSE, main="Distribution of firm casinghead gas production", xlab="log(Gas (MCF))");
-            curve(dnorm(x, mean(V1), sd(V1)), col="blue", add=TRUE); NULL}]
+            {"h_data"= hist(V1, breaks="scott", plot=FALSE);
+            plot(exp(h_data$mids), h_data$density, log='x', type='h', lwd=3, lend=2,
+            main="Distribution of firm scaled casinghead gas production", xlab="Gas (MCF)", ylab="", ylim=c(0,0.25));
+            curve(dnorm(log(x), mean(V1), sd(V1)), lwd=2, col='blue', add=TRUE); NULL}]
 ```
 
 Output operators
@@ -206,8 +253,9 @@ CCM_og <- CCM[(sic==1311 | naics==2111) & !is.na(sale) & sale>=0]
 ggplot(CCM_og[, .("Number of firms"=uniqueN(LPERMCO)), by=fyear]) +
     geom_col(aes(x=fyear, y=`Number of firms`))
 
-print(CCM_og[fyear>2010, .("Number of firms"=uniqueN(LPERMCO)), by=fyear])
+CCM_og[fyear>2010, .("Number of firms"=uniqueN(LPERMCO)), by=fyear]
 ```
+
 ### Calculate characteristics using firm data
 Described in [Leary & Roberts 2014](zotero://select/items/0_2I87I24H)
 ```{r}
@@ -224,11 +272,6 @@ ggplot(CCM_og[fyear>=2010]) +
     geom_density(aes(x=CI)) +
     scale_x_log10() +
     facet_wrap(.~fyear)
-```
-```{r fig.cap="Cash reserves are nearly log-normally distributed"}
-CCM_og[fyear>=2010 & CI>0, .(log(CI))][,
-        {hist(V1, breaks="scott", freq=FALSE, main="Distribution of firm cash", xlab="log(Dollars)");
-        curve(dnorm(x, mean(V1), sd(V1)), col="blue", add=TRUE); NULL}]
 ```
 
 Output financial data

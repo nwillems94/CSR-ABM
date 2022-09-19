@@ -1,7 +1,43 @@
 ---
 title: "FlaringABM market history"
 author: "Nick Willems"
+output:
+  html_document:
+    code_folding: hide
+  pdf_document:
+    keep_tex: true
+knit: (function(input, ...) { rmarkdown::render(input, output_format='all', ...) })
 ---
+
+```{css, echo=FALSE, eval=knitr::is_html_output()}
+/* avoid displaying title and author in html output */
+.title{
+    display: none;
+}
+.author{
+    display: none;
+}
+```
+
+```{r, echo=FALSE, eval=knitr::is_latex_output()}
+library(formatR)
+knitr::opts_chunk$set(tidy=TRUE,
+                    tidy.opts=list(width.cutoff=40),
+                    fig.path=sub("/", "_tex/", knitr::opts_chunk$get('fig.path')))
+```
+
+```{r, echo=FALSE, include=FALSE}
+library(knitr)
+library(printr)
+# define a method for objects of the class data.table
+registerS3method("knit_print", "data.table", function(x, ...) {
+    if (!shouldPrint(x)) {
+        return(invisible())
+    } else {
+        NextMethod("knit_print") # print as data.frame
+    }
+})
+```
 
 CHARACTERIZE WELL COST INFLATION.  
 
@@ -32,9 +68,6 @@ EIA_index[, "year":= as.numeric(substr(Date, 1, 4))]
 
 EIA_index[, "nom_index_1977":= 100 * .SD / .SD[year==1977][[1]],
     .SDcols="U.S. Nominal Cost per Crude Oil, Natural Gas, and Dry Well Drilled (Thousand Dollars per Well)"]
-
-well_cost_index <- rbind(EIA_index[!between(year, 1976, 2004), .(year, nom_index_1977, source)],
-                        MIT_index[year>=1976])[order(year)]
 
 well_cost_index <- rbind(EIA_index[, .(year, nom_index_1977, source)], MIT_index)[order(year)]
 
@@ -115,14 +148,14 @@ fwrite(well_cost_index[composite==TRUE, .(year, source, real_index_2014)], "./pr
 [Oil (West Texas Intermediate)](https://www.eia.gov/dnav/pet/hist/rwtcW.htm)
 ```{r}
 HH <- fread("./data/Henry_Hub_Natural_Gas_Spot_Price_weekly.csv")
-HH[, "Day":= as.Date(Day, format='%m/%d/%Y')]
 
 WTI <- fread("./data/Cushing_OK_WTI_Spot_Price_FOB.csv")
-WTI[, "Day":= as.Date(Day, format='%m/%d/%Y')]
 ```
 
 ```{r}
 daily_prices <- na.omit(WTI[HH, on="Day"])
+daily_prices[, "Day":= as.Date(Day, format='%m/%d/%Y')]
+daily_prices[, "year":= as.numeric(format(Day, "%Y"))]
 
 setnames(daily_prices, "Cushing OK WTI Spot Price FOB  Dollars per Barrel",          "dollars_pBBL")
 setnames(daily_prices, "Henry Hub Natural Gas Spot Price Dollars per Million Btu",   "dollars_pMMBTU")
@@ -132,7 +165,6 @@ daily_prices[, "dollars_pMCF":= 1.037 * dollars_pMMBTU]
 
 daily_prices[, "ratio_BBLpMCF":= dollars_pBBL / dollars_pMCF]
 daily_prices <- daily_prices[ratio_BBLpMCF>0]
-daily_prices[,"year":= as.numeric(format(Day, "%Y"))]
 ```
 
 ## Natural gas prices
@@ -148,8 +180,8 @@ ggplot(daily_prices[year>2010], aes(x=Day, y=dollars_pMCF)) +
     geom_hline(aes(yintercept=mean(dollars_pMCF)), color="blue") +
     labs(title="Natural gas prices since 2010", y="$ per MCF")
 
-print(daily_prices[year>2010,
-                    .("Mean"= mean(dollars_pMCF), "Median"= median(dollars_pMCF), "Std Dev"= sd(dollars_pMCF))])
+daily_prices[year>2010,
+                    .("Mean"= mean(dollars_pMCF), "Median"= median(dollars_pMCF), "Std Dev"= sd(dollars_pMCF))]
 ```
 
 ```{r}
@@ -158,8 +190,8 @@ ggplot(daily_prices[year>2003 & year<2010], aes(x=Day, y=dollars_pMCF)) +
     geom_hline(yintercept = mean(daily_prices[year>2003 & year<2010]$dollars_pMCF), color="blue") +
     labs(title="Legacy natural gas prices", y="$ per MCF")
 
-print(daily_prices[year>2003 & year<2010,
-                    .("Mean"= mean(dollars_pMCF), "Median"= median(dollars_pMCF), "Std Dev"= sd(dollars_pMCF))])
+daily_prices[year>2003 & year<2010,
+                    .("Mean"= mean(dollars_pMCF), "Median"= median(dollars_pMCF), "Std Dev"= sd(dollars_pMCF))]
 ```
 
 ```{r}
@@ -181,8 +213,8 @@ ggplot(daily_prices[year>2010], aes(x=Day, y=ratio_BBLpMCF)) +
     geom_hline(aes(yintercept = mean(ratio_BBLpMCF)), color="blue") +
     labs(title="Ratio of oil and gas prices since 2010", y="$ per BBL / $ per MCF")
 
-print(daily_prices[year>2010,
-                    .("Mean"= mean(ratio_BBLpMCF), "Median"= median(ratio_BBLpMCF), "Std Dev"= sd(ratio_BBLpMCF))])
+daily_prices[year>2010,
+                    .("Mean"= mean(ratio_BBLpMCF), "Median"= median(ratio_BBLpMCF), "Std Dev"= sd(ratio_BBLpMCF))]
 ```
 
 ```{r}
@@ -196,11 +228,11 @@ daily_prices[year>2010, {hist(ratio_BBLpMCF, freq=FALSE, breaks="scott", main=""
 and furthermore that they are willing to pay a premium of 5-20% for renewable electricity.
 ```{r}
 # Lower bound
-print(daily_prices[, summary(dollars_pMCF*1.05)])
+daily_prices[, summary(dollars_pMCF*1.05)]
 # Upper bound
-print(daily_prices[, summary(dollars_pMCF*1.2)])
+daily_prices[, summary(dollars_pMCF*1.2)]
 # Average
-print(daily_prices[, summary(dollars_pMCF*1.16)])
+daily_prices[, summary(dollars_pMCF*1.16)]
 ```
 
 Output price data
@@ -213,18 +245,16 @@ fwrite(daily_prices, "./processed/daily_prices.csv")
 [Natural gas marketed production](https://www.eia.gov/dnav/ng/hist/n9050us2m.htm)
 ```{r}
 monthly_price <- fread("./data/Henry_Hub_Natural_Gas_Spot_Price.csv")
-monthly_price[, c("Date","Month"):= .(as.Date(paste0("01", Month), "%d %b %Y"), NULL)]
 
 monthly_quantity <- fread("./data/U.S._Natural_Gas_Marketed_Production.csv")
-monthly_quantity[, "Date":= as.Date(paste0("01", Month), "%d %b %Y")]
 ```
 
 ### Combine historical prices, quantites, & supply
 ```{r}
-demand_data <- na.omit(monthly_price[monthly_quantity, on="Date"])
+demand_data <- na.omit(monthly_price[monthly_quantity, on="Month"])
+demand_data[, c("Date","Month"):= .(as.Date(paste0("01", Month), "%d %b %Y"), NULL)]
 demand_data[, "year":= as.numeric(format(Date, "%Y"))]
-demand_data[, "month":= factor(format(Date, "%b"),
-                        levels=c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"))]
+demand_data[, "month":= factor(format(Date, "%b"), levels=month.abb)]
 
 demand_data[month %in% c("Mar", "Apr", "May"), "season":= "spring"]
 demand_data[month %in% c("Jun", "Jul", "Aug"), "season":= "summer"]
@@ -238,7 +268,17 @@ demand_data[, "p":= p * 1.037]          # convert to dollars per MCF
 demand_data[, "q":= 1000*as.numeric(q)] # convert to MCF
 ```
 
-### Flag time-series outliers
+Rolling yearly minimum prices 
+```{r}
+demand_data[order(Date), "threshold":= frollapply(p, 12, min, na.rm=TRUE)]
+
+ggplot(demand_data[year>2003 & year<2010], aes(x=Date)) +
+    geom_line(aes(y=p)) +
+    geom_line(aes(y=threshold), lty=2) +
+    labs(title="Legacy natural gas prices", y="$ per MCF")
+```
+
+Flag time-series outliers
 ```{r}
 demand_data[, "outlier":= {rem = p/q - supsmu(1:.N, p/q)$y; rem_lim = boxplot.stats(rem)$stats;
                             !between(rem, min(rem_lim), max(rem_lim))}]
@@ -250,8 +290,8 @@ ggplot(melt(demand_data, measure.vars=c("p","q")), aes(x=Date, y=value, color=ou
     labs(title="Outliers in national historical natural gas prices & quantities", y="")
 ```
 
-### Price-quantity relationship
-#### All-time natural gas demand
+### Price-quantity relationship  
+All-time natural gas demand  
 ```{r}
 ggplot(demand_data, aes(x=q, y=p)) +
     geom_point() +
@@ -259,7 +299,7 @@ ggplot(demand_data, aes(x=q, y=p)) +
     labs(title="Natural gas prices and marketed production", x="Quantity (MCF)", y="Price ($)")
 ```
 
-#### Seasonal natural gas demand
+Seasonal natural gas demand  
 ```{r}
 ggplot(demand_data, aes(x=q, y=p)) +
     geom_point() +
@@ -268,7 +308,7 @@ ggplot(demand_data, aes(x=q, y=p)) +
     labs(title="Seasonal natural gas prices and marketed production", x="Quantity (MCF)", y="Price ($)")
 ```
 
-#### Monthly natural gas demand
+Monthly natural gas demand  
 ```{r}
 ggplot(demand_data, aes(x=q, y=p)) +
     geom_point() +
@@ -354,7 +394,7 @@ Output demand by sector
 fwrite(monthly_quantity_sector, "./processed/monthly_quantity_sector.csv")
 ```
 
-## Green electricity premiums
+# Green electricity premiums
 [Utility prices](https://www.eia.gov/electricity/sales_revenue_price/)
 
 Format names of [major green energy utilities](https://www.nrel.gov/analysis/assets/pdfs/green-pricing-top-10-2020-data-plus-archives.pdf) 
@@ -389,8 +429,11 @@ Percent premium using the mean residential premium per kWh.
 ```{r}
 utility_base_price[, "approx_percent_premium":= 1.6 / `Average Price (cents/kWh)`]
 
-print(summary(1.6 / utility_base_price[!is.na(utility), `Average Price (cents/kWh)`]))
+summary(1.6 / utility_base_price[!is.na(utility), `Average Price (cents/kWh)`])
 
+```
+
+```{r}
 ggplot(utility_base_price[!is.na(utility)]) +
     geom_density(aes(approx_percent_premium))
 ```
@@ -416,8 +459,10 @@ utility_premium_price[!is.na(base_cpkWh), "premium_percent":= premium_cpkWh / ba
 ```
 
 ```{r}
-print(summary(utility_premium_price[!is.na(premium_percent), premium_percent]))
+summary(utility_premium_price[!is.na(premium_percent), premium_percent])
+```
 
+```{r}
 ggplot(utility_premium_price[!is.na(premium_percent)]) +
     geom_density(aes(premium_percent))
 ```
