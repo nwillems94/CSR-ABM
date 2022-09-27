@@ -215,8 +215,8 @@ leases_emp[model_csgd_MCF>0, "opEx_pMCF":= opEx_pMCF + (612.5 * (capEx_csgd / 31
 cat("Generating representative firms\n\t")
 firms <- data.table("firmID"= 1:Params$nagents, key= "firmID",
                     # how much oil (BBL) and gas (MCF) does the firm produce each time step
-                    "oil_output"= NA_real_, "oil_revenue"= NA_real_,
-                    "gas_output"= NA_real_, "gas_revenue"= NA_real_,
+                    "oil_output"= NA_real_, "oil_revenue"= 0,
+                    "gas_output"= NA_real_, "gas_revenue"= 0,
                     "grey_gas_sold"= NA_real_, "green_gas_sold"= NA_real_, "gas_flared"= NA_real_,
                     # Valuations; costs include Operating, Mitigation, Capital Expenditures
                     "sales"= 0, "profit"= 0, "market_value"= NA_real_,

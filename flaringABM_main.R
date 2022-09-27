@@ -97,8 +97,9 @@ flaringABM_main <- function(Params, jobID, Run) {
         firms[, "profit":= sales - (cost_P + cost_M)]
         # calculates the market value based on [Baron's formulation](zotero://select/items/0_I7NL6RPA)
         # market_value = profit + dprofit - Ai - cost*xi + cost*xi*SRoR
-        firms[, "market_value":= ((oil_revenue + gas_revenue) - (cost_P + cost_M)) +    # Net income
-                                ((cost_M * ti$SRoR) - sPressure)]                       # Net social value
+        firms[, "market_value":= (oil_revenue + gas_revenue - cost_P - cost_M)/(time - ti$t0 + 1) + # Net income
+                                ((cost_M * ti$SRoR)/(time - ti$t0 + 1) - sPressure)]                # Net social value
+        firms[, "market_value":= pmax(market_value, 0)]
 
 
 
