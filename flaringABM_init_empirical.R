@@ -233,25 +233,25 @@ cat("\tAssigning oil leases to firms\n\t")
 leases_emp[, "firmID":= NA_integer_]
 
 firms[, "production_BBL":= 0]
-while(!between(sum(firms$production_BBL)/mean(market_shares[, sum(scaled_oil_BBL), by=.(CYCLE_YEAR, CYCLE_MONTH)]$V1), 0.8, 0.85)) {
-    firms[, "production_BBL":= rlnorm(.N, mean(log(market_shares$scaled_oil_BBL)),
-                                            sd(log(market_shares$scaled_oil_BBL)))]
+while(!between(sum(firms$production_BBL)/mean(market_shares[, sum(scaled_oil_BBL), by=.(CYCLE_YEAR, CYCLE_MONTH)]$V1), 0.7, 0.75)) {
+    firms[, "production_BBL":= sort(rlnorm(.N, mean(log(market_shares[scaled_oil_BBL>0, scaled_oil_BBL])),
+                                                sd(log(market_shares[scaled_oil_BBL>0, scaled_oil_BBL]))))]
 }
 
 for (ID in firms[order(production_BBL)]$firmID) {
     rem_capacity <- firms[ID, production_BBL] - leases_emp[firmID==ID, sum(total_oil_avg)]
-    while (rem_capacity - min(leases_emp[is.na(firmID) & (oil_avg>0)]$total_oil_avg) > 0) {
-        leases_emp[sample(.N, 1, prob=(is.na(firmID) & (oil_avg>0) & (rem_capacity - total_oil_avg > 0)) / log(2+csgd_avg)), "firmID":= ID]
-        rem_capacity <- firms[ID, production_BBL] - leases_emp[firmID==ID, sum(total_oil_avg)]
+    leases_emp[is.na(firmID) & (oil_avg > 0) & (total_oil_avg < rem_capacity),
+        "firmID":= replace(firmID, sample(.N, min(1+rem_capacity/mean(total_oil_avg), .N), prob= 1/capEx), ID)]
+    if (leases_emp[firmID==ID, sum(oil_avg > 0)] == 0) {
+        leases_emp[is.na(firmID) & oil_avg>0, "firmID":= replace(firmID, sample(.N, 1, prob= 1/capEx), ID)]
     }
-    leases_emp[is.na(firmID) & oil_avg>0, "firmID":= replace(firmID, which.min(oil_avg), ID)]
 }
 
 # assign gas leases to agents according to their total production
 cat("\tAssigning gas leases to firms\n\t")
 
 firms[, "production_MCF":= 0]
-while(!between(sum(firms$production_MCF)/mean(market_shares[, sum(scaled_gas_MCF), by=.(CYCLE_YEAR, CYCLE_MONTH)]$V1), 0.8, 0.85)) {
+while(!between(sum(firms$production_MCF)/mean(market_shares[, sum(scaled_gas_MCF), by=.(CYCLE_YEAR, CYCLE_MONTH)]$V1), 0.7, 0.75)) {
     firms[order(log(production_BBL) * runif(.N, 0.5, 1.5)),
             "production_MCF":= sort(rlnorm(.N, mean(log(market_shares[scaled_gas_MCF>0, scaled_gas_MCF])),
                                                 sd(log(market_shares[scaled_gas_MCF>0, scaled_gas_MCF]))))]
@@ -261,16 +261,14 @@ while(!between(sum(firms$production_MCF)/mean(market_shares[, sum(scaled_gas_MCF
 
 for (ID in firms[production_MCF>0][order(production_MCF)]$firmID) {
     rem_capacity <- firms[ID, production_MCF] - leases_emp[firmID==ID & gas_avg>0, sum(total_MCF_avg)]
-    while (rem_capacity - min(leases_emp[is.na(firmID) & (gas_avg>0)]$total_MCF_avg) > 0) {
-        leases_emp[sample(.N, 1, prob=is.na(firmID) & (gas_avg>0) & (rem_capacity - total_MCF_avg > 0)), "firmID":= ID]
-        rem_capacity <- firms[ID, production_MCF] - leases_emp[firmID==ID & gas_avg>0, sum(total_MCF_avg)]
+    leases_emp[is.na(firmID) & (gas_avg > 0) & (total_MCF_avg < rem_capacity),
+        "firmID":= replace(firmID, sample(.N, min(1+rem_capacity/mean(total_MCF_avg), .N), prob= 1/capEx), ID)]
+    if (leases_emp[firmID==ID, sum(gas_avg > 0)] == 0) {
+        leases_emp[is.na(firmID) & gas_avg>0, "firmID":= replace(firmID, sample(.N, 1, prob= 1/capEx), ID)]
     }
-    leases_emp[is.na(firmID) & gas_avg>0, "firmID":= replace(firmID, which.min(gas_avg), ID)]
 }
 
 # calculate lease lifetime in months
-
-# estimate lifetime based on remaining recoverable resource
 # estimate lifetime based on initial production rate at t_i and total production since t_i
 leases_emp[(expiration>=201912) & (decline_fun!=""),
             "q_curve":= (eval(parse(text=decline_fun))(qdel_i, -m_shift+1, param) + EUR -
@@ -283,11 +281,9 @@ leases_emp[order(-log(q_i/q_curve) * runif(.N, 0.5, 1.5)),
        "m_rem":= ifelse(expiration<201912, m_rem,
                                 sort(sample(m_rem[(start>199301) & (expiration<201912)], .N, replace=TRUE))), by=area]
 
-
 # extend lifetime by the predicted remaing months
 leases_emp[, "lifetime":= .SD[, lapply(.(t_i, start, expiration), function(x) 12*trunc(x/100) + x %% 100)][,
                             pmax(1+V3-V2, m_rem + V1-V2)]]
-
 
 # offest for delay between lease discovery and becoming operational
 leases_emp[!is.na(firmID), "lifetime":= lifetime+2]
@@ -309,7 +305,7 @@ leases[, "leaseID":= .I]
 setkey(leases, leaseID)
 
 leases[!is.na(firmID), "t_found":= Params$t0 - sample(lifetime-1, 1), by=leaseID]
-leases[!is.na(firmID) & (expiration<201912),
+leases[!is.na(firmID) & (start<201001) & (expiration<201912),
         "t_found":= .SD[, lapply(.(expiration, 201001), function(x) 12*trunc(x/100) + x %% 100)][, 1+V1-V2] - lifetime]
 
 # offset for first time step

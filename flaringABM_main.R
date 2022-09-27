@@ -34,7 +34,9 @@ flaringABM_main <- function(Params, jobID, Run) {
     portfolio_options <- optimal_strategy(firms, replace(leases, "class", ""), "", "", list("time"=Params$t0-1))
 
     # with what probability to exploring firms discover a new asset - validated based on EIA DPR
-    Params$prob_e <- 0.7 * 1.23 / (Params$nagents * Params$prop_e * leases[is.na(firmID), mean(oil_BBL+cond_BBL)])
+    Params$prob_e <- 1.23 / (Params$nagents * Params$prop_e *
+                                leases[is.na(firmID), mean(oil_BBL+cond_BBL + (gas_MCF+csgd_MCF)/6)])
+
     fwrite(as.data.table(t(unlist(Params))), file=sprintf(logOuts, Run))
     fwrite(firms, file=sprintf(agentOuts, Run))
     fwrite(leases, file=sprintf(leaseOuts, Run))

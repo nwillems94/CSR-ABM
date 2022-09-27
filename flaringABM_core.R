@@ -246,14 +246,6 @@ do_development <- function(dt_f, dt_l, dt_p, ti) {
 
 do_exploration <- function(dt_f, dt_l, ti) {
     retiring_leases <- dt_l[(lifetime + t_found + 1) == ti$time]$leaseID
-    new_discs <- dt_l[dt_f[(activity=="exploration")], on="firmID",
-                    .SD[leaseID %in% retiring_leases, sum(oil_BBL + gas_MCF/6)], by=.EACHI][,
-                        sample(firmID, sum(runif(.N) < ti$prob_e * dt_l[.(retiring_leases), sum(oil_BBL+cond_BBL)]),
-                                        prob=V1+10, replace=TRUE)]
-    # agents with no assets will discover new ones
-    new_discs <- c(new_discs, setdiff(dt_f[(activity=="exploration") & (gas_output+oil_output==0)]$firmID, new_discs))
-
-    new_output <- unique(dt_l[union(retiring_leases, which(status=="pending"))]$firmID)
 
     # new discovered leases begin as undeveloped, then progress to underdeveloped with pending production
     #  (at this point, firms can decide whether to fully develop them), then finally begin production
@@ -262,20 +254,40 @@ do_exploration <- function(dt_f, dt_l, ti) {
     # retire leases at the end of their lifetime
     dt_l[.(retiring_leases), "status":= "retired"]
 
+    N_discs <- dt_l[, dcast(.SD, firmID~OIL_GAS_CODE, fun=function(x) sum(x!="retired"), value.var="status")][
+                    dt_f[activity=="exploration"], on="firmID"][,
+                    sum(runif(.N) < ti$prob_e * dt_l[.(retiring_leases), sum(oil_BBL+cond_BBL + (gas_MCF+csgd_MCF)/6)])
+                    - sum(((O==0) & (production_BBL>0)) + ((G==0) & (production_MCF>0)))]
+
+    new_discs <- dt_l[status=="retired"][dt_f[activity=="exploration"], on="firmID"][,
+                        -sample(-firmID, max(ceiling(N_discs), 0), prob= 1 + (leaseID %in% retiring_leases))]
+
+    # agents with no assets will discover new ones
+    new_discs <- dt_l[, dcast(.SD, firmID~OIL_GAS_CODE, fun=function(x) sum(x!="retired"), value.var="status")][
+                    dt_f[activity=="exploration"], on="firmID",
+                    c(new_discs, setdiff(firmID[(O==0) & (production_BBL>0)], new_discs),
+                                setdiff(firmID[(G==0) & (production_MCF>0)], new_discs))]
+
     # probabilistically discover new leases
     if (length(new_discs)>0) {
         # prevalence of oil and gas leases among new_discs
-        weights <- dt_l[firmID %in% new_discs, .SD[status!="retired", .N], by=.(firmID, OIL_GAS_CODE)][,
-                        sum(V1*table(new_discs)[as.character(firmID)]), by=OIL_GAS_CODE][, setNames(V1, OIL_GAS_CODE)]
-        weights[setdiff(c("O","G"), names(weights))] <- 0
-        weights <- if(sum(weights)==0) replace(weights, c("O","G"), 1) else weights
+        weights <- dt_l[status=="retired"][.(new_discs), on="firmID", allow.cartesian=TRUE, nomatch=0,
+                        sum(1 + (leaseID %in% retiring_leases)), keyby=.(OIL_GAS_CODE)][
+                       .(c("O","G")), setNames(nafill(V1, fill=0), OIL_GAS_CODE)]
 
+        weights <- dt_l[is.na(firmID), .N, by=OIL_GAS_CODE][, weights[OIL_GAS_CODE] / N]
+
+        # assign newly discovered leases to firms
         new_leases <- dt_l[is.na(firmID)][sample(.N, length(new_discs), prob=weights[OIL_GAS_CODE])]
 
-        dt_l[.(new_leases[oil_BBL==0][order(-gas_MCF)]$leaseID), c("firmID", "class", "t_found"):=
-                .(dt_f[.(new_discs)][order(-production_MCF)[1:length(leaseID)], firmID], "undeveloped", ti$time)]
-        dt_l[.(new_leases[oil_BBL>0][order(-oil_BBL)]$leaseID), c("firmID", "class", "t_found"):=
-                .(dt_f[.(new_discs)][order(-production_BBL)[1:length(leaseID)], firmID], "undeveloped", ti$time)]
+        dt_l[.(new_leases$leaseID), c("class", "t_found"):= .("undeveloped", ti$time)]
+        dt_l[.(new_leases[OIL_GAS_CODE=="G"][order(-capEx), leaseID]),
+            "firmID":= dt_f[.(new_discs)][, "shift":= ifelse(production_MCF>0, exp(mean(log(1+production_MCF))), 0)][,
+                            -sample(-firmID, length(leaseID), prob= 1 + production_MCF + shift)]]
+        dt_l[.(new_leases[OIL_GAS_CODE=="O"][order(-capEx), leaseID]),
+            "firmID":= dt_f[.(new_discs)][, "shift":= ifelse(production_BBL>0, exp(mean(log(1+production_BBL))), 0)][,
+                            -sample(-firmID, length(leaseID), prob= 1 + production_BBL + shift)]]
+
     }
 
 }###--------------------    END OF FUNCTION do_exploration          --------------------###
