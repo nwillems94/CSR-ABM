@@ -336,7 +336,7 @@ wellbore_data[, &quot;lat&quot;:=  as.numeric(gsub(&quot;(\\d{3})(\\d{6})&quot;,
 wellbore_data[, &quot;lon&quot;:= -as.numeric(gsub(&quot;(\\d{3})(\\d{6})&quot;, &quot;\\1.\\2&quot;, lon))]
 wellbore_data[, &quot;depth&quot;:= as.numeric(depth)]
 wellbore_data[, &quot;start&quot;:= as.numeric(start)]
-wellbore_data[start&lt;1000, &quot;start&quot;:= NA_integer_]</code></pre>
+wellbore_data[start&lt;150000, &quot;start&quot;:= NA_integer_]</code></pre>
 <p>Get missing start dates from WB-DATE segment</p>
 <pre class="r"><code>wellbore_data[
     wellbore_full[wellbore_data[is.na(start)], on=&quot;id&quot;][
@@ -686,7 +686,7 @@ OG_LEASE_CYCLE_DISP[OG_IDS[(is.na(drop) | drop==FALSE) &amp; (expiration&lt;2019
                                     &quot;start&quot;= min(start), &quot;expiration&quot;= max(expiration),
                                     &quot;area&quot;= first(area), &quot;county&quot;= first(county), &quot;lat&quot;= first(lat), &quot;lon&quot;= first(lon),
                                     # &quot;Estimated Ultimate Recovery&quot; from emprical distribution
-                                    .SD[, sum(total_BOE), keyby=CYCLE_YEAR_MONTH][
+                                    .SD[, sum(total_BOE), keyby=CYCLE_YEAR_MONTH][CYCLE_YEAR_MONTH>=max(start)][
                                     between(CYCLE_YEAR_MONTH, CYCLE_YEAR_MONTH[which.max(V1)], 201912),
                                         #   time of peak production
                                         c(&quot;t_i&quot;= CYCLE_YEAR_MONTH[1],

@@ -156,7 +156,7 @@ wellbore_data[, "lat":=  as.numeric(gsub("(\\d{3})(\\d{6})", "\\1.\\2", lat))]
 wellbore_data[, "lon":= -as.numeric(gsub("(\\d{3})(\\d{6})", "\\1.\\2", lon))]
 wellbore_data[, "depth":= as.numeric(depth)]
 wellbore_data[, "start":= as.numeric(start)]
-wellbore_data[start<1000, "start":= NA_integer_]
+wellbore_data[start<150000, "start":= NA_integer_]
 ```
 
 Get missing start dates from WB-DATE segment
@@ -505,7 +505,7 @@ OG_LEASE_AVG <- OG_LEASE_CYCLE_DISP[OG_IDS[is.na(drop) | drop==FALSE],
                                     "start"= min(start), "expiration"= max(expiration),
                                     "area"= first(area), "county"= first(county), "lat"= first(lat), "lon"= first(lon),
                                     # "Estimated Ultimate Recovery" from emprical distribution
-                                    .SD[, sum(total_BOE), keyby=CYCLE_YEAR_MONTH][
+                                    .SD[, sum(total_BOE), keyby=CYCLE_YEAR_MONTH][CYCLE_YEAR_MONTH>=max(start)][
                                     between(CYCLE_YEAR_MONTH, CYCLE_YEAR_MONTH[which.max(V1)], 201912),
                                         #   time of peak production
                                         c("t_i"= CYCLE_YEAR_MONTH[1],
