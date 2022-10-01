@@ -1,4 +1,5 @@
 args <- commandArgs(trailingOnly=TRUE)
+args <- args[substr(args, 1, 2)!="--"]
 
 library(data.table)
 library(DBI)
@@ -33,29 +34,100 @@ write_outputs <- function(db, csv, ID, append_file) {
     }
     market_states[lease_states[dw!=0, sum((gas_MCF + csgd_MCF) * dw), by=.(model, RunID, time)],
         on=c("model", "RunID", "time"), "q_stored":= V1]
+
     market_states[, "frac":= median(readRDS(sprintf("./outputs/demand_function_%s.rds", .BY))$historical_market$frac), by=RunID]
     setcolorder(market_states, c("time", "p_grey", "p_green", "p_oil_mult", "q_grey", "q_green", "q_stored", "q_oil",
                                 "market_prop_green", "frac", "RunID", "model"))
 
     agent_states[
-        lease_states[(status=="producing"), sum(csgd_MCF[class=="underdeveloped"]) + sum(sopf_MCF),
-            by=.(model, RunID, time, firmID)],
-        on=c("model", "RunID", "time", "firmID"), "gas_flared_calc":= V1]
-    agent_states[!is.na(time) & is.na(gas_flared_calc), "gas_flared_calc":= 0]
+        # add verification / validation metrics to agent states
+        lease_states[(status=="producing"),
+                        .(sum(csgd_MCF[class=="underdeveloped"]) + sum(sopf_MCF), sum(oil_BBL), sum(gas_MCF)),
+                        by=.(model, RunID, time, firmID)],
+            on=c("model", "RunID", "time", "firmID"), c("gas_flared_calc", "oil_prod", "gas_prod"):= .(V1, V2, V3)]
+    setnafill(agent_states, cols=c("oil_prod", "gas_prod", "gas_flared_calc"), fill=0)
 
     # write outputs
+    cat("\tWriting CSVs")
     fwrite(params, sprintf("./logs/params_%s.csv.gz", csv), append=append_file)
     fwrite(market_states, sprintf("./outputs/processed/market_states_%s.csv.gz", csv), append=append_file)
     fwrite(agent_states, sprintf("./outputs/processed/agent_states_%s.csv.gz", csv), append=append_file)
 
-    dbBegin(db) # begin SQLite transaction and turn off autocommit
-    for (dt in c("params", "market_states", "agent_states", "lease_states")) {
-        if (!append_file) {
-            dbCreateTable(db, dt, get(dt))
+    # begin SQLite transaction and turn off autocommit
+    dbBegin(db)
+    cat("\tUpdating lookup table")
+    # save space by using lookup table for string definitions
+    if (!append_file) {
+        # create keyed tabled WITHOUT ROWID column
+        dbExecute(db, "CREATE TABLE string_lookup 
+                        (
+                          column_name TEXT, 
+                          string_key TEXT, 
+                          integer_key INTEGER, 
+                          PRIMARY KEY (column_name, string_key)
+                        ) WITHOUT ROWID;")
+        model_num <- 1L
+    } else {
+        model_num <- dbGetQuery(db, "SELECT MAX(integer_key) FROM string_lookup WHERE column_name='model'") + 1
+    }
+
+    # convert string columns to integers
+    dbExecute(db, "INSERT INTO string_lookup (column_name, string_key, integer_key) VALUES (?, ?, ?);",
+                   list("model", names(ID), as.integer(model_num)))
+
+    for (dt in c("agent_states", "lease_states", "market_states", "params")) {
+        get(dt)[, "model":= NULL]
+        get(dt)[, "model":= as.integer(model_num)]
+    }
+
+    for (col in c("strategy", "reporting", "activity", "behavior", "class", "status", "market", "area")) {
+        dt <- if (col %in% c("strategy", "reporting")) "params" else
+                if (col %in% c("activity", "behavior")) "agent_states" else "lease_states"
+
+        # ensure factor levels match existing records
+        if (append_file) {
+            factor_levels <- dbGetQuery(db, paste0("SELECT * FROM string_lookup WHERE column_name='", col,
+                                                    "' ORDER BY integer_key"))$string_key
+        } else {
+            factor_levels <- c()
         }
-        wrdt <- dbSendStatement(db, paste0("INSERT INTO ", dt, " VALUES(:", paste(names(get(dt)), collapse=", :"), ")"))
-        dbBind(wrdt, get(dt))
-        dbClearResult(wrdt)
+        get(dt)[is.na(get(col)), c(col):= ""]
+        get(dt)[, c(col):= factor(get(col), levels=c(factor_levels, setdiff(get(col), factor_levels)))]
+
+        # update lookup table
+        get(dt)[, .("cname"=col, "skey"=levels(get(col)), "ikey"=seq(nlevels(get(col))))][,
+            dbExecute(db, "INSERT OR IGNORE INTO string_lookup (column_name, string_key, integer_key) 
+                            VALUES (:cname, :skey, :ikey);", .SD)]
+        # cast factor to integer
+        get(dt)[, c(col):= as.integer(get(col))]
+    }
+
+    # store repeated columns of lease and agent states in separate table
+    agent_info <- agent_states[, first(.SD), by=.(model, RunID, firmID),
+                                .SDcols=patterns("^production_*")]
+    agent_states[, setdiff(names(agent_info), c("model", "RunID", "firmID")):= NULL]
+
+    lease_info <- lease_states[, .SD[which.max(time)], by=.(model, RunID, leaseID, area, DISTRICT_NO, OIL_GAS_CODE),
+                                .SDcols=-patterns("dw|^cost_*|^ERR_MCF$|^class$|^market$|^lifetime$")]
+    lease_states[, setdiff(names(lease_info), c("model", "RunID", "leaseID", "time", "status")):= NULL]
+    setnames(lease_info, "time", "t_last")
+
+    cat("\tWriting data to db\n")
+    for (dt in c("params", "market_states", "agent_info", "agent_states", "lease_info", "lease_states")) {
+        keys <- c("model", "RunID", if(!grepl("info", dt)) "time",
+                    if(grepl("agent", dt)) "firmID" else if(grepl("lease", dt)) "leaseID")
+        if (!append_file) {
+            # create keyed tabled WITHOUT ROWID column
+            sql <- sub("\n)\n$",
+                        sprintf(",\n  \\PRIMARY KEY(%s ASC) \n) WITHOUT ROWID;\n", paste(keys, collapse=" ASC, ")),
+                        as.character(sqlCreateTable(db, dt, get(dt), row.names=FALSE)))
+            dbExecute(db, sql)
+        }
+
+        # match order of primary keys to speed up write time
+        setorderv(get(dt), cols= keys)
+
+        dbExecute(db, paste0("INSERT INTO ", dt, " VALUES(:", paste(names(get(dt)), collapse=", :"), ")"), get(dt))
         rm(dt)
     }
     dbCommit(db)
@@ -68,7 +140,7 @@ print(jobIDs)
 
 if("refID" %in% names(jobIDs)) {
     file_name <- gsub("^all_states_(.*).sqlite$", "\\1",
-                    list.files(path="./outputs/processed/", pattern=sprintf("^all_states_%s-.*.sqlite$", jobIDs$refID)))
+                    list.files(path="./outputs/processed/", pattern=sprintf("^all_states_%s.*.sqlite$", jobIDs$refID)))
 } else {
     file_name <- paste(jobIDs, collapse="-")
     jobIDs <- c(jobIDs, "refID"=NA)
@@ -90,4 +162,5 @@ dbExecute(all_states, "PRAGMA analysis_limit=1000;")
 dbExecute(all_states, "PRAGMA optimize;")
 dbDisconnect(all_states)
 
+print(warnings())
 print("Finished assembling databases")

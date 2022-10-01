@@ -8,10 +8,18 @@ author: "Nick Willems"
 ```{r}
 market_shares <- fread("./inputs/processed/firm_market_shares.csv")
 
-sql <- "SELECT %s, %s, model, RunID, time, firmID FROM lease_states 
-        WHERE time IN (SELECT MIN(time) FROM lease_states UNION SELECT 0 UNION SELECT MAX(time) FROM lease_states) 
-        GROUP BY model, RunID, time, firmID"
-prod_vol <- dbGetQuery(db, sprintf(sql, "SUM(oil_BBL) AS oil_prod", "SUM(gas_MCF) AS gas_prod"))
+lookup_sql <- "SELECT %s FROM string_lookup WHERE column_name='%s' AND %s"
+
+sql <- "SELECT oil_prod, gas_prod, model, RunID, time, firmID FROM agent_states 
+        WHERE time IN (SELECT MIN(time) FROM agent_states UNION SELECT 0 UNION SELECT MAX(time) FROM agent_states)"
+
+prod_vol <- dbGetQuery(db, sql)
+
+setDT(prod_vol)
+
+prod_vol[, "model":= as.character(model)]
+prod_vol[, "model":= as.character(dbGetQuery(db, sprintf(lookup_sql,
+                                    "string_key", "model", paste0("integer_key=", .BY)))), by=model]
 
 print(head(prod_vol))
 ```
@@ -79,12 +87,23 @@ ggplot(agent_states[, sum(gas_flared) / sum(oil_output), by=.(model, RunID, time
 
 ## Rate of asset retirement and acquisition
 ```{r}
-sql <- sprintf("SELECT %1$s, %1$s, model, RunID, time FROM lease_states GROUP BY model, RunID, time",
-                "SUM(CASE WHEN %s THEN oil_BBL+cond_BBL ELSE 0 END) AS %s")
+sql <- "SELECT %1$s, model, RunID, %2$s FROM lease_info GROUP BY model, RunID, %2$s"
 
-prod <- dbGetQuery(db, sprintf(sql, "status='retired'", "ret_BBL", "t_found=time", "new_BBL"))
+new_prod <- dbGetQuery(db, sprintf(sql, "SUM(oil_BBL+cond_BBL) AS new_BBL", "t_found"))
+ret_prod <- dbGetQuery(db, sprintf(sql, sprintf("SUM(CASE WHEN status=(%s) THEN oil_BBL+cond_BBL ELSE 0 END) AS ret_BBL",
+                                   sprintf(lookup_sql, "integer_key", "status", "string_key='retired'")), "t_last"))
 
-setDT(prod)
+setDT(new_prod)
+setDT(ret_prod)
+prod <- ret_prod[new_prod, on=c("model", "RunID", t_last="t_found")][t_last>=min(ret_prod$t_last)]
+
+prod[, "model":= as.character(model)]
+prod[, "model":= as.character(dbGetQuery(db, sprintf(lookup_sql,
+                                    "string_key", "model", paste0("integer_key=", .BY)))), by=model]
+
+setnames(prod, "t_last", "time")
+setnafill(prod, cols=c("ret_BBL", "new_BBL"), fill=0)
+
 prod[, "ratio":= new_BBL / ret_BBL]
 prod[(new_BBL==0) & (ret_BBL==0), "ratio":= 0]
 
@@ -104,11 +123,25 @@ ggplot(prod[time>min(time)], aes(x=time, y=ratio, group=model)) +
 
 ## Market Dynamics
 ```{r}
-sql <- "SELECT gas_MCF, csgd_MCF, opEx_pMCF, market, RunID, model FROM lease_states
-        WHERE time=(SELECT MAX(time) FROM lease_states) AND market IN ('green','grey') AND (gas_MCF>0 OR csgd_MCF>0)
+sql <- "SELECT %1$s.gas_MCF, %1$s.csgd_MCF, %1$s.opEx_pMCF, %2$s.market, %2$s.RunID, %2$s.model FROM %2$s 
+        INNER JOIN %1$s ON %2$s.leaseID=%1$s.leaseID AND %1$s.RunID=%2$s.RunID AND %1$s.model=%2$s.model 
+            AND %2$s.time=(SELECT MAX(time) FROM %2$s) 
+            AND %2$s.market IN (%3$s) 
+            AND (%1$s.gas_MCF>0 OR %1$s.csgd_MCF>0) 
         ORDER BY opEx_pMCF ASC"
-gas_supply <- dbGetQuery(db, sql)
+
+gas_supply <- dbGetQuery(db, sprintf(sql, "lease_info", "lease_states",
+                               sprintf(lookup_sql, "integer_key", "market", "string_key IN ('green','grey')")))
+
 setDT(gas_supply)
+gas_supply[, "model":= as.character(model)]
+gas_supply[, "model":= as.character(dbGetQuery(db, sprintf(lookup_sql,
+                                    "string_key", "model", paste0("integer_key=", .BY)))), by=model]
+
+gas_supply[, "market":= as.character(market)]
+gas_supply[, "market":= as.character(dbGetQuery(db, sprintf(lookup_sql,
+                                    "string_key", "market", paste0("integer_key=", .BY)))), by=market]
+
 gas_supply[, "q_sup":= cumsum(gas_MCF+csgd_MCF), by=.(model, RunID, market)]
 gas_supply[market_history, on=c("model","RunID"), "max_prop_green":= market_prop_green]
 
