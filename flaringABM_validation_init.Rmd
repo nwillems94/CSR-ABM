@@ -17,7 +17,7 @@ print(leases_emp[OIL_GAS_CODE=="G", summary(N)])
 
 Expect a capital expenditures to be about [$7/BOE](zotero://select/items/0_BSNIWDAF)
 ```{r}
-leases_emp[, cat("All leases:", sum(capEx) / sum(EUR), "\t Assigned leases:", .SD[!is.na(firmID), sum(capEx) / sum(EUR)])]
+leases[, cat("All leases:", sum(capEx) / sum(EUR), "\t Assigned leases:", .SD[!is.na(firmID), sum(capEx) / sum(EUR)])]
 ```
 
 ## Operating costs per MCF of gas at oil and gas leases  
