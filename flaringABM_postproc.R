@@ -12,7 +12,7 @@ write_outputs <- function(db, csv, ID, append_file) {
     params_wide[, "RunID":= .I]
     params <- melt(params_wide, measure.vars=patterns("market_prop_green","prob_m","SRoR", "Activism"),
                 variable="time", value.name=c("market_prop_green","prob_m","SRoR", "Activism"), variable.factor=FALSE)
-    params[, names(params[, -c("refID","strategy")]):= lapply(.SD[, -c("refID","strategy")], as.numeric)]
+    params[, names(params[, -c("refID","strategy","reporting")]):= lapply(.SD[, -c("refID","strategy","reporting")], as.numeric)]
     params[, "time":= time - 1 + t0]
     params[refID=="", "refID":= NA]
 

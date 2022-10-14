@@ -41,7 +41,8 @@ Params <<- list(
     "p_low"=1.07, "p_high"=1.3,
     # Activities
     "prop_e" = 11/12, # what proportion of firms engage in exploration activities in a given time step
-    "prob_m" = 1      # probability that a follower will mimic a leader if they observe them mitigating
+    "prob_m" = 1,     # probability that a follower will mimic a leader if they observe them mitigating
+    "reporting" = "accurate" # are reported empirical flared volumes accurate
 )
 
 # update parameters from command-line arguments

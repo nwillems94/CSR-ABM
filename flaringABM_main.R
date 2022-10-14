@@ -40,6 +40,39 @@ flaringABM_main <- function(Params, jobID, Run) {
     }
     cat("...Running...\n\t")
 
+    if (Params$reporting!="accurate") {
+        leases[capEx_csgd>0, "opEx_pMCF":= opEx_pMCF - (612.5 * (capEx_csgd / 31250) / csgd_MCF)]
+        leases[!is.na(firmID) & (csgd_MCF>0) & (class=="developed"), "t_switch":= NA_integer_]
+        leases[!is.na(firmID) & (csgd_MCF>0) & (class=="developed"), "class":= "underdeveloped"]
+
+        if (Params$reporting == "misreported") {
+            # assume flared casinghead volumes are mis-reported as captured and up to 3 times as much gas is actually flared
+            leases[capEx_csgd>0, "capEx_csgd":=
+                    {"flared_MCF"= csgd_MCF - 6 * (BOE_emp - oil_BBL);
+                    31250 * ceiling(pmin(3*flared_MCF, csgd_MCF)/5475)}]
+        } else if (Params$reporting == "underreported") {
+            # assume flared casinghead volumes are under-reported and 3 times as much gas is actually flared
+            leases[capEx_csgd>0, c("capEx_csgd", "sopf_MCF", "csgd_MCF"):=
+                    {"flared_MCF"= csgd_MCF - 6 * (BOE_emp - oil_BBL);
+                    .(31250 * ceiling(3*flared_MCF/5475),
+                    (csgd_MCF + (2 * flared_MCF)) * sopf_MCF / csgd_MCF,
+                    csgd_MCF + (2 * flared_MCF))}]
+        }
+
+        leases[capEx_csgd>0, "opEx_pMCF":= opEx_pMCF + (612.5 * (capEx_csgd / 31250) / csgd_MCF)]
+        leases[!is.na(firmID) & (csgd_MCF>0) & ((Params$t0 - t_found)>=120),
+                "class":= replace(class, opEx_pMCF + (capEx_csgd / csgd_MCF / lifetime) < 5, "developed")]
+        leases[!is.na(firmID) & (csgd_MCF>0) & (class=="developed"), "t_switch":= t_found]
+
+        # calculate lease operating expenses
+        leases[, sprintf("cost_%s", c("oil","csgd","gas")):= lease_costs(.SD)]
+
+        # initial flaring intensity
+        firms[leases[!is.na(firmID), .(sum(oil_BBL+cond_BBL), sum(gas_MCF), sum(csgd_MCF[class=="underdeveloped"]) + sum(sopf_MCF)), by=firmID],
+                on="firmID", c("oil_output", "gas_output", "gas_flared"):= .(V1, V2, V3)]
+        firms[, "behavior":= ifelse(gas_flared/oil_output > Params$threshold, "flaring", "economizing")]
+    }
+
     if (market_history[, all(is.na(p_grey))]) {
         # initialize dummy portfolio options (abuses lack of type-checking)
         portfolio_options <- optimal_strategy(firms, replace(leases, "class", ""), "", "", list("time"=Params$t0-1))
