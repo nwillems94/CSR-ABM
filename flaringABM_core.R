@@ -32,6 +32,9 @@ dist_social_pressure <- function(dt_f, ti, focus=1) {
         dt_f[behavior=="flaring", "sPressure":= a * gas_output / sum(gas_output)]
     } else if (ti$strategy=="oil_output") {
         dt_f[behavior=="flaring", "sPressure":= a * oil_output / sum(oil_output)]
+    } else if (ti$strategy=="top") {
+        dt_f[.(dt_f[behavior=="flaring"][order(-gas_flared), firmID[1:min(5, .N)]]),
+                "sPressure":= a * gas_flared / sum(gas_flared)]
     }
     # pressure on leader firms
     else if (ti$strategy=="leaders") {
