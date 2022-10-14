@@ -10,29 +10,44 @@ flaringABM_main <- function(Params, jobID, Run) {
         saveRDS(demand, sprintf("./outputs/demand_function_%s.rds", Run))
         firms[, "RunID":= Run]
         leases[, "RunID":= Run]
+
+        market_history <- data.table("time"=Params$t0:Params$tf, key="time",
+                                    "p_grey"= NA_real_, "p_green"= NA_real_,
+                                    "p_oil_mult"= with(Params, rlnorm(1+tf-t0, oil_price_mean, oil_price_sd)),
+                                    "q_grey"= NA_real_, "q_green"= NA_real_, "q_oil"= NA_real_,
+                                    "market_prop_green"= Params$market_prop_green,
+                                    "RunID"= Run)
     } else {
         demand <- readRDS(sprintf("./outputs/demand_function_%s.rds", Run))
         # update default arguments if necessary
         with(environment(demand$new_schedule),
             formals(new_schedule) <-  c(alist(prop_green=, sample_set=list()), Params[c("p_low", "p_high")]))
-        firms <- fread(cmd=sprintf('grep "RunID$\\|,%d$" ./outputs/agent_states_%s.csv', Run, Params$refID), nrow=Params$nagents,
-                        colClasses=list(numeric=c("cost_M","sPressure","grey_gas_sold","green_gas_sold"), character="activity"))
+        firms <- fread(sprintf("./outputs/agent_states_%s-%s.csv", Params$refID, Run),
+                        colClasses=list(numeric=c("sPressure", "grey_gas_sold"), character="activity"))[
+                    time==Params$t0 - 1]
         setkey(firms, firmID)
-        leases <- fread(cmd= sprintf('grep "RunID$\\|,%d$" ./outputs/lease_states_%s.csv', Run, Params$refID),
-                        nrow= length(count.fields("./inputs/processed/leases_emp.csv")) - 1,
-                        colClasses= list(integer="t_switch", numeric="cost_csgd"))
+
+        leases <- fread(sprintf("./outputs/lease_states_%s-%s.csv", Params$refID, Run),
+                        colClasses= list(integer="t_switch", numeric="cost_csgd"))[
+                    time<Params$t0][!duplicated(leaseID, fromLast=TRUE)]
+        leases[, "time":= Params$t0 - 1]
         setkey(leases, leaseID)
+
+        market_history <- fread(sprintf("./outputs/market_states_%s-%s.csv", Params$refID, Run))
+        market_history[time >= Params$t0, c("p_grey", "p_green", "q_grey", "q_green", "q_oil"):= NA_real_]
+        market_history[time >= Params$t0, "market_prop_green":= Params$market_prop_green]
+        setkey(market_history, time)
     }
     cat("...Running...\n\t")
-    market_history <- data.table("time"=Params$t0:Params$tf, key="time",
-                                "p_grey"= NA_real_, "p_green"= NA_real_,
-                                "p_oil_mult"= with(Params, rlnorm(1+tf-t0, oil_price_mean, oil_price_sd)),
-                                "q_grey"= NA_real_, "q_green"= NA_real_, "q_oil"= NA_real_,
-                                "market_prop_green"= Params$market_prop_green,
-                                "RunID"= Run)
 
-    # initialize dummy portfolio options (abuses lack of type-checking)
-    portfolio_options <- optimal_strategy(firms, replace(leases, "class", ""), "", "", list("time"=Params$t0-1))
+    if (market_history[, all(is.na(p_grey))]) {
+        # initialize dummy portfolio options (abuses lack of type-checking)
+        portfolio_options <- optimal_strategy(firms, replace(leases, "class", ""), "", "", list("time"=Params$t0-1))
+    } else {
+        t1 <- c(as.list(market_history[!is.na(p_grey), last(.SD[, c("time", "market_prop_green")])]),
+                Params["threshold"], "SRoR"=0)
+        portfolio_options <- optimal_strategy(firms, leases, market_history, demand$new_schedule(t1$market_prop_green), t1)
+    }
 
     # with what probability to exploring firms discover a new asset - validated based on EIA DPR
     Params$prob_e <- 1.23 / (Params$nagents * Params$prop_e *
@@ -47,6 +62,7 @@ flaringABM_main <- function(Params, jobID, Run) {
     for (ti in split(as.data.table(c("time"=list(Params$t0:Params$tf), Params)), by="time")) {
 
         cat("\r\t|", strrep("*", floor((options("width")[[1]]-12) * (ti$time - Params$t0) / (Params$tf-Params$t0))))
+        ti$period <- with(ti, time - min(market_history$time) + 1)
         leases[, "time":= ti$time]
         firms[, "time":= ti$time]
 
@@ -98,8 +114,8 @@ flaringABM_main <- function(Params, jobID, Run) {
         firms[, "profit":= sales - (cost_P + cost_M)]
         # calculates the market value based on [Baron's formulation](zotero://select/items/0_I7NL6RPA)
         # market_value = profit + dprofit - Ai - cost*xi + cost*xi*SRoR
-        firms[, "market_value":= (oil_revenue + gas_revenue - cost_P - cost_M)/(time - ti$t0 + 1) + # Net income
-                                ((cost_M * ti$SRoR)/(time - ti$t0 + 1) - sPressure)]                # Net social value
+        firms[, "market_value":= (oil_revenue + gas_revenue - cost_P - cost_M)/ti$period +  # Net income
+                                ((cost_M * ti$SRoR)/ti$period - sPressure)]                 # Net social value
         firms[, "market_value":= pmax(market_value, 0)]
 
 

@@ -227,7 +227,8 @@ ggplot(market_history, aes(x=time, group=RunID, color=as.factor(RunID))) +
 
 Storage and withdrawls compared to scaled [Texas capacity](https://www.eia.gov/dnav/ng/ng_sum_lsum_dcu_STX_m.htm)
 ```{r, fig.height=7.5}
-ggplot(market_history[order(time), .(time, "net"= cumsum(q_stored), "frac"= mean(frac)), by=.(model, RunID)]) +
+ggplot(market_history[!is.na(q_stored)][order(time),
+                        .(time, "net"= cumsum(q_stored), "frac"= mean(frac)), by=.(model, RunID)]) +
     geom_line(aes(x=time, y=net, group=RunID, color=as.factor(RunID)), alpha=0.4) +
     geom_hline(aes(yintercept= mean(frac) * 400000 * 1000), color='darkred', linetype='dashed') +
     annotate("text", x=0, y=0.9*400000*1000*mean(market_history$frac),
