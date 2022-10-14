@@ -143,11 +143,16 @@ optimal_strategy <- function(dt_f, dt_l, dt_m, demand_schedule, ti) {
                     "sopf_MCF"= sum(sopf_MCF),
                     # historical (pessimistic) grey gas market price
                     "p_grey"= min(tail(dt_m[time<=ti$time]$p_grey, 12), na.rm=TRUE),
+                    "p_green"= min(tail(dt_m[time<=ti$time]$p_green, 12), na.rm=TRUE),
                     "base_perm"=list(), "green_perm"=list()),
                 keyby=firmID][lengths(leaseIDs)>0]
+
+    # add firm attributes
+    dt_p[dt_f, on="firmID", "activity":= activity]
+
     # firms not doing development only consider pending leases
-    dt_p[dt_f[activity=="exploration"], on="firmID",
-        "leaseIDs":= .(.(dt_l[(firmID==.BY) & (status=="pending") & (class=="underdeveloped"), leaseID])), by=.EACHI]
+    dt_p[activity=="exploration",
+        "leaseIDs":= .(.(dt_l[(firmID==.BY) & (status=="pending") & (class=="underdeveloped"), leaseID])), by=firmID]
 
     # develop leases which would have an average cost below the conventional market price for gas
     dt_p[, "base_perm":= cbind(dt_l, AC_pMCF)[leaseIDs, .(.(as.numeric(AC_pMCF<p_grey)))], by=firmID]
@@ -156,7 +161,8 @@ optimal_strategy <- function(dt_f, dt_l, dt_m, demand_schedule, ti) {
     dt_p[, "K":= sopf_MCF + dt_l[leaseIDs, (1-base_perm[[1]]) %*% csgd_MCF] - (ti$threshold * prod_BBL), by=firmID]
     dt_p[sopf_MCF > (ti$threshold * prod_BBL), "K":= NA]
 
-    dt_p[dt_f[activity=="exploration"], on="firmID", "green_perm":= base_perm, by=.EACHI]
+    dt_p[activity=="exploration", "green_perm":= base_perm, by=firmID]
+
     dt_p[lengths(green_perm)<lengths(base_perm),
         "green_perm":= .(ifelse(K<=0 | is.na(K), base_perm,
                             Map(pmax, base_perm, dt_l[leaseIDs, shift(cumsum(csgd_MCF)<K, fill=1)]))), by=firmID]
@@ -180,20 +186,15 @@ optimal_strategy <- function(dt_f, dt_l, dt_m, demand_schedule, ti) {
                                 # account for whether gas is sold
                                 (p_grey * (opEx_pMCF<=p_grey))], by=firmID]
         } else {
-            is_green <- dt_l[, (leaseID %in% dt_p[, unlist(leaseIDs)[as.logical(unlist(green_perm))]]) |
-                                ((class=="developed") & ((lifetime + t_found - 1) > ti$time))]
-
-            dt_p[is.na(gas_revenue_add), c("cutoff","cp_green"):=
-                    market_allocation(dt_l[, replace(.SD, "market", ifelse(is_green & (firmID==.BY), "green", market))],
-                                        demand_schedule, .BY, p_grey)[, .(cutoff, cp_green)], by=firmID]
-
+            # allocate assets assuming pessimistic prices
             dt_p[is.na(gas_revenue_add), "green_revenue":=
                 dt_l[(firmID==.BY) & ((lifetime + t_found - 1) > ti$time),
                                 # account for existing and green leases
                                 (nafill(green_perm[[1]][match(leaseID, leaseIDs[[1]])], fill=1) * ERR_MCF) %*%
                                 # account for where gas is sold
-                                (ifelse((opEx_pMCF>cutoff) & (opEx_pMCF<=cp_green), cp_green,
+                                (ifelse((opEx_pMCF>p_grey) & (opEx_pMCF<=p_green), p_green,
                                         ifelse(opEx_pMCF<=p_grey, p_grey, 0)))], by=firmID]
+
         }
 
         # calculate revenue under base scenario
@@ -211,10 +212,11 @@ optimal_strategy <- function(dt_f, dt_l, dt_m, demand_schedule, ti) {
     # update market conditions weighted by investment horizon
     dt_p[dt_f, on="firmID", "sPressure":= sPressure * max(dt_l[firmID==.BY, lifetime + t_found - ti$time - 1]), by=.EACHI]
 
+
     # is casinghead gas capture economical even without social pressure?
     dt_p[, "economical":= ((K<=0) | (gas_revenue_add > cost_M_add))]
     dt_p[, "option":= fifelse(economical==TRUE, "green", NA_character_, na=NA_character_)]
-    dt_p[dt_f[activity=="exploration"], on="firmID", "option":= replace(option, is.na(option), "grey")]
+    dt_p[activity=="exploration", "option":= replace(option, is.na(option), "grey")]
 
     # if the possible threat outweighs the cost, exercise the mitigation option
     dt_p[is.na(option), "option":= ifelse((cost_M_add * (1-ti$SRoR)) - gas_revenue_add < sPressure, "green", "grey")]
@@ -231,10 +233,12 @@ optimal_strategy <- function(dt_f, dt_l, dt_m, demand_schedule, ti) {
 
 }###--------------------    END OF FUNCTION optimal_strategy        --------------------###
 
+
 do_development <- function(dt_f, dt_l, dt_p, ti) {
     ## Update lease attributes
     # update lease classes to reflect new development
     dt_l[.(dt_p[, unlist(devIDs)]), c("class", "t_switch"):= .("developed", ti$time)]
+
     # update the break down of operating costs
     dt_l[.(dt_p[, unlist(devIDs)]), sprintf("cost_%s", c("oil","csgd","gas")):= lease_costs(.SD)]
 
@@ -304,7 +308,7 @@ market_price <- function(dt_l, demand_schedule, market_segment) {
     # market price from intersection of supply and demand
     price <- dt_l[market==market_segment][order(opEx_pMCF)][,
                     # supply curve
-                    {"p"= c(0,opEx_pMCF); "q"=c(0,cumsum(gas_MCF+csgd_MCF));
+                    {"p"= c(0, opEx_pMCF); "q"= c(0, cumsum(gas_MCF+csgd_MCF));
                     # price willing to be paid at every point of supply curve
                     "p_demand"= demand_schedule(q)[, get(paste0("p_", market_segment))];
                     # intersection of supply and demand
@@ -317,21 +321,52 @@ market_price <- function(dt_l, demand_schedule, market_segment) {
 
 market_allocation <- function(dt_l, demand_schedule, firmIDs, mp_grey) {
 
-    max_profit <- dt_l[(market=="green") & (firmID %in% firmIDs)][order(opEx_pMCF)][,
-                    .("leaseIDs"= c(NA_integer_, leaseID), "cutoff"= c(0, opEx_pMCF)), by=firmID]
+    q_green <- dt_l[market=="green", sum(gas_MCF+csgd_MCF)]
+    b_green <- demand_schedule(0)$p_green
+
+    q_shift <- 0
+    if (b_green < mp_grey) {
+        # leave the green market if the max(mp_green) < mp_grey
+        q_shift <- -Inf
+    } else if (q_green > 0) {
+        # upper bound on q_shift by assuming supply curve is vertical at intersection with demand
+        q_shift <- -q_green * (1 - (mp_grey - b_green) / (demand_schedule(q_green/100)$p_green - b_green) / 100)
+    }
+
+    max_profit <- dt_l[firmID %in% firmIDs][order(opEx_pMCF),
+                        .SD[!is.na(market) & (opEx_pMCF<=mp_grey)][,
+                        .("leaseIDs"= c(NA_integer_, leaseID), "cutoff"= c(0, opEx_pMCF))], by=firmID]
+
+    max_profit[, "sequence":= seq(.N), by=firmID]
+    if (q_shift<0) {
+        # green price lower than grey price, need to remove q_shift or more units from green to grey
+        max_profit[dt_l[market=="green"], on=c(leaseIDs="leaseID"), "MCF":= gas_MCF+csgd_MCF]
+        max_profit[, "sequence":= replace(sequence, cumsum(nafill(MCF, fill=0)) < -q_shift, NA), by=firmID]
+    } else if (q_shift>0) {
+        # green price higher than grey price, can add at most q_shift units from grey to green
+        max_profit[dt_l[market=="grey"], on=c(leaseIDs="leaseID"), "MCF":= gas_MCF+csgd_MCF]
+        max_profit[, "sequence":= replace(sequence, rev(cumsum(rev(nafill(MCF, fill=0)))) > q_shift, NA), by=firmID]
+    }
+    max_profit[, "sequence":= replace(sequence, .N, .N), by=firmID]
+
+    max_profit[, "cp_green":= if(.N==1) market_price(dt_l, demand_schedule, "green") else NA_real_, by=firmID]
 
     # Cournot price in the green market at each level of allocation
-    max_profit[, "cp_green":= sapply(1:.N, function(x) market_price(dt_l[!.(leaseIDs[1:x])], demand_schedule, "green")),
-            by=firmID]
+    max_profit[is.na(cp_green), "cp_green":=
+        dt_l[, replace(.SD, "market", ifelse((firmID==.BY) & !is.na(market), "green", market))[,
+            sapply(sequence, function(x)
+                if (is.na(x)) NA else market_price(.SD[!.(leaseIDs[1:x])], demand_schedule, "green"))]], by=firmID]
+
+    max_profit[, "cp_green":= replace(cp_green, (cp_green<=mp_grey) & (sequence<.N), NA), by=firmID]
 
     # revenue given output allocation between markets
-    max_profit[, "revenue":= dt_l[firmID==.BY][order(opEx_pMCF),
-                                    c(gas_MCF+csgd_MCF) %*% sapply(1:length(leaseIDs), function(x)
-                                                                ifelse((opEx_pMCF>cutoff[x]) & (opEx_pMCF<=cp_green[x]),
-                                                                    cp_green, ifelse(opEx_pMCF<=mp_grey, mp_grey, 0)))],
-            by=firmID]
+    max_profit[!is.na(cp_green), "revenue":=
+        dt_l[(firmID==.BY)][order(opEx_pMCF),
+            c(gas_MCF+csgd_MCF) %*% sapply(1:length(leaseIDs), function(x)
+                                        ifelse((opEx_pMCF>cutoff[x]) & (opEx_pMCF<=cp_green[x]),
+                                                cp_green[x], ifelse(opEx_pMCF<=mp_grey, mp_grey, 0)))], by=firmID]
 
-    return(max_profit[, .SD[which.max(revenue)], by=firmID])
+    return(max_profit[!is.na(revenue), .SD[which.max(revenue)], by=firmID])
 
 }###--------------------     END OF FUNCTION market_allocation      --------------------###
 
@@ -342,30 +377,27 @@ clear_gas_markets <- function(dt_f, dt_l, dt_m, demand_schedule, ti) {
                         replace(market, is.na(market) | market=="none", "grey"), NA)]
     dt_l[dt_f[behavior=="flaring"], on="firmID", "market":= replace(market, !is.na(market), "grey")]
 
-    if(ti$market_prop_green>0) {
+    if (ti$market_prop_green>0) {
         # market conditions under previous market allocations
-        if(dt_l[market=="green", .N==0]) {
-            # first approximation allocates all eligible leases to the green market
-            dt_l[dt_f[behavior!="flaring"], on="firmID", "market":= replace(market, !is.na(market), "green")]
-        }
-
-        # clear the green market first
-        mp0_green <- market_price(dt_l, demand_schedule, "green")
-        # supply not purchased in the green market falls back to the grey market
-        dt_l[(market=="green") & (opEx_pMCF > mp0_green), "market":= "grey"]
-        # clear grey market with remaining supply
         mp0_grey <- market_price(dt_l, demand_schedule, "grey")
         dt_l[(market=="grey") & (opEx_pMCF > mp0_grey), "market":= "none"]
 
-        dt_l[dt_f[behavior!="flaring"], on="firmID", "market":= replace(market, market=="none", "green")]
+        # developing firms determine how to allocate production between green and grey markets
+        optimal_allocation <- dt_f[(behavior!="flaring") & (activity=="development"),
+                                    market_allocation(dt_l[!is.na(market)], demand_schedule, firmID, mp0_grey)]
 
-        # determine how to allocate production between green and grey markets
-        if (dt_l[market=="green", .N] > 0) {
-            optimal_allocation <- market_allocation(dt_l, demand_schedule, dt_f$firmID, mp0_grey)
-            dt_l[optimal_allocation, on="firmID",
-                "market":= replace(market, (market=="green") & (opEx_pMCF<=cutoff), "grey"), by=.EACHI]
-        }
+        # determine whether current allocation is above or below the target setpoint
+        optimal_allocation[dt_l[, max(c(0, opEx_pMCF[market=="grey"])), by=firmID], on="firmID", "error":= V1 - cutoff]
+
+        # take one step towards the target setpoint
+        ## move lowest opEx lease out of green market or
+        dt_l[optimal_allocation[error < 0], on="firmID",
+                "market":= replace(market, which.max(rank(-opEx_pMCF) * (market=="green")), "grey"), by=.EACHI]
+        ## move highest opEx lease into green market
+        dt_l[optimal_allocation[error > 0], on="firmID",
+                "market":= replace(market, which.max(rank(opEx_pMCF) * (market!="green")), "green"), by=.EACHI]
     }
+
 
     # determine market prices based on agent allocations
     # clear green market first
