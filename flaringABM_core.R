@@ -98,25 +98,25 @@ calc_credits <- function(dt_f, market) {
 #*
 #*** FIRM ACTIVITIES ***#
 #*
-imitators <- function(dt_f, ti, success_metric="sales") {
+imitators <- function(dt_f, dt_p, ti, success_metric="sales") {
     # determine who is an imitator - less successful followers mimic more successful leaders
     # following Leary & Roberts "success" can be defined in terms of sales (market share), profit, or market_value
-    imitators <- dt_f[, .(firmID, behavior, activity, "weight"= log(1+get(success_metric)))][
+    observations <- dt_f[, {"weight"= 1+get(success_metric);
                             # agents doing exploration cannot imitate
-                            (activity!="exploration") &
-                            # moderate rate of imitation
-                            (runif(.N) < ti$prob_m) &
-                            # less sucessful agents are more likely to imitate
-                            (runif(.N) > weight / max(weight)) &
+                            "I"= which(activity=="development");
+                            .("observer"= firmID[I], "weight"= weight[I], "imitation"= NA_character_,
                             # more successful agents are more likely to be imitated
-                            sapply(seq(.N), function(x)
-                                # the most succeessful agent has no one to imitate
-                                if (weight[x]==max(weight)) FALSE
-                                # agents imitate as or more successful agents (besides themselves)
-                                else sample(behavior[-x], 1, prob= pmax(weight[-x] - 0.95*weight[x], 0))!="flaring"),
-                        firmID]
+                            "observed"= sapply(I, function(x) sample(behavior[-x], 1, prob=weight[-x])))}]
 
-    return(imitators)
+    ## agents considering staying grey may instead copy other green firms
+    observations[dt_p[(option=="grey") & !is.na(K)], on=c(observer="firmID"),
+            "imitation":= replace(imitation, observed %in% c("economizing", "mitigating", "imitating"), "green")]
+    ## agents considering going green may change its mind (as long as it's not happening because of standard development)
+    observations[dt_p[(option=="green") & (K>0)], on=c(observer="firmID"),
+            "imitation":= replace(imitation, observed=="flaring", "grey")]
+
+    # moderate rate of imitation, less sucessful agents are more likely to imitate
+    return(observations[sample(.N, sum(runif(.N)<ti$prob_m), prob=1/weight)][!is.na(imitation)]$observer)
 
 }###--------------------    END OF FUNCTION imitators               --------------------###
 
@@ -221,9 +221,13 @@ optimal_strategy <- function(dt_f, dt_l, dt_m, demand_schedule, ti) {
     # if the possible threat outweighs the cost, exercise the mitigation option
     dt_p[is.na(option), "option":= ifelse((cost_M_add * (1-ti$SRoR)) - gas_revenue_add < sPressure, "green", "grey")]
 
-    # imitators will mitigate even if it is not strictly more economical
-    dt_p[option=="grey", "imitation":= (firmID %in% imitators(dt_f, ti)) & (economical==FALSE)]
-    dt_p[imitation==TRUE, "option":= "green"]
+    # imitators will ignore economics and copy a the behavior of a successful firm
+    # reverse decision because of imitation
+    dt_p[, "imitation":= (firmID %in% imitators(dt_f, dt_p, ti))]
+    dt_p[imitation==TRUE, "option":= unname(c("grey"="green", "green"="grey")[option])]
+    # only register grey-to-green as imitators
+    dt_p[(imitation==TRUE) & (option=="grey"), "imitation":= FALSE]
+
 
     # optimal decision for which assets to developed
     dt_p[!is.na(option), "devIDs":= Map(`[`, leaseIDs,
