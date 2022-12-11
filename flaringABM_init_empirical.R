@@ -316,9 +316,9 @@ leases[!is.na(firmID) & ERR_MCF>0, "ERR_MCF":= ERR_MCF + (gas_MCF+csgd_MCF)]
 
 leases[!is.na(firmID), c("class", "status", "market"):=
         .(ifelse(csgd_MCF>0, "underdeveloped", "developed"), "producing", "grey")]
-# historically (2004-2010), gas prices were much higher (~$7/MCF). Develop leases which are at least 10 years old accordingly
+# historically (2004-2010), gas prices were much higher (~5/MCF). Develop leases accordingly
 leases[!is.na(firmID) & csgd_MCF>0 & ((Params$t0 - t_found)>=120),
-        "class":= replace(class, opEx_pMCF + (capEx_csgd / csgd_MCF / lifetime) < 7, "developed")]
+        "class":= replace(class, opEx_pMCF + (capEx_csgd / csgd_MCF / lifetime) < 5, "developed")]
 leases[!is.na(firmID) & (csgd_MCF>0) & (class=="developed"), "t_switch":= t_found]
 
 # calculate lease operating expenses
