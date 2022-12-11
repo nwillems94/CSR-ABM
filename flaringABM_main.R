@@ -6,6 +6,7 @@ flaringABM_main <- function(Params, jobID, Run) {
     ti <- lapply(Params, `[[` , 1)
 
     if (is.na(Params$refID)) {
+        set.seed(Run)
         source("./flaringABM_init_empirical.R", local=TRUE)
         saveRDS(demand, sprintf("./outputs/demand_function_%s.rds", Run))
         firms[, "RunID":= Run]
@@ -73,12 +74,16 @@ flaringABM_main <- function(Params, jobID, Run) {
         firms[, "behavior":= ifelse(gas_flared/oil_output > Params$threshold, "flaring", "economizing")]
     }
 
+    # unique random seed for consistent results across model runs
+    seed_base <- market_history[, (Run * 10^floor(1 + log10(max(time) - min(time) + 1))) - min(time)]
+
     if (market_history[, all(is.na(p_grey))]) {
         # initialize dummy portfolio options (abuses lack of type-checking)
         portfolio_options <- optimal_strategy(firms, replace(leases, "class", ""), "", "", list("time"=Params$t0-1))
     } else {
         t1 <- c(as.list(market_history[!is.na(p_grey), last(.SD[, c("time", "market_prop_green")])]),
                 Params["threshold"], "SRoR"=0)
+        set.seed(seed_base + t1$time)
         portfolio_options <- optimal_strategy(firms, leases, market_history, demand$new_schedule(t1$market_prop_green), t1)
     }
 
@@ -95,6 +100,8 @@ flaringABM_main <- function(Params, jobID, Run) {
     for (ti in split(as.data.table(c("time"=list(Params$t0:Params$tf), Params)), by="time")) {
 
         cat("\r\t|", strrep("*", floor((options("width")[[1]]-12) * (ti$time - Params$t0) / (Params$tf-Params$t0))))
+
+        set.seed(seed_base + ti$time)
         ti$period <- with(ti, time - min(market_history$time) + 1)
         leases[, "time":= ti$time]
         firms[, "time":= ti$time]
