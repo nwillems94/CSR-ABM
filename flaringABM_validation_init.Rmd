@@ -6,6 +6,9 @@ author: "Nick Willems"
 ```{r}
 library(ggplot2)
 library(data.table)
+
+# better break points for adjusted log scale
+log1p_breaks <- function(x, n) { replace(axisTicks(c(0, log10(max(x))), log=TRUE, n=n), 1, 0) }
 ```
 
 # Lease expenses
@@ -21,44 +24,52 @@ leases[, cat("All leases:", sum(capEx) / sum(EUR), "\t Assigned leases:", .SD[!i
 ```
 
 ## Operating costs per MCF of gas at oil and gas leases  
-```{r fig.cap="Gas lease operating expenditures are skewed left (cheaper) while oil leases are skewed right"}
-ggplot(leases[gas_MCF+csgd_MCF>0]) +
-    geom_density(aes(x=opEx_pMCF + ifelse(csgd_MCF==0, 0, capEx_csgd / csgd_MCF / lifetime), color=OIL_GAS_CODE)) +
-    labs(color="Oil or Gas lease?", x="Average Cost per MCF") +
-    theme(legend.position = c(0.85, 0.9)) +
+```{r, fig.cap="Gas lease operating expenditures are skewed left (cheaper) while oil leases are skewed right"}
+ggplot(leases[gas_MCF+csgd_MCF>0], aes(color=ifelse(OIL_GAS_CODE=="O", "Oil", "Gas"))) +
+    geom_density(aes(x=opEx_pMCF + ifelse(csgd_MCF==0, 0, capEx_csgd / csgd_MCF / lifetime))) +
+    theme_bw() + theme(plot.title=element_text(hjust=0.5), legend.position=c(0.85, 0.8), legend.background=element_rect(color="black")) +
+    labs(color="Lease type", x="Average Cost per MCF", title="Gas operating costs") +
     xlim(0, 5)
 ```
 
 ## Operating costs per BBL of oil at oil leases  
 ```{r}
-ggplot(leases[oil_BBL>0]) +
+fed_data <- fread(text="area,           year, Mean,  Min, Max
+                        Eagle Ford,     2017, 29,    10,  50
+                        Eagle Ford,     2021, 16.58, 7,   35
+                        Delaware Basin, 2017, 33,    15,  55
+                        Delaware Basin, 2021, 26.19, 7,   50
+                        Midland Basin,  2017, 24,    10,  55
+                        Midland Basin,  2021, 27.05, 6,   60")
+
+ggplot(leases[oil_BBL>0], aes(color=area)) +
     geom_density(data= function(x) {x[,"area":= ifelse(area=="Spraberry", "Midland Basin", area)]},
                 aes(x=cost_oil/oil_BBL, color=area)) +
+    geom_point(aes(x=Mean, y=(0.5 + (year==2021))), data=fed_data) +
+    geom_errorbarh(aes(xmin=Min, xmax=Max, y=(0.5 + (year==2021))), alpha=0.5, lty=2, data=fed_data, show.legend=FALSE) +
+    annotate("text", x=fed_data[year==2017, max(Mean)], y=0.5, label="2017", alpha=0.5, vjust=-1) +
+    annotate("text", x=fed_data[year==2021, min(Mean)], y=1.5, label="2021", alpha=0.5, vjust=-1) +
     scale_x_log10() +
-    labs(x="$ / barrel", main="Operating expenses per barrel of oil")
+    theme_bw() + theme(plot.title=element_text(hjust=0.5), legend.position=c(0.85, 0.8), legend.background=element_rect(color="black")) +
+    labs(x="$ / barrel", title="Oil operating costs at oil leases", color="")
 ```
 
-| Region            | Year  | Mean  | Min   | Max   |
-| ---               | ---   | ---   | ---   | ---   |
-| Eagle Ford        | 2017  | 29    | 10    | 50    |
-| Eagle Ford        | 2021  | 16.58 | 7     | 35    |
-| Permian - Delaware| 2017  | 33    | 15    | 55    |
-| Permian - Delaware| 2021  | 26.19 | 7     | 50    |
-| Permian - Midland | 2017  | 24    | 10    | 55    |
-| Permian - Midland | 2021  | 27.05 | 6     | 60    |
-Table: Break-even operating expenses ($/barrel) reported by Dallas Fed
-([2017](https://www.dallasfed.org/research/surveys/des/2017/1701.aspx#tab-questions),
-[2021](https://www.dallasfed.org/research/surveys/des/2021/2101.aspx#tab-questions)):  
+```{r, echo=FALSE}
+knitr::kable(fed_data, col.names=c("Region", "Year", "Mean", "Min", "Max"),
+                caption=paste("Break-even operating expenses ($/barrel) reported by Dallas Fed",
+                                "([2017](https://www.dallasfed.org/research/surveys/des/2017/1701.aspx#tab-questions),",
+                                "[2021](https://www.dallasfed.org/research/surveys/des/2021/2101.aspx#tab-questions)):"))
+```
 
 # Lease assignment summary  
 ### Number of assigned leases   
 ```{r}
-print(leases[is.na(firmID), .N, by=OIL_GAS_CODE])
+print(leases[!is.na(firmID), .N, by=OIL_GAS_CODE])
 ```
 
 ### Number of leases left to be discovered  
 ```{r}
-print(leases[!is.na(firmID), .N, by=OIL_GAS_CODE])
+print(leases[is.na(firmID), .N, by=OIL_GAS_CODE])
 ```
 
 ### Lifetime estimation
@@ -66,6 +77,12 @@ Goodness of fit among historical leases
 ```{r}
 leases_emp[(expiration<201912) & (start>199301),
             .("R2"= summary(lm(log(m_rem)~log(q_i/q_curve)))$r.squared), by=area]
+```
+
+```{r}
+leases_emp[(expiration<201912) & (start>199301),
+            with(summary(lm(log(m_rem)~log(q_i/q_curve))),
+                setNames(.(r.squared, coefficients[2,1]), c("R2", "slope"))), by=area]
 ```
 
 ```{r}
@@ -115,41 +132,29 @@ market_shares[, {curve(dnorm(x, mean(log(scaled_oil_BBL)), sd(log(scaled_oil_BBL
 ```{r}
 par(mfrow=c(1,2))
 hist(log(market_shares$scaled_gas_MCF), breaks="scott", freq=FALSE,
-    main="Empirical", xlab="log(Gas (MCF))", xlim=c(0,29), ylim=c(0,0.2))
+    main="Empirical", xlab="log(Gas (MCF))", xlim=c(0,20), ylim=c(0,0.2))
 market_shares[scaled_gas_MCF>0, .(log(scaled_gas_MCF))][, {curve(dnorm(x, mean(V1), sd(V1)), col="blue", add=TRUE); NULL}]
 hist(log(leases[!is.na(firmID), sum(gas_MCF), by=firmID]$V1), breaks="scott", freq=FALSE,
     main="Generated", xlab="log(Gas (MCF))", xlim=c(0,20), ylim=c(0,0.2))
 market_shares[scaled_gas_MCF>0, .(log(scaled_gas_MCF))][, {curve(dnorm(x, mean(V1), sd(V1)), col="blue", add=TRUE); NULL}]
 ```
 
-Joint density of oil and gas outputs
-```{r}
-ggplot(market_shares, aes(x=scaled_oil_BBL, y=scaled_gas_MCF)) +
-    stat_density_2d(geom="raster", aes(fill=after_stat(density)), contour=FALSE) +
-    scale_fill_viridis_c() +
-    geom_point(data=leases[!is.na(firmID), .(sum(oil_BBL), sum(gas_MCF)), by=firmID][V1>0 & V2>0],
-                aes(x=V1, y=V2, color="red"), alpha=0.8, shape=1, size=2) +
-    scale_color_manual(labels="Generated", values="red") +
-    scale_x_log10() +
-    scale_y_log10() +
-    labs(title="Joint distribution of firm oil and gas production", x="Oil (BBL)", y="Gas (MCF)") +
-    labs(color="", fill="Emprical")
+Joint density of oil and (casinghead) gas outputs
+```{r, fig.width=10}
+ggplot(melt(market_shares, id.vars="scaled_oil_BBL", measure.vars=patterns("_MCF$"), variable.name="type")) +
+    stat_density_2d(geom="raster", aes(x=scaled_oil_BBL, y=value, fill=after_stat(density)), contour=FALSE) +
+    stat_bin_2d(geom="point", aes(x=V1, y=V2, size=after_stat(count), color="red", fill=NULL), alpha=0.5,
+        data=leases[!is.na(firmID), .(sum(oil_BBL), c(sum(gas_MCF), sum(csgd_MCF)),
+                                    "type"=c("scaled_gas_MCF","scaled_csgd_MCF")), by=firmID]) +
+    scale_size_area(guide=FALSE) +
+    scale_color_manual("", labels="Generated", values="red", guide=guide_legend(override.aes=list("alpha"=1))) +
+    scale_fill_viridis_c("Empirical") +
+    scale_x_continuous(trans=scales::log1p_trans(), breaks= function(x) {log1p_breaks(x, 5)}) +
+    scale_y_continuous(trans=scales::log1p_trans(), breaks= function(x) {log1p_breaks(x, 5)}) +
+    facet_grid(.~type, labeller=as_labeller(function(x) ifelse(x=="scaled_gas_MCF", "Unassociated Gas", "Casinghead Gas"))) +
+    theme_bw() + theme(plot.title=element_text(hjust=0.5)) + coord_cartesian(expand=FALSE) +
+    labs(title="Joint distribution of firm oil and gas production", x="Production (BBL)", y="Production (MCF)")
 ```
-
-Joint density of oil and casinghead gas outputs
-```{r}
-ggplot(market_shares, aes(x=scaled_oil_BBL, y=scaled_csgd_MCF)) +
-    stat_density_2d(geom="raster", aes(fill=after_stat(density)), contour=FALSE) +
-    scale_fill_viridis_c() +
-    geom_point(data=leases[!is.na(firmID), .(sum(oil_BBL), sum(csgd_MCF)), by=firmID][V1>0 & V2>0],
-                aes(x=V1, y=V2, color="red"), alpha=0.8, shape=1, size=2) +
-    scale_color_manual(labels="Generated", values="red") +
-    scale_x_log10() +
-    scale_y_log10() +
-    labs(title="Joint distribution of firm oil and casinghead gas production", x="Oil (BBL)", y="Gas (MCF)") +
-    labs(color="", fill="Emprical")
-```
-
 
 # Market conditions
 ## Oil
@@ -172,7 +177,7 @@ ggplot(leases[class=="developed"][order(opEx_pMCF)]) +
 ```
 
 ### Demand curve
-```{r fig.cap="Sample demand curves using single months. Model demand curves use samples of one or more months"}
+```{r, fig.cap="Sample demand curves using single months. Model demand curves use samples of one or more months"}
 ggplot(demand$historical_market, aes(color=factor(month, levels=month.abb))) +
     geom_point(aes(x=q, y=p), shape=4) +
     geom_line(data= function(x) {x[sample(.N, 5), {"shift"= q - (q_TX*frac*0.95);
@@ -206,4 +211,11 @@ ggplot(leases[firms[behavior!="flaring"], on="firmID"][order(opEx_pMCF)]) +
     theme(legend.position=c(0.85, 0.15), legend.background=element_blank()) +
     ylim(0,7) +
     labs(x="Q (MCF / month)", y="Price ($)", title="Green natural gas market", color="")
+```
+
+### Flaring intensity floor
+```{r}
+leases[, sum(sopf_MCF) / sum(oil_BBL + cond_BBL)]
+leases[!is.na(firmID), sum(sopf_MCF) / sum(oil_BBL + cond_BBL)]
+leases[is.na(firmID), sum(sopf_MCF) / sum(oil_BBL + cond_BBL)]
 ```

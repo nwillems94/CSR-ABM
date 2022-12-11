@@ -40,6 +40,13 @@ ggplot(prod_vol, aes(log(gas_prod))) +
     labs(title="Distribution of firm gas production over time", color="RunID", y="density")
 ```
 
+```{r}
+agent_states[time==-1,
+            {"h_data"= hist(log(gas_flared/oil_output), plot=FALSE);
+            plot(exp(h_data$mids), h_data$density, log='x', type='h', lwd=10, lend=2,
+            main="Distribution of firm flaring intensity", xlab="Flaring intensity (MCF/BBL)", ylab="Density"); NULL}]
+```
+
 ## Agent behaviors
 
 ```{r}
@@ -48,11 +55,20 @@ ggplot(agent_states[behavior!="flaring", .N, keyby=.(model, RunID, time, behavio
     facet_grid(behavior~., scales="free_y")
 ```
 
+```{r}
+ggplot(agent_states[(behavior!="flaring") & (model=="complete"), .N, keyby=.(RunID, time, behavior)]) +
+    geom_step(aes(x=time, y=N, group=RunID)) +
+    facet_grid(behavior~., scales="free_y")
+```
+
 ## Comparison of model components
 
 ```{r}
 ggplot(agent_states[, sum(gas_flared) / sum(gas_output), by=.(model, RunID, time)]) +
-    stat_summary(fun="mean", geom="line", aes(x=time, y=V1, color=model)) +
+    stat_summary(fun="mean", geom="line", aes(x=time, y=V1, color=model),
+                    data=function(x) {x[!((time<0) & (model=="complete"))]}) +
+    stat_summary(fun="mean", geom="line", aes(x=time, y=V1), color="black",
+                    data=function(x) {x[((time<0) & (model=="complete"))]}) +
     geom_hline(yintercept=0.05, lty=2) +
     geom_hline(yintercept=0.03, lty=2) +
     labs(title="Relative impact of model components", x="Time", y="Total Flaring Intensity, gas basis", color="") +
@@ -61,7 +77,10 @@ ggplot(agent_states[, sum(gas_flared) / sum(gas_output), by=.(model, RunID, time
 
 ```{r}
 ggplot(agent_states[, sum(gas_flared) / sum(oil_output), by=.(model, RunID, time)]) +
-    stat_summary(fun="mean", geom="line", aes(x=time, y=V1, color=model)) +
+    stat_summary(fun="mean", geom="line", aes(x=time, y=V1, color=model),
+                    data=function(x) {x[!((time<0) & (model=="complete"))]}) +
+    stat_summary(fun="mean", geom="line", aes(x=time, y=V1), color="black",
+                    data=function(x) {x[((time<0) & (model=="complete"))]}) +
     geom_hline(yintercept=0.1, lty=2) +
     labs(title="Relative impact of model components", x="Time", y="Total Flaring Intensity, oil basis", color="") +
     theme(legend.position="bottom")
@@ -69,7 +88,10 @@ ggplot(agent_states[, sum(gas_flared) / sum(oil_output), by=.(model, RunID, time
 
 ```{r}
 ggplot(agent_states[, sum(gas_flared) / sum(oil_output), by=.(model, RunID, time)]) +
-    stat_summary(fun="mean", geom="line", aes(x=time, y=V1, color=model)) +
+    stat_summary(fun="mean", geom="line", aes(x=time, y=V1, color=model),
+                    data=function(x) {x[!((time<0) & (model=="complete"))]}) +
+    stat_summary(fun="mean", geom="line", aes(x=time, y=V1), color="black",
+                    data=function(x) {x[((time<0) & (model=="complete"))]}) +
     geom_hline(yintercept=0.1, lty=2) +
     labs(title="Relative impact of model components", x="Time", y="Total Flaring Intensity, oil basis", color="") +
     theme(legend.position="bottom") +
@@ -82,6 +104,55 @@ ggplot(agent_states[, sum(gas_flared) / sum(oil_output), by=.(model, RunID, time
     labs(title="Relative impact of model components", x="Time", y="Total Flaring Intensity", color="") +
     theme(legend.position="bottom") +
     coord_cartesian(ylim=c(0, 0.25))
+```
+
+```{r}
+ggplot(agent_states[model=="complete", sum(gas_flared) / sum(oil_output), by=.(RunID, time)]) +
+    geom_smooth(aes(x=time, y=V1), color="black") +
+    geom_vline(xintercept=0, lty=2) +
+    annotate(x=0, y=Inf, "text", label="Warm start", hjust=1.1, vjust=1.5) +
+    annotate(x=0, y=Inf, "text", label="Forecast", hjust=-0.1, vjust=1.5) +
+    labs(title="Market evolution", x="Time", y="Total Flaring Intensity", color="") +
+    theme_bw() + theme(plot.title=element_text(hjust=0.5)) +
+    coord_cartesian(ylim=c(0, 0.25))
+```
+
+```{r}
+flaring_intensity <- agent_states[(model=="complete"), .("oil"= sum(gas_flared)/sum(oil_output),
+                                                        "gas"=sum(gas_flared)/sum(gas_output)), by=.(RunID, time)]
+
+ggplot(melt(flaring_intensity, measure.vars=c("gas","oil"), variable.name="basis")) +
+    stat_summary(fun="mean", geom="line", aes(x=time, y=value)) +
+    geom_vline(xintercept=0, lty=2) +
+    annotate(x=0, y=Inf, "text", label="Warm start", hjust=1.1, vjust=1.5) +
+    annotate(x=0, y=Inf, "text", label="Forecast", hjust=-0.1, vjust=1.5) +
+    labs(title="Market evolution", x="Time", y="Total Flaring Intensity", color="") +
+    facet_wrap(.~basis, scales="free_y", labeller=as_labeller(function(x) paste(x, "basis"))) +
+    theme_bw() + theme(plot.title=element_text(hjust=0.5), legend.position="bottom")
+```
+
+```{r}
+ggplot(agent_states[model=="complete", sum(gas_flared) / sum(oil_output), by=.(RunID, time)]) +
+    geom_smooth(aes(x=time, y=V1), color="black") +
+    geom_vline(xintercept=0, lty=2) +
+    annotate(x=0, y=Inf, "text", label="Warm start", hjust=1.1, vjust=1.5) +
+    annotate(x=0, y=Inf, "text", label="Forecast", hjust=-0.1, vjust=1.5) +
+    labs(title="Market evolution", x="Time", y="Total Flaring Intensity", color="") +
+    theme_bw() + theme(plot.title=element_text(hjust=0.5))
+```
+
+```{r}
+flaring_intensity <- agent_states[time>=-1, .("oil"= sum(gas_flared)/sum(oil_output),
+                                            "gas"=sum(gas_flared)/sum(gas_output)), by=.(model, RunID, time)]
+
+ggplot(melt(flaring_intensity, measure.vars=c("gas","oil"), variable.name="basis")) +
+    stat_summary(fun="mean", geom="line", aes(x=time, y=value, color=model),
+                    data=function(x) {x[!((time<0) & (model=="complete"))]}) +
+    stat_summary(fun="mean", geom="line", aes(x=time, y=value), color="black",
+                    data=function(x) {x[((time<0) & (model=="complete"))]}) +
+    labs(title="Relative impact of model components", x="Time", y="Total Flaring Intensity", color="") +
+    facet_wrap(.~basis, scales="free_y", labeller=as_labeller(function(x) paste(x, "basis"))) +
+    theme_bw() + theme(plot.title=element_text(hjust=0.5), legend.position="bottom")
 ```
 
 
@@ -110,7 +181,7 @@ prod[(new_BBL==0) & (ret_BBL==0), "ratio":= 0]
 print(prod)
 ```
 
-```{r}
+```{r, fig.height=7.5}
 ggplot(prod[time>min(time)], aes(x=time, y=ratio, group=model)) +
     geom_line() +
     geom_hline(yintercept=1.23, lty=3, color="red") +
@@ -119,6 +190,76 @@ ggplot(prod[time>min(time)], aes(x=time, y=ratio, group=model)) +
     labs(title="Oil production gained and lost from new and retiring wells", y="Production gained / Production lost") +
     facet_grid(model~.) +
     coord_cartesian(ylim=c(0, 10))
+```
+
+```{r, fig.height=7.5}
+ggplot(prod[(time>min(time)) & (model=="complete")], aes(x=time, y=ratio, group=model)) +
+    geom_line() +
+    geom_hline(yintercept=1.23, lty=3, color="red") +
+    stat_summary(aes(x=1, yintercept=..y..), fun="median", na.rm=TRUE, geom="hline", lty=2) +
+    stat_summary(aes(x=10, label=sprintf("Median: %.02f",..y..)), fun="median", na.rm=TRUE, geom="text", vjust=-2.5) +
+    labs(title="Oil production gained and lost from new and retiring wells", y="Production gained / Production lost") +
+    facet_grid(model~.) +
+    coord_cartesian(ylim=c(0, 10))
+```
+
+## Market shares
+#### CRSP/Compustat Merged (Annual) for oil and gas firms
+```{r}
+CCM_OG <- fread("./inputs/processed/firm_finances.csv")
+```
+
+```{r}
+ggplot(CCM_OG) +
+    geom_histogram(aes(x=market_share)) +
+    scale_x_log10() +
+    facet_wrap(fyear~.)
+```
+
+### Joint distribution of market share and market value
+```{r}
+ggplot(CCM_OG) +
+    geom_density2d_filled(aes(x=market_share, y=CI)) +
+    scale_x_log10() +
+    scale_y_log10()
+```
+
+```{r}
+ggplot(agent_states[time==max(time)]) +
+    geom_density(aes(x=gas_flared/oil_output, color=model)) +
+    scale_x_log10() +
+    theme_bw() + theme(plot.title=element_text(hjust=0.5), legend.position="bottom")
+```
+
+```{r}
+ggplot(agent_states[(time==max(time)) & (model=="complete")], aes(x=1+market_value, y=gas_flared/oil_output)) +
+    geom_density_2d_filled(show.legend=FALSE) +
+    geom_hline(yintercept=0.05, color="white", linetype=2) +
+    scale_x_log10() + scale_y_log10() +
+    annotate("text", x=-Inf, y=0.05, vjust=-1, label="Green market\nthreshold", color="white") +
+    labs(title="Density of all firms", x="Market Value", y="Flaring Intensity") +
+    theme_bw() + theme(plot.title=element_text(hjust=0.5)) + coord_cartesian(expand=FALSE)
+```
+
+```{r}
+ggplot(agent_states[time==max(time)], aes(x=1+market_value, y=gas_flared/oil_output)) +
+    geom_density_2d_filled(show.legend=FALSE) +
+    geom_hline(yintercept=0.05, color="white", linetype=2) +
+    scale_x_log10() + scale_y_log10() +
+    facet_wrap(model~.) +
+    annotate("text", x=0, y=0.05, vjust=-1, label="Green market\nthreshold", color="white") +
+    labs(title="Density of all firms", x="Market Value", y="Flaring Intensity") +
+    theme_bw() + theme(plot.title=element_text(hjust=0.5)) + coord_cartesian(expand=FALSE)
+```
+
+```{r}
+ggplot(agent_states[(time==max(time)) & (behavior!="flaring") & (model=="complete")], aes(x=1+market_value)) +
+    geom_density(aes(color=behavior)) +
+    labs(title="Density of non flaring firms", x="Market Value", color="Behavior:") +
+    scale_x_log10() +
+    theme_bw() + coord_cartesian(expand=FALSE) +
+    theme(plot.title=element_text(hjust=0.5), legend.position=c(0.8,0.8), legend.background=element_rect(fill="white",color="black"))
+    #theme_bw() + theme(plot.title=element_text(hjust=0.5), legend.position=c(0.8,0.8)) + coord_cartesian(expand=FALSE)
 ```
 
 ## Market Dynamics
@@ -159,8 +300,18 @@ ggplot(gas_supply, aes(x=q_sup, color=market)) +
     labs(x="Q (MCF / month)", y="Price ($)", title="Natural gas market", color="")
 ```
 
-### Emergent gas market prices
 ```{r}
+ggplot(gas_supply[model=="complete"][RunID==RunID[which.max(opEx_pMCF)]], aes(x=q_sup, color=market)) +
+    geom_line(aes(y=opEx_pMCF), size=0.85) +
+    geom_line(aes(y=p_grey, color="grey"), linetype="dashed", size=0.85) +
+    geom_line(aes(y=replace(p_green, p_green==0, NA), color="green"), linetype="dashed", size=0.85) +
+    scale_color_manual(values=c("grey"="grey40", "green"="darkgreen")) +
+    scale_x_continuous(labels = function(x) format(x, scientific = TRUE)) +
+    labs(x="Quantity (MCF / month)", y="Price ($)", title="Sample Natural Gas Market", color="Market")
+```
+
+### Emergent gas market prices
+```{r, fig.height=7.5}
 ggplot(market_history, aes(x=time, group=RunID)) +
     geom_line(aes(y=p_grey, color="grey"), alpha=0.4) +
     geom_line(aes(y=p_green, color="green"), alpha=0.4) +
@@ -171,12 +322,15 @@ ggplot(market_history, aes(x=time, group=RunID)) +
 
 Expect:
 $$1.07 P_{grey} <= P_{green} <= 1.3 P_{grey}$$
-```{r}
+```{r, fig.height=7.5}
 ggplot(market_history[p_green>0], aes(x=time, group=RunID, color=as.factor(RunID))) +
     geom_point(aes(y=p_green/p_grey), alpha=0.4) +
+    geom_rug(aes(y=p_green/p_grey), alpha=0.1, color="grey40", sides='r', outside=TRUE) +
+    coord_cartesian(clip='off') +
     geom_hline(yintercept=c(1.07, 1.3), color="grey40", linetype="dashed") +
     facet_grid(model~.) +
-    labs(title="Green gas premium", y=expression(P[green] / P[grey]), color="RunID")
+    labs(title="Green gas premium", y=expression(P[green] / P[grey]), color="RunID") +
+    theme_bw() + theme(plot.title=element_text(hjust=0.5), strip.switch.pad.grid=unit(0.3,'cm'), strip.placement='outside')
 ```
 
 ### Comparison with emprical values
@@ -190,7 +344,7 @@ ggplot(monthly_prices[year>2010], aes(x=Date, y=p)) +
     labs(title="Empirical monthly natural gas prices since 2010", y="$ per MCF")
 ```
 
-```{r}
+```{r, fig.height=7.5}
 ggplot(market_history, aes(x=time, y=p_grey, group=RunID, color=as.factor(RunID))) +
     geom_line() +
     geom_hline(aes(yintercept=mean(p_grey)), color="blue") +
@@ -198,7 +352,8 @@ ggplot(market_history, aes(x=time, y=p_grey, group=RunID, color=as.factor(RunID)
     labs(title="Gas market price", y="$ / MCF", color="RunID")
 ```
 
-```{r fig.width=10}
+```{r, fig.width=10}
+par(mgp=c(3, 1.5, 0))
 boxplot(data.table(matrix(nrow=0, ncol=market_history[time<0, uniqueN(model) + 1])),
         boxfill=NA, border=NA, ylim=c(1,6), ylab="$ / MCF", xaxt="n")
 title("Emprical & modeled distribution of conventional gas prices")
@@ -210,7 +365,7 @@ boxplot(p_grey~gsub("\\n", " ", model), data=market_history[time<0],
 ```
 
 ### Gas market size
-```{r}
+```{r, fig.height=7.5}
 ggplot(market_history, aes(x=time, group=RunID, color=as.factor(RunID))) +
     geom_point(aes(y=q_green/(q_grey+q_green)), alpha=0.4) +
     geom_line(aes(y=market_prop_green), linetype="dashed", color="black") +
@@ -218,8 +373,15 @@ ggplot(market_history, aes(x=time, group=RunID, color=as.factor(RunID))) +
     labs(title="Green gas market size", y="% of total sales", color="RunID")
 ```
 
-```{r}
+```{r, fig.height=7.5}
 ggplot(market_history, aes(x=time, group=RunID, color=as.factor(RunID))) +
+    geom_point(aes(y=q_green+q_grey), alpha=0.4) +
+    facet_grid(model~.) +
+    labs(title="Total gas sold", y="MCF", color="RunID")
+```
+
+```{r}
+ggplot(market_history[model %in% c("complete","no differentiation")], aes(x=time, group=RunID, color=as.factor(RunID))) +
     geom_point(aes(y=q_green+q_grey), alpha=0.4) +
     facet_grid(model~.) +
     labs(title="Total gas sold", y="MCF", color="RunID")

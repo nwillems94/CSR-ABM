@@ -15,6 +15,23 @@ market_history <- fread(sprintf("./outputs/processed/market_states_%s.csv.gz", p
 agent_states <- fread(sprintf("./outputs/processed/agent_states_%s.csv.gz", paste(jobIDs, collapse="-")))
 db <- dbConnect(RSQLite::SQLite(), sprintf("./outputs/processed/all_states_%s.sqlite", paste(jobIDs, collapse="-")))
 
+## Market value
+if (agent_states[is.na(market_value) & (time>min(time)), .N] > 0) {
+    print("Missing market values")
+    print(agent_states[is.na(market_value) & (time>min(time))])
+} else {
+    print("Market values")
+    print(agent_states[!is.na(market_value), summary(market_value)])
+}
+print("Percent of agents who lose money over model run")
+print(agent_states[time==max(time), as.list(summary(.SD[, sum(profit<0) / .N, by=RunID]$V1)), by=model])
+print(agent_states[time==max(time), as.list(summary(.SD[, sum(profit<0) / .N, by=RunID]$V1)), by=.(model,behavior)])
+
+print("Percent of oil and gas production from bankrupt agents")
+print(agent_states[time==max(time), as.list(summary(.SD[, sum(oil_output[profit<0]) / sum(oil_output), by=RunID]$V1)), by=model])
+print(agent_states[time==max(time), as.list(summary(.SD[, sum(gas_output[profit<0]) / sum(gas_output), by=RunID]$V1)), by=model])
+
+
 ## Check for flarers who are selling green gas
 if (agent_states[behavior=="flaring" & green_gas_sold!=0, .N] > 0) {
     print("Agents who are flaring are still participating in the green market")
@@ -30,6 +47,7 @@ if (agent_states[!(behavior %in% c("flaring", "economizing", "imitating")) & tim
 ## Model and calculated flaring intensity that dont match
 if (agent_states[abs(gas_flared-gas_flared_calc) > 0.01, .N>0]) {
     print("Model gas flared does not match calculated value")
+    print(agent_states[gas_flared!=gas_flared_calc, as.list(summary(gas_flared/gas_flared_calc)), by=model])
     print(agent_states[gas_flared!=gas_flared_calc])
 }
 
