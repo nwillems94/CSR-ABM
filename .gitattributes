@@ -1,0 +1,8 @@
+# from files github language stats
+
+# exclude rendered html
+inputs/*.html linguist-generated
+outputs/validation/*.html linguist-generated
+
+# exclude run logs
+scripts/logs/*.out linguist-generated
