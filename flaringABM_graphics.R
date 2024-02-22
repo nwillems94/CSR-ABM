@@ -37,6 +37,12 @@ theme_custom <- function() {
 # better break points for adjusted log scale
 log1p_breaks <- function(x, n) { replace(axisTicks(c(0, log10(max(x))), log=TRUE, n=n), 1, 0) }
 
+# label panels facetted by basis
+basis_labeller <- function(x) {
+    units <- ifelse(x=="gas", "[MCF/MCF]", "[MCF/BBL]")
+    main <- tools::toTitleCase(paste(x, "basis"))
+    return(paste(main, units))
+}
 
 # generate unique color pallette for model runs
 colors <- dbGetQuery(db, sprintf(lookup_sql, "string_key AS model, integer_key", "model", "TRUE ORDER BY integer_key"))
@@ -212,7 +218,7 @@ ggplot(melt(flaring_intensity, measure.vars=c("gas","oil"), variable.name="basis
     annotate(x=0, y=Inf, "text", label=" Forecast", hjust=-0.1, vjust=1.5) +
     geom_hline(aes(yintercept=y), lty=2, data=data.table("y"=c(0.1, 0.05, 0.03), "basis"=c("oil","gas","gas"))) +
     labs(title="Market evolution", x="Time", y="Total Flaring Intensity", color="") +
-    facet_wrap(.~basis, scales="free_y", labeller=as_labeller(function(x) paste(x, "basis"))) +
+    facet_wrap(.~basis, scales="free_y", labeller=as_labeller(basis_labeller)) +
     theme_custom()
 dev.off()
 
@@ -223,7 +229,7 @@ ggplot(melt(flaring_intensity[time>=-1], measure.vars=c("gas","oil"), variable.n
     stat_summary(geom="ribbon", fun.data="mean_se", alpha=0.5) +
     geom_hline(aes(yintercept=y), lty=2, data=data.table("y"=c(0.1, 0.05, 0.03), "basis"=c("oil","gas","gas"))) +
     labs(title="Market evolution", x="Time", y="Total Flaring Intensity", color="") +
-    facet_wrap(.~basis, scales="free_y", labeller=as_labeller(function(x) paste(x, "basis"))) +
+    facet_wrap(.~basis, scales="free_y", labeller=as_labeller(basis_labeller)) +
     theme_custom()
 dev.off()
 rm(flaring_intensity)
@@ -237,7 +243,7 @@ warm_models <- params[t0<0, unique(model)]
 svglite("./graphics/prices_complete.svg", height=7, width=12, bg="transparent")
 boxplot(data.table(matrix(nrow=0, ncol=2)),
         boxfill=NA, border=NA, ylim=c(1,6), xaxt="n", cex.lab=18/11)
-title("Emprical & modeled distribution of conventional gas prices", cex.main=18/11)
+title("Empirical & modeled distribution of standard gas prices", cex.main=18/11)
 title(ylab="$ / MCF", line=2.5, cex.lab=18/11)
 abline(h=1:6, col = "grey", lty = "dotted")
 boxplot(monthly_prices[year>2010]$p, boxwex=1.6, add=TRUE, at=1, yaxt="n")
@@ -249,7 +255,7 @@ dev.off()
 svglite("./graphics/prices_all.svg", height=7, width=12, bg="transparent")
 boxplot(data.table(matrix(nrow=0, ncol=length(warm_models)+1)),
         boxfill=NA, border=NA, ylim=c(1,6), xaxt="n", cex.axis=18/11)
-title("Emprical & modeled distribution of conventional gas prices", cex.main=18/11)
+title("Empirical & modeled distribution of standard gas prices", cex.main=18/11)
 title(ylab="$ / MCF", line=2.5, cex.lab=18/11)
 abline(h=1:6, col = "grey", lty = "dotted")
 boxplot(monthly_prices[year>2010]$p, boxwex=1.6, add=TRUE, at=1, yaxt="n")
@@ -282,7 +288,7 @@ ggplot(behaviors[behavior!="flaring"], aes(x=time, y=N)) +
     stat_summary(geom="step", fun="mean", lwd=1) +
     stat_summary(geom="ribbon", fun.data="mean_se", alpha=0.5) +
     facet_grid(behavior~., scales="free_y") +
-    labs(title="Types of green firms", x="", y="Number of firms") +
+    labs(title="Types of certified firms", x="", y="Number of firms") +
     theme_custom()
 dev.off()
 rm(behaviors)
@@ -305,7 +311,7 @@ ggplot(agent_end_states[(model=="complete") & (gas_flared>0)], aes(x=market_valu
     geom_density_2d_filled(show.legend=FALSE) +
     geom_hline(yintercept=0.05, color="white", linetype=2, lwd=1) +
     scale_x_continuous(trans=scales::log1p_trans(), breaks= function(x) {log1p_breaks(x, 5)}) + scale_y_log10() +
-    annotate("text", x=100, y=0.05, label="Green market\nthreshold", color="white") +
+    annotate("text", x=100, y=0.05, label="Certified market\nthreshold", color="white") +
     labs(title="Density of all firms", x="Market Value", y="Flaring Intensity") +
     theme_custom() + coord_cartesian(expand=FALSE)
 dev.off()
@@ -425,24 +431,24 @@ dev.off()
 
 
 # gas premium
-svglite("./graphics/green_premium.svg", height=7, width=12, bg="transparent")
+svglite("./graphics/certified_premium.svg", height=7, width=12, bg="transparent")
 ggplot(market_history[(p_green>0) & (model=="complete")], aes(x=time, y=p_green/p_grey, group=RunID)) +
     geom_point(alpha=0.25) +
     geom_rug(alpha=0.25, color="grey40", sides='r', outside=TRUE) +
     coord_cartesian(clip='off') +
     geom_hline(yintercept=c(1.07, 1.3), color="grey40", linetype="dashed") +
-    labs(title="Green gas premium", y=expression(P[green] / P[grey]), color="RunID") +
+    labs(title="Certified gas premium", y=expression(P[green] / P[grey]), color="RunID") +
     theme_custom() + theme(plot.margin=c(1,2,1,1) * theme_bw()$plot.margin)
 dev.off()
 
-svglite("./graphics/green_premium_all.svg", height=7, width=12, bg="transparent")
+svglite("./graphics/certified_premium_all.svg", height=7, width=12, bg="transparent")
 ggplot(market_history[(p_green>0) & (model %in% c("complete","CA market", "EU market"))], aes(x=time, y=p_green/p_grey, group=RunID)) +
     geom_point(alpha=0.25) +
     geom_rug(alpha=0.25, color="grey40", sides='r', outside=TRUE) +
     coord_cartesian(clip='off') +
     geom_hline(yintercept=c(1.07, 1.3), color="grey40", linetype="dashed") +
     facet_grid(model~.) +
-    labs(title="Green gas premium", y=expression(P[green] / P[grey]), color="RunID") +
+    labs(title="Certified gas premium", y=expression(P[green] / P[grey]), color="RunID") +
     theme_custom() + theme(strip.switch.pad.grid=unit(0.4,'cm'), strip.placement='outside')
 dev.off()
 
@@ -488,7 +494,7 @@ ggplot(melt(flaring_intensity, measure.vars=c("gas","oil"), variable.name="basis
     annotate(x=0, y=Inf, "text", label=" Forecast", hjust=-0.1, vjust=1.5) +
     geom_hline(aes(yintercept=y), lty=2, data=data.table("y"=c(0.1, 0.05, 0.03), "basis"=c("oil","gas","gas"))) +
     labs(title="Market evolution", x="Time", y="Total Flaring Intensity", color="") +
-    facet_wrap(.~basis, scales="free_y", labeller=as_labeller(function(x) paste(x, "basis"))) +
+    facet_wrap(.~basis, scales="free_y", labeller=as_labeller(basis_labeller)) +
     theme_custom() + theme(legend.position="bottom")
 dev.off()
 
@@ -500,7 +506,7 @@ ggplot(melt(flaring_intensity[time>=-1], measure.vars=c("gas","oil"), variable.n
     geom_vline(xintercept=0, lty=1, color="grey") +
     geom_hline(aes(yintercept=y), lty=2, data=data.table("y"=c(0.1, 0.05, 0.03), "basis"=c("oil","gas","gas"))) +
     labs(title="Market evolution", x="Time", y="Total Flaring Intensity", color="") +
-    facet_wrap(.~basis, scales="free_y", labeller=as_labeller(function(x) paste(x, "basis"))) +
+    facet_wrap(.~basis, scales="free_y", labeller=as_labeller(basis_labeller)) +
     theme_custom() + theme(legend.position="bottom")
 dev.off()
 
@@ -511,7 +517,7 @@ ggplot(melt(flaring_intensity[time<0], measure.vars=c("gas","oil"), variable.nam
     scale_color_manual(values=model_colors) + scale_fill_manual(values=model_colors, guide=NULL) +
     geom_hline(aes(yintercept=y), lty=2, data=data.table("y"=c(0.1, 0.05, 0.03), "basis"=c("oil","gas","gas"))) +
     labs(title="Market equilibration", subtitle="Warm-start period", x="Time", y="Total Flaring Intensity", color="") +
-    facet_wrap(.~basis, scales="free_y", labeller=as_labeller(function(x) tools::toTitleCase(paste(x, "basis")))) +
+    facet_wrap(.~basis, scales="free_y", labeller=as_labeller(basis_labeller)) +
     theme_custom() + theme(legend.position="bottom")
 
 inset <-
@@ -566,7 +572,7 @@ ggplot(melt(flaring_intensity, measure.vars=c("gas","oil"), variable.name="basis
     scale_color_manual(values=model_colors) + scale_fill_manual(values=model_colors, guide=NULL) +
     geom_hline(aes(yintercept=y), lty=2, data=data.table("y"=c(0.1, 0.05, 0.03), "basis"=c("oil","gas","gas"))) +
     labs(title="Impact of market components", x="Time", y="Total Flaring Intensity", color="") +
-    facet_wrap(.~basis, scales="free_y", labeller=as_labeller(function(x) paste(x, "basis"))) +
+    facet_wrap(.~basis, scales="free_y", labeller=as_labeller(basis_labeller)) +
     theme_custom() + theme(legend.position="bottom")
 dev.off()
 rm(flaring_intensity)
@@ -592,7 +598,7 @@ ggplot(melt(flaring_intensity, measure.vars=c("gas","oil"), variable.name="basis
     scale_color_manual(values=model_colors) + scale_fill_manual(values=model_colors, guide=NULL) +
     geom_hline(aes(yintercept=y), lty=2, data=data.table("y"=c(0.1, 0.05, 0.03), "basis"=c("oil","gas","gas"))) +
     labs(title="Impact of activist targeting strategy", x="Time", y="Total Flaring Intensity", color="") +
-    facet_wrap(.~basis, scales="free_y", labeller=as_labeller(function(x) paste(x, "basis"))) +
+    facet_wrap(.~basis, scales="free_y", labeller=as_labeller(basis_labeller)) +
     theme_custom() + theme(legend.position="bottom")
 dev.off()
 
@@ -605,7 +611,7 @@ ggplot(flaring_intensity_der[!is.na(der) & (time>=-1)], aes(x=time, y=der)) +
     stat_smooth(geom="line", lwd=1, aes(color=model)) +
     scale_color_manual(values=model_colors) + scale_fill_manual(values=model_colors) +
     labs(title="Impact of activist targeting strategy", x="Time", y="Derivative estimate of flaring intensity", color="") +
-    facet_wrap(.~basis, scales="free_y", labeller=as_labeller(function(x) paste(x, "basis"))) +
+    facet_wrap(.~basis, scales="free_y", labeller=as_labeller(basis_labeller)) +
     theme_custom() + theme(legend.position="bottom")
 dev.off()
 
@@ -635,7 +641,7 @@ ggplot(melt(flaring_intensity, measure.vars=c("gas","oil"), variable.name="basis
                     box.padding=1.5, max.overlaps=50, size=5,
                     segment.curvature=1e-20, segment.color="grey40") +
     labs(title="Impact of activist targeting strategy", subtitle="Forecast period", x="Time", y="Value") +
-    facet_wrap(.~basis, scales="free_y", labeller=as_labeller(function(x) tools::toTitleCase(paste(x, "basis")))) +
+    facet_wrap(.~basis, scales="free_y", labeller=as_labeller(basis_labeller)) +
     theme_custom() + theme(axis.text.x=element_blank(), axis.title.x=element_blank(),
         plot.margin=margin(l=40, b=5), axis.title.y=element_text(size=rel(0.8)))
 
@@ -645,7 +651,7 @@ ggplot(flaring_intensity_der[!is.na(der) & (time>=-1)], aes(x=time, y=der)) +
     stat_smooth(geom="line", lwd=1, aes(color=model)) +
     scale_color_manual(values=model_colors, guide=NULL) + scale_fill_manual(values=model_colors) +
     labs(x="Time", y="Derivative estimate") +
-    facet_wrap(.~basis, scales="free_y", labeller=as_labeller(function(x) paste(x, "basis"))) +
+    facet_wrap(.~basis, scales="free_y", labeller=as_labeller(basis_labeller)) +
     theme_custom() + theme(strip.background=element_blank(), strip.text=element_blank(),
         plot.margin=margin(l=40), axis.title.y=element_text(size=rel(0.8)))
 
@@ -675,8 +681,8 @@ ggplot(melt(flaring_intensity[model!="no differentiation"], measure.vars=c("gas"
     stat_summary(geom="ribbon", fun.data="mean_se", aes(fill=model), alpha=0.25) +
     scale_color_manual(values=model_colors) + scale_fill_manual(values=model_colors, guide=NULL) +
     geom_hline(aes(yintercept=y), lty=2, data=data.table("y"=c(0.1, 0.05, 0.03), "basis"=c("oil","gas","gas"))) +
-    labs(title="Impact of green market threshold", x="Time", y="Total Flaring Intensity", color="") +
-    facet_wrap(.~basis, scales="free_y", labeller=as_labeller(function(x) paste(x, "basis"))) +
+    labs(title="Impact of certified market threshold", x="Time", y="Total Flaring Intensity", color="") +
+    facet_wrap(.~basis, scales="free_y", labeller=as_labeller(basis_labeller)) +
     theme_custom() + theme(legend.position="bottom")
 dev.off()
 
@@ -686,8 +692,8 @@ labels <- melt(flaring_intensity[between(time, 10, 50)], measure.vars=c("gas","o
 
 labels[params[, unique(threshold), by=model], on="model", "label":= sprintf("Threshold of\n%s MCF/BBL", V1)]
 labels[time!=30, "label":= ""]
-labels[!(((basis=="gas") & (model=="lower threshold")) | ((basis=="oil") & (model=="complete"))), "label":= ""]
-labels[(basis=="oil") & (time==20) & (model=="no differentiation"), "label":= "No green market"]
+labels[!(((basis=="oil") & (model=="lower threshold")) | ((basis=="oil") & (model=="complete"))), "label":= ""]
+labels[(basis=="gas") & (time==30) & (model=="no differentiation"), "label":= "No certified market"]
 
 
 svglite("./graphics/thresh_intensity_alt.svg", height=6.25, width=12, bg="transparent")
@@ -702,8 +708,8 @@ ggplot(melt(flaring_intensity, measure.vars=c("gas","oil"), variable.name="basis
                     nudge_x=ifelse(labels$model=="complete", -10, 10),
                     box.padding=1.5, max.overlaps=50, size=5,
                     segment.curvature=1e-20, segment.color="grey40") +
-    labs(title="Impact of green market threshold", subtitle="Forecast period", x="Time", y="Total Flaring Intensity") +
-    facet_wrap(.~basis, scales="free_y", labeller=as_labeller(function(x) tools::toTitleCase(paste(x, "basis")))) +
+    labs(title="Impact of certified market threshold", subtitle="Forecast period", x="Time", y="Total Flaring Intensity") +
+    facet_wrap(.~basis, scales="free_y", labeller=as_labeller(basis_labeller)) +
     theme_custom()
 dev.off()
 
@@ -724,8 +730,8 @@ ggplot(melt(flaring_intensity, measure.vars=c("gas","oil"), variable.name="basis
     stat_summary(geom="ribbon", fun.data="mean_se", aes(fill=model), alpha=0.25) +
     scale_color_manual(values=model_colors) + scale_fill_manual(values=model_colors, guide=NULL) +
     geom_hline(aes(yintercept=y), lty=2, data=data.table("y"=c(0.1, 0.05, 0.03), "basis"=c("oil","gas","gas"))) +
-    labs(title="Impact of green market size", x="Time", y="Total Flaring Intensity", color="") +
-    facet_wrap(.~basis, scales="free_y", labeller=as_labeller(function(x) paste(x, "basis"))) +
+    labs(title="Impact of certified market size", x="Time", y="Total Flaring Intensity", color="") +
+    facet_wrap(.~basis, scales="free_y", labeller=as_labeller(basis_labeller)) +
     theme_custom() + theme(legend.position="bottom")
 dev.off()
 rm(flaring_intensity)
