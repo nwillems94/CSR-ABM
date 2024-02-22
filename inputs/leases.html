@@ -227,10 +227,10 @@ summary {
 - Crude pipelines<br />
 - Gas processing facilities</p>
 <p>Well data is used to find approximate lease locations and to calculate capital expenditures based on well depth(s). Cost parameters are derived during initialization by matching leases to areas and sampling data from: <a href="zotero://select/items/0_EJYISQT4">US EIA. (2016)</a>.</p>
-<pre class="r"><code>library(rsvg)
-library(readxl)
+<pre class="r"><code>library(readxl)
 library(data.table)
-library(sf)</code></pre>
+library(sf)
+library(maps)</code></pre>
 <pre><code>## Linking to GEOS 3.8.0, GDAL 3.0.4, PROJ 6.3.1</code></pre>
 <hr />
 <div id="pdq" class="section level2">
@@ -244,7 +244,9 @@ library(sf)</code></pre>
 <div id="import-spatial-data" class="section level1">
 <h1>Import spatial data</h1>
 <p><a href="https://www.eia.gov/maps/maps.htm">Source: Play boundaries</a>, <a href="https://www.eia.gov/maps/layer_info-m.php">Source: Processing plants &amp; crude pipelines</a></p>
-<pre class="r"><code>TX &lt;- st_read(&quot;./data/spatial/Texas_State_Boundary-shp&quot;, layer=&quot;State&quot;, quiet=TRUE)
+<pre class="r"><code>TX &lt;- st_as_sf(map(&quot;state&quot;, regions=&quot;Texas&quot;, plot=FALSE, fill=TRUE))
+names(TX)[names(TX)==&quot;geom&quot;] &lt;- &quot;geometry&quot;
+st_geometry(TX) &lt;- &quot;geometry&quot;
 head(TX)</code></pre>
 <pre><code>## Simple feature collection with 1 feature and 6 fields
 ## geometry type:  POLYGON
@@ -300,6 +302,7 @@ head(eagle_ford)</code></pre>
 ##                         geometry
 ## 1 POLYGON ((-100.5614 28.8291...</code></pre>
 <pre class="r"><code># merge permian and eagle_ford shapefiles
+TX &lt;- st_transform(TX, st_crs(permian))
 cat(&quot;CRS ok:&quot;, (st_crs(permian) == st_crs(TX)), &quot;\n&quot;)</code></pre>
 <pre><code>## CRS ok: TRUE</code></pre>
 <pre class="r"><code>cat(&quot;CRS ok:&quot;, (st_crs(permian) == st_crs(spraberry)) &amp; (st_crs(permian) == st_crs(eagle_ford)), &quot;\n&quot;)</code></pre>

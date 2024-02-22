@@ -68,10 +68,10 @@ EACH LEASE HAS THE FOLLOWING PROPERTIES
   [US EIA. (2016)](zotero://select/items/0_EJYISQT4).  
 
 ```{r}
-library(rsvg)
 library(readxl)
 library(data.table)
 library(sf)
+library(maps)
 ```
 
 ******  
@@ -90,7 +90,10 @@ library(sf)
  [Source: Play boundaries](https://www.eia.gov/maps/maps.htm), 
  [Source: Processing plants & crude pipelines](https://www.eia.gov/maps/layer_info-m.php)
 ```{r, render=knitr::normal_print}
-TX <- st_read("./data/spatial/Texas_State_Boundary-shp", layer="State", quiet=TRUE)
+TX <- st_as_sf(map("state", regions="Texas", plot=FALSE, fill=TRUE))
+names(TX)[names(TX)=="geom"] <- "geometry"
+st_geometry(TX) <- "geometry"
+
 head(TX)
 plot(TX$geometry, reset=FALSE, main="Gas plants and crude oil pipelines in Texas")
 
@@ -105,6 +108,7 @@ eagle_ford  <- st_read("./data/spatial/EagleFord_Play_Boundary_Elevation_Isopach
 head(eagle_ford)
 
 # merge permian and eagle_ford shapefiles
+TX <- st_transform(TX, st_crs(permian))
 cat("CRS ok:", (st_crs(permian) == st_crs(TX)), "\n")
 cat("CRS ok:", (st_crs(permian) == st_crs(spraberry)) & (st_crs(permian) == st_crs(eagle_ford)), "\n")
 permian$geometry <- st_difference(permian$geometry, spraberry$geometry)
