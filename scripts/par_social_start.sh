@@ -9,6 +9,7 @@
 #SBATCH --mail-type=all
 #SBATCH --mail-user=*
 #export MKL_NUM_THREADS=96
+nruns=32
 
 module load Rstats
 export PATH=/home/pandoc/bin:$PATH
@@ -17,12 +18,12 @@ export PATH=/home/pandoc/bin:$PATH
 # concatenate runs into single file and delete components
 function concat_runs {
     if [ $1 == "log" ]; then
-        awk '(NR == 1) || (FNR > 1)' `ls -v ./logs/param_log_$2-*` > ./logs/param_log_$2.csv || break 
-        rm ./logs/param_log_$2-* 
-        cat ./logs/run_log_$2-{1..32}.txt >> ./logs/run_log_$2.txt
-        rm  ./logs/run_log_$2-{1..32}.txt
+        awk '(NR == 1) || (FNR > 1)' `eval "ls -v ./logs/param_log_$2-{1..$nruns}.csv"` > ./logs/param_log_$2.csv || break 
+        eval "rm ./logs/param_log_$2-{1..$nruns}.csv"
+        eval "cat ./logs/run_log_$2-{1..$nruns}.txt >> ./logs/run_log_$2.txt"
+        eval "rm  ./logs/run_log_$2-{1..$nruns}.txt"
     else
-        awk '(NR == 1) || (FNR > 1)' `ls -v ./outputs/$1_states_$2-*` > ./outputs/$1_states_$2.csv || break 
+        awk '(NR == 1) || (FNR > 1)' `eval "ls -v ./outputs/$1_states_$2-{1..$nruns}.csv"` > ./outputs/$1_states_$2.csv || break 
     fi
 }
 
@@ -47,7 +48,7 @@ cd flaringABM_${SLURM_JOBID}/
 
 # run models
 echo "running baseline model"
-Rscript flaringABM_exe.R >> ./logs/run_log_${SLURM_JOBID}_0.txt || exit 
+Rscript flaringABM_exe.R nruns=$nruns >> ./logs/run_log_${SLURM_JOBID}_0.txt || exit 
 
 # get jobID for reference in following runs
 JOBID_0=`grep "jobID:" ./logs/run_log_${SLURM_JOBID}_0.txt | cut -d " " -f 2` 
@@ -69,12 +70,12 @@ echo -e "\nStarting comparative runs"
 
 # no imitation
 { echo "running without imitation ... "; 
-Rscript flaringABM_exe.R --parallel=32 refID=$JOBID_0 prob_m=0 t0=0 >> ./logs/run_log_${SLURM_JOBID}_1.txt; } & 
+Rscript flaringABM_exe.R --parallel=32 nruns=$nruns refID=$JOBID_0 prob_m=0 t0=0 >> ./logs/run_log_${SLURM_JOBID}_1.txt; } & 
 
 # no differentiation
 { sleep 60; # pause to ensure unique jobIDs 
 echo "running without differentiation ... "; 
-Rscript flaringABM_exe.R --parallel=32 refID=$JOBID_0 market_prop_green=0 t0=0 >> ./logs/run_log_${SLURM_JOBID}_2.txt; } & 
+Rscript flaringABM_exe.R --parallel=32 nruns=$nruns refID=$JOBID_0 market_prop_green=0 t0=0 >> ./logs/run_log_${SLURM_JOBID}_2.txt; } & 
 
 { sleep 65; 
 echo -e "\nPost processing: ${JOBID_0}"; 
@@ -97,12 +98,12 @@ wait
 
 # no stakeholder activism
 { echo "running without activism ... "; 
-Rscript flaringABM_exe.R --parallel=32 refID=$JOBID_0 Activism=0 t0=0 >> ./logs/run_log_${SLURM_JOBID}_3.txt; } & 
+Rscript flaringABM_exe.R --parallel=32 nruns=$nruns refID=$JOBID_0 Activism=0 t0=0 >> ./logs/run_log_${SLURM_JOBID}_3.txt; } & 
 
 # no shareholder valuation
 { sleep 60; # pause to ensure unique jobIDs 
 echo "running without shareholder valuation ... "; 
-Rscript flaringABM_exe.R --parallel=32 refID=$JOBID_0 SRoR=0 t0=0 >> ./logs/run_log_${SLURM_JOBID}_4.txt; } & 
+Rscript flaringABM_exe.R --parallel=32 nruns=$nruns refID=$JOBID_0 SRoR=0 t0=0 >> ./logs/run_log_${SLURM_JOBID}_4.txt; } & 
 
 { sleep 65; 
 echo -e "\nPost processing: ${JOBID_1}, ${JOBID_2}";

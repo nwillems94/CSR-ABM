@@ -9,6 +9,7 @@
 #SBATCH --mail-type=all
 #SBATCH --mail-user=*
 #export MKL_NUM_THREADS=96
+nruns=32
 
 module load Rstats
 
@@ -16,13 +17,13 @@ module load Rstats
 # concatenate runs into single file and delete components
 function concat_runs {
     if [ $1 == "log" ]; then
-        awk '(NR == 1) || (FNR > 1)' `ls -v ./logs/param_log_$2-*` > ./logs/param_log_$2.csv || break 
-        rm ./logs/param_log_$2-* 
-        cat ./logs/run_log_$2-{1..32}.txt >> ./logs/run_log_$2.txt
-        rm  ./logs/run_log_$2-{1..32}.txt
+        awk '(NR == 1) || (FNR > 1)' `eval "ls -v ./logs/param_log_$2-{1..$nruns}.csv"` > ./logs/param_log_$2.csv || break 
+        eval "rm ./logs/param_log_$2-{1..$nruns}.csv"
+        eval "cat ./logs/run_log_$2-{1..$nruns}.txt >> ./logs/run_log_$2.txt"
+        eval "rm  ./logs/run_log_$2-{1..$nruns}.txt"
     else
-        awk '(NR == 1) || (FNR > 1)' `ls -v ./outputs/$1_states_$2-*` > ./outputs/$1_states_$2.csv || break 
-        rm ./outputs/$1_states_$2-* 
+        awk '(NR == 1) || (FNR > 1)' `eval "ls -v ./outputs/$1_states_$2-{1..$nruns}.csv"` > ./outputs/$1_states_$2.csv || break 
+        eval "rm ./outputs/$1_states_$2-{1..$nruns}.csv"
     fi
 }
 
@@ -37,12 +38,12 @@ echo -e "\nStarting alternative runs"
 
 # activist strategy 1
 { echo "targetting evenly";
-Rscript flaringABM_exe.R --parallel=48 refID=$JOBID_0 t0=0 strategy='even' >> ./logs/run_log_${SLURM_JOBID}_1.txt; } &
+Rscript flaringABM_exe.R --parallel=48 nruns=$nruns refID=$JOBID_0 t0=0 strategy='even' >> ./logs/run_log_${SLURM_JOBID}_1.txt; } &
 
 # activist strategy 2
 { sleep 60; # pause to ensure unique jobIDs 
 echo "targetting top";
-Rscript flaringABM_exe.R --parallel=48 refID=$JOBID_0 t0=0 strategy='top' >> ./logs/run_log_${SLURM_JOBID}_2.txt; } &
+Rscript flaringABM_exe.R --parallel=48 nruns=$nruns refID=$JOBID_0 t0=0 strategy='top' >> ./logs/run_log_${SLURM_JOBID}_2.txt; } &
 
 wait
 
