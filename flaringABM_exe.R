@@ -23,6 +23,7 @@ cat("jobID:", jobID, "\n")
 ## Set model parameters and interpret command line arguments
 Params <<- list(
     "refID" = NA,
+    "nruns" = NA_real_,
     # TxRRC data shows about 2000 firms producing gas alongside oil operating in any given year since 2010
     "nagents" = 2000,
     "t0" = -60,
@@ -80,7 +81,7 @@ rm(args, update_arg, daily_prices)
 
 ## Start model runs given parameters
 run_time <- Sys.time()
-future_lapply(1:32, function(Run) {
+future_lapply(1:Params$nruns, function(Run) {
     source("./flaringABM_core.R")
     # setup logging
     sink(sprintf("./logs/run_log_%s-%s.txt", jobID, Run))
