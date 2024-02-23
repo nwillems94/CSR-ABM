@@ -17,12 +17,13 @@ Welcome to the CSR-ABM: an empirically-grounded, agent-based modeling framework 
 
 In this specific application, the decision to avoid gas flaring is viewed as an act of corporate social responsibility by upstream oil and gas firms. 
 Agents (firms) are assigned heterogenous assets and interact in markets. Assets are empirically grounded oil and gas leases. Agents engage in 2 basic activities: "exploration" (i.e., acquiring new assets) and "development" (i.e., investing in existing assets). An agent's objective is to maximize their composite market value:  
-$$
+
+```math
 \begin{align} 
 \text{Market Value} &= (\text{Net Cashflow}) &+ \quad&(\text{Net Social value}) \\ 
 MV &= (\pi + \Delta\pi - C) &+ \quad&(\rho_\theta C - A)
 \end{align}
-$$
+```
 
 By spending on limiting flaring (CSR: $C$), firms can avoid pressure from social activists ($A$) and generate additional revenue ($\Delta\pi$) by selling certified gas at a premium price. Simultaneously, shareholders value firms' efforts ($\rho_\theta C$), bolstering stock prices. 
 
