@@ -115,9 +115,8 @@ Users wishing to replicate or update bundled datasets will need to compile the `
 These data are not ingested by the model directly, they are either processed and combined into a new, formatted input file or used for the purposes of validation or parameter selection. Note file names may change as datasets are updated by their respective publishers.  
 
 ## Configuration
-The model can be 
+The model configuration can be altered either by editing `flaringABM_exe.R` directly or by using command line arguments. The default parameters are specified below:  
 
-The default parameters are specified below:
 | **Parameter**                          | **Value**                     | **Source**                                                                        |
 |----------------------------------------|-------------------------------|-----------------------------------------------------------------------------------|
 | Number of runs                         | 32                            | NA                                                                                |
