@@ -125,10 +125,10 @@ The default parameters are specified below:
 | Total activist funds                   | \$500,000 per month           | Greenpeace annual spending on energy activism                                     |
 | Flaring threshold                      | 0.05                          | Half of baseline                                                                  |
 | Proportion of green market             | Linear growth from 0 to 0.075 | New York City residential demand                                                  |
-| Premium for green gas                  | 1.07-1.3                      | Green electricity prices (Figure \ref{fig:green_price})                           |
-| Shareholder valuation                  | 0.5                           | Calibrated (Figure \ref{fig:shareholder_val})                                     |
+| Premium for green gas                  | 1.07-1.3                      | Green electricity prices                                                          |
+| Shareholder valuation                  | 0.5                           | Calibrated                                                                        |
 | Percent of time doing exploration      | 11/12                         | NA                                                                                |
-| Probability of discovering a new asset | 1.23                          | Validated based on EIA DPR \cite{energy_information_administration_drilling_2021} |
+| Probability of discovering a new asset | 1.23                          | Validated based on EIA Drilling productivity report                               |
 | Probability of imitation               | 0.5                           | NA                                                                                |
 
 
