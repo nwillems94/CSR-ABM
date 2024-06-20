@@ -77,9 +77,10 @@ market_history[, "model":= factor(model, intersect(unique(model), names(model_co
 
 ##### INITIALIZATION #####
 sql <- "SELECT * FROM %2$s 
-        INNER JOIN %1$s ON %2$s.leaseID=%1$s.leaseID AND %1$s.RunID=%2$s.RunID AND %1$s.model=%2$s.model 
-            AND %2$s.model=1 
-            AND time < (SELECT MIN(t0) FROM params WHERE model=1)"
+        LEFT JOIN %1$s ON %2$s.leaseID=%1$s.leaseID AND %1$s.RunID=%2$s.RunID AND %1$s.model=%2$s.model 
+            WHERE %2$s.model=1 
+            AND %2$s.time < (SELECT MIN(t0) FROM params WHERE model=1)"
+
 leases <- dbGetQuery(db, sprintf(sql, "lease_info", "lease_states"))
 setDT(leases)
 leases[, which(duplicated(names(leases))) := NULL]
@@ -387,9 +388,10 @@ rm(agent_states)
 
 # shareholder validation
 sql <- "SELECT * FROM %2$s 
-        INNER JOIN %1$s ON %2$s.firmID=%1$s.firmID AND %1$s.RunID=%2$s.RunID AND %1$s.model=%2$s.model 
-            AND %2$s.model=(%3$s)
+        LEFT JOIN %1$s ON %2$s.firmID=%1$s.firmID AND %1$s.RunID=%2$s.RunID AND %1$s.model=%2$s.model 
+            WHERE %2$s.model=(%3$s)
             AND %2$s.time>0"
+
 agent_states <- dbGetQuery(db, sprintf(sql, "agent_info", "agent_states",
                                 sprintf(lookup_sql, "integer_key", "model", "string_key='complete'")))
 setDT(agent_states)
@@ -744,7 +746,7 @@ rm(flaring_intensity)
 sql <- "SELECT SUM(CASE WHEN class=(%3$s) THEN csgd_MCF ELSE 0 END) + SUM(sopf_MCF) AS gas_flared,
         SUM(CASE WHEN class!=(%4$s) THEN oil_BBL+cond_BBL ELSE 0 END) AS oil_output,
         %1$s.model, %1$s.RunID, %2$s.time, %1$s.area FROM %2$s 
-        INNER JOIN lease_info ON %2$s.leaseID=%1$s.leaseID AND %1$s.RunID=%2$s.RunID AND %1$s.model=%2$s.model 
+        INNER JOIN %1$s ON %2$s.leaseID=%1$s.leaseID AND %1$s.RunID=%2$s.RunID AND %1$s.model=%2$s.model 
             AND %1$s.model IN (%5$s) 
             AND %2$s.time IN (SELECT 0 UNION SELECT MAX(tf) FROM params WHERE model=1) 
             AND %2$s.status=(%6$s) 
