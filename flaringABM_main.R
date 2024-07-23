@@ -8,7 +8,8 @@ flaringABM_main <- function(Params, jobID, Run) {
     if (is.na(Params$refID)) {
         set.seed(Run)
         source("./flaringABM_init_empirical.R", local=TRUE)
-        saveRDS(demand, sprintf("./outputs/demand_function_%s.rds", Run))
+        saveRDS(demand,
+            sprintf("./outputs/demand_function_%s-%s.rds", jobID, Run))
         firms[, "RunID":= Run]
         leases[, "RunID":= Run]
 
@@ -19,7 +20,7 @@ flaringABM_main <- function(Params, jobID, Run) {
                                     "market_prop_green"= Params$market_prop_green,
                                     "RunID"= Run)
     } else {
-        demand <- readRDS(sprintf("./outputs/demand_function_%s.rds", Run))
+        demand <- readRDS(sprintf("./outputs/demand_function_%s-%s.rds", Params$refID, Run))
         # update default arguments if necessary
         with(environment(demand$new_schedule),
             formals(new_schedule) <-  c(alist(prop_green=, sample_set=list()), Params[c("p_low", "p_high")]))

@@ -173,8 +173,8 @@ for (col in c("model", "market")) {
 gas_supply[, "q_sup":= cumsum(gas_MCF+csgd_MCF), by=.(model, RunID, market)]
 gas_supply[market_history, on=c("model","RunID"), "max_prop_green":= market_prop_green]
 
-gas_demand <- readRDS(sprintf("./outputs/demand_function_%s.rds", 1))
-#gas_demand <- readRDS(sprintf("./outputs/demand_function_%s.rds", gas_supply[, RunID[which.max(opEx_pMCF)]]))
+gas_demand <- readRDS(sprintf("./outputs/demand_function_%s-%s.rds", jobIDs$refID, 1))
+# gas_demand <- readRDS(sprintf("./outputs/demand_function_%s-%s.rds", jobIDs$refID, gas_supply[, RunID[which.max(opEx_pMCF)]]))
 
 gas_supply[, c("p_grey","p_green"):= gas_demand$new_schedule(first(max_prop_green))(q_sup)[, .(p_grey, p_green)]]
 while (gas_supply[market=="green", all(p_green>opEx_pMCF)]) {

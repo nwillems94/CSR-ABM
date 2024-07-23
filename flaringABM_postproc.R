@@ -35,7 +35,9 @@ write_outputs <- function(db, ID, append_file) {
     market_states[lease_states[dw!=0, sum((gas_MCF + csgd_MCF) * dw), by=.(model, RunID, time)],
         on=c("model", "RunID", "time"), "q_stored":= V1]
 
-    market_states[, "frac":= median(readRDS(sprintf("./outputs/demand_function_%s.rds", .BY))$historical_market$frac), by=RunID]
+    demand_file <- sprintf("./outputs/demand_function_%s-%%s.rds",
+                        if(is.na(jobIDs$refID)) ID else jobIDs$refID)
+    market_states[, "frac":= median(readRDS(sprintf(demand_file, .BY))$historical_market$frac), by=RunID]
     setcolorder(market_states, c("time", "p_grey", "p_green", "p_oil_mult", "q_grey", "q_green", "q_stored", "q_oil",
                                 "market_prop_green", "frac", "RunID", "model"))
 
