@@ -122,6 +122,9 @@ write_outputs <- function(db, ID, append_file) {
                         sprintf(",\n  \\PRIMARY KEY(%s ASC) \n) WITHOUT ROWID;\n", paste(keys, collapse=" ASC, ")),
                         as.character(sqlCreateTable(db, dt, get(dt), row.names=FALSE)))
             dbExecute(db, sql)
+        } else {
+            # order columns like existing sql table
+            setcolorder(get(dt), dbGetQuery(db, sprintf("PRAGMA table_info(%s)", dt))$name)
         }
 
         # match order of primary keys to speed up write time
