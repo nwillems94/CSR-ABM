@@ -5,7 +5,7 @@ library(data.table)
 library(DBI)
 require(RSQLite)
 
-write_outputs <- function(db, csv, ID, append_file) {
+write_outputs <- function(db, ID, append_file) {
     print(paste("Compiling model:", names(ID)))
 
     params_wide <- fread(sprintf("./logs/param_log_%s.csv", ID), colClasses="character")
@@ -49,9 +49,9 @@ write_outputs <- function(db, csv, ID, append_file) {
 
     # write outputs
     cat("\tWriting CSVs")
-    fwrite(params, sprintf("./logs/params_%s.csv.gz", csv), append=append_file)
-    fwrite(market_states, sprintf("./outputs/processed/market_states_%s.csv.gz", csv), append=append_file)
-    fwrite(agent_states, sprintf("./outputs/processed/agent_states_%s.csv.gz", csv), append=append_file)
+    fwrite(params, sprintf("./logs/params_%s.csv.gz", ID))
+    fwrite(market_states, sprintf("./outputs/processed/market_states_%s.csv.gz", ID))
+    fwrite(agent_states, sprintf("./outputs/processed/agent_states_%s.csv.gz", ID))
 
     # begin SQLite transaction and turn off autocommit
     dbBegin(db)
@@ -155,7 +155,7 @@ all_states <- dbConnect(RSQLite::SQLite(), sprintf("./outputs/processed/all_stat
 dbExecute(all_states, "PRAGMA journal_mode = OFF;")
 dbExecute(all_states, "PRAGMA synchronous = OFF;")
 
-lapply(seq(jobIDs)[-which(names(jobIDs)=="refID")], function(i) write_outputs(all_states, file_name, jobIDs[i], i!=1))
+lapply(seq(jobIDs)[-which(names(jobIDs)=="refID")], function(i) write_outputs(all_states, jobIDs[i], i!=1))
 
 # optimize later queries
 dbExecute(all_states, "PRAGMA analysis_limit=1000;")
