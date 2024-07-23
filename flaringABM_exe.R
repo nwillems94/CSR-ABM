@@ -85,6 +85,7 @@ future_lapply(1:Params$nruns, function(Run) {
     source("./flaringABM_core.R")
     # setup logging
     sink(sprintf("./logs/run_log_%s-%s.txt", jobID, Run))
+    on.exit(sink())
     flaringABM_main(Params, jobID, Run)
 })
 cat("\n", gsub("Time difference of", "All runs complete in", capture.output(Sys.time() - run_time)), "\n")
