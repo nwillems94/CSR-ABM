@@ -97,10 +97,26 @@ flaringABM_main <- function(Params, jobID, Run) {
         # initialize dummy portfolio options (abuses lack of type-checking)
         portfolio_options <- optimal_strategy(firms, replace(leases, "class", ""), "", "", list("time"=Params$t0-1))
     } else {
-        t1 <- c(as.list(market_history[!is.na(p_grey), last(.SD[, c("time", "market_prop_green")])]),
-                Params["threshold"], "SRoR"=0)
-        set.seed(seed_base + t1$time)
-        portfolio_options <- optimal_strategy(firms, leases, market_history, demand$new_schedule(t1$market_prop_green), t1)
+        firms_0 <- fread(sprintf("./outputs/agent_states_%s-%s.csv", Params$refID, Run),
+                        colClasses=list(character="activity"))[
+                    time==Params$t0 ]
+        setkey(firms_0, firmID)
+        leases_0 <- fread(sprintf("./outputs/lease_states_%s-%s.csv", Params$refID, Run),
+                        colClasses= list(integer="t_switch", numeric="cost_csgd"))[
+                    (time==Params$t0) & (t_switch==Params$t0)][
+                    !duplicated(leaseID, fromLast=TRUE)]
+
+        portfolio_options <- firms_0[leases_0, on="firmID"][,
+                            .("devIDs"=.(leaseID), behavior), by=firmID][
+                            !duplicated(firmID)]
+
+        portfolio_options[, "economical":= (behavior=="economizing")]
+        portfolio_options[, "imitation":= (behavior=="imitating")]
+        portfolio_options[,
+            "option":= ifelse(behavior=="mitigating", "green", "")]
+        portfolio_options[, "behavior":= NULL]
+
+        rm(leases_0, firms_0)
     }
 
     fwrite(as.data.table(t(unlist(Params))), file=sprintf(logOuts, Run))
