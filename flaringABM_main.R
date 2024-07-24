@@ -130,7 +130,6 @@ flaringABM_main <- function(Params, jobID, Run) {
         cat("\r\t|", strrep("*", floor((options("width")[[1]]-12) * (ti$time - Params$t0) / (Params$tf-Params$t0))))
 
         set.seed(seed_base + ti$time)
-        ti$period <- with(ti, time - min(market_history$time) + 1)
         leases[, "time":= ti$time]
         firms[, "time":= ti$time]
 
@@ -178,12 +177,22 @@ flaringABM_main <- function(Params, jobID, Run) {
         ## Assess value
         # net cashflow from oil and gas operations
         #    (revenue from oil + gas operations) - (baseline costs + additional costs spent on mitigation)
-        firms[, "sales":= oil_revenue + gas_revenue]
-        firms[, "profit":= sales - (cost_P + cost_M)]
-        # calculates the market value based on [Baron's formulation](zotero://select/items/0_I7NL6RPA)
-        # market_value = profit + dprofit - Ai - cost*xi + cost*xi*SRoR
-        firms[, "market_value":= (oil_revenue + gas_revenue - cost_P - cost_M)/ti$period +  # Net income
-                                ((cost_M * ti$SRoR)/ti$period - sPressure)]                 # Net social value
+        firms[, "sales":= sales + oil_revenue + gas_revenue]
+        firms[, "profit":= profit + (oil_revenue + gas_revenue) - (cost_P + cost_M)]
+
+
+        # calculate market value (exponential moving average)
+        #   based on [Baron's formulation](zotero://select/items/0_I7NL6RPA)
+        #   market_value = profit + dprofit - Ai - cost*xi + cost*xi*SRoR
+        firms[, "market_value":= market_value / 2 +
+            ((oil_revenue + gas_revenue - cost_P - cost_M) + # Net income
+            ((cost_M * ti$SRoR) - sPressure)) / 2]           # Net social value
+
+        if (ti$time == min(market_history$time)) {
+            firms[, "market_value":=
+                (oil_revenue + gas_revenue - cost_P - cost_M) + # Net income
+                ((cost_M * ti$SRoR) - sPressure)]               # Net social value
+        }
         firms[, "market_value":= pmax(market_value, 0)]
 
 

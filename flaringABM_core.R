@@ -85,20 +85,27 @@ lease_costs <- function(dt_l) {
 
 
 calc_debits <- function(dt_f, dt_l) {
+    dt_f[, c("cost_P","cost_M"):= 0]
     # baseline cost of production
     dt_f[dt_l[, .SD[(is.na(market) | market!="none") & (status=="producing"),
-                    sum(cost_oil + cost_gas)], by=firmID], on="firmID", "cost_P":= cost_P+V1]
+                sum(cost_oil + cost_gas)], by=firmID], on="firmID",
+            "cost_P":= cost_P + V1]
+
+    dt_f[dt_l[, .SD[(market!="none") & (status=="producing") & (class=="developed"),
+            sum(cost_csgd)], by=firmID], on="firmID",
+        "cost_P":= cost_P + ifelse(behavior=="flaring", V1, 0)]
 
     # additional costs from mitigating
     dt_f[dt_l[, .SD[(market!="none") & (status=="producing") & (class=="developed"),
-                    sum(cost_csgd)], by=firmID], on="firmID", "cost_M":= cost_M+V1]
+            sum(cost_csgd)], by=firmID], on="firmID",
+        "cost_M":= cost_M + ifelse(behavior!="flaring", V1, 0)]
 
 }###--------------------    END OF FUNCTION calc_debits             --------------------###
 
 
 calc_credits <- function(dt_f, market) {
-    dt_f[, "gas_revenue":= gas_revenue + (grey_gas_sold * market$p_grey + green_gas_sold * market$p_green)]
-    dt_f[, "oil_revenue":= oil_revenue + (oil_output * (market$p_grey * market$p_oil_mult))]
+    dt_f[, "gas_revenue":= (grey_gas_sold * market$p_grey + green_gas_sold * market$p_green)]
+    dt_f[, "oil_revenue":= (oil_output * (market$p_grey * market$p_oil_mult))]
 
 }###--------------------    END OF FUNCTION calc_credits            --------------------###
 
