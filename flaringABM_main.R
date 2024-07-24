@@ -19,6 +19,10 @@ flaringABM_main <- function(Params, jobID, Run) {
                                     "q_grey"= NA_real_, "q_green"= NA_real_, "q_oil"= NA_real_,
                                     "market_prop_green"= Params$market_prop_green,
                                     "RunID"= Run)
+
+        # with what probability to exploring firms discover a new asset - validated based on EIA DPR
+        Params$prob_e <- 1.23 / (Params$nagents * Params$prop_e *
+                                leases[is.na(firmID), mean(oil_BBL+cond_BBL + (gas_MCF+csgd_MCF)/6)])
     } else {
         demand <- readRDS(sprintf("./outputs/demand_function_%s-%s.rds", Params$refID, Run))
         # update default arguments if necessary
@@ -42,6 +46,12 @@ flaringABM_main <- function(Params, jobID, Run) {
         market_history[time >= Params$t0, c("p_grey", "p_green", "q_grey", "q_green", "q_oil"):= NA_real_]
         market_history[time >= Params$t0, "market_prop_green":= Params$market_prop_green]
         setkey(market_history, time)
+
+        # recover probability exploring firms discover a new asset
+        ref_params <- fread(sprintf("./logs/param_log_%s-%s.csv", Params$refID, Run))
+        Params$prob_e <- ref_params[, unique(prob_e * prop_e)] / Params$prop_e
+        rm(ref_params)
+
     }
     cat("...Running...\n\t")
 
@@ -62,6 +72,8 @@ flaringABM_main <- function(Params, jobID, Run) {
                     .(31250 * ceiling(3*flared_MCF/5475),
                     (csgd_MCF + (2 * flared_MCF)) * sopf_MCF / csgd_MCF,
                     csgd_MCF + (2 * flared_MCF))}]
+            Params$prob_e <- 1.23 / (Params$nagents * Params$prop_e *
+                                leases[is.na(firmID), mean(oil_BBL+cond_BBL + (gas_MCF+csgd_MCF)/6)])
         }
 
         leases[capEx_csgd>0, "opEx_pMCF":= opEx_pMCF + (612.5 * (capEx_csgd / 31250) / csgd_MCF)]
@@ -90,10 +102,6 @@ flaringABM_main <- function(Params, jobID, Run) {
         set.seed(seed_base + t1$time)
         portfolio_options <- optimal_strategy(firms, leases, market_history, demand$new_schedule(t1$market_prop_green), t1)
     }
-
-    # with what probability to exploring firms discover a new asset - validated based on EIA DPR
-    Params$prob_e <- 1.23 / (Params$nagents * Params$prop_e *
-                                leases[is.na(firmID), mean(oil_BBL+cond_BBL + (gas_MCF+csgd_MCF)/6)])
 
     fwrite(as.data.table(t(unlist(Params))), file=sprintf(logOuts, Run))
     fwrite(firms, file=sprintf(agentOuts, Run))
