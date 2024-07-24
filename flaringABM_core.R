@@ -33,12 +33,15 @@ dist_social_pressure <- function(dt_f, ti, focus=1) {
     } else if (ti$strategy=="oil_output") {
         dt_f[behavior=="flaring", "sPressure":= a * oil_output / sum(oil_output)]
     } else if (ti$strategy=="top") {
-        dt_f[.(dt_f[behavior=="flaring"][order(-gas_flared), firmID[1:min(5, .N)]]),
-                "sPressure":= a * gas_flared / sum(gas_flared)]
+        dt_f[(behavior=="flaring") &
+                (gas_flared > quantile(gas_flared, 0.9)),
+            "sPressure":= a * gas_flared / sum(gas_flared)]
     }
     # pressure on leader firms
     else if (ti$strategy=="leaders") {
-        dt_f[market_value > quantile(market_value, 2/3), "sPressure":= a / .N]
+        dt_f[(behavior=="flaring") &
+                (market_value > quantile(market_value, 0.9)),
+            "sPressure":= a * market_value / sum(market_value)]
     }
 
     # the effect on market value can be up to 20% [King and Soule, 2007](zotero://select/items/0_TWS6EB4J)
