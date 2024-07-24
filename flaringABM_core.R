@@ -42,6 +42,12 @@ dist_social_pressure <- function(dt_f, ti, focus=1) {
         dt_f[(behavior=="flaring") &
                 (market_value > quantile(market_value, 0.9)),
             "sPressure":= a * market_value / sum(market_value)]
+    } else if (ti$strategy=="shock") {
+        if (between(ti$time, 1, 12)) {
+            dt_f[(behavior=="flaring") &
+                    (oil_output > quantile(oil_output, 0.9)),
+                "sPressure":= a * oil_output / sum(oil_output)]
+        }
     }
 
     # the effect on market value can be up to 20% [King and Soule, 2007](zotero://select/items/0_TWS6EB4J)
@@ -115,8 +121,10 @@ imitators <- function(dt_f, dt_p, ti, success_metric="sales") {
     observations[dt_p[(option=="grey") & !is.na(K)], on=c(observer="firmID"),
             "imitation":= replace(imitation, observed %in% c("economizing", "mitigating", "imitating"), "green")]
     ## agents considering going green may change its mind (as long as it's not happening because of standard development)
-    observations[dt_p[(option=="green") & (K>0)], on=c(observer="firmID"),
+    if (!((ti$strategy=="shock") & between(ti$time, 1, 12))) {
+        observations[dt_p[(option=="green") & (K>0)], on=c(observer="firmID"),
             "imitation":= replace(imitation, observed=="flaring", "grey")]
+    }
 
     # moderate rate of imitation, less sucessful agents are more likely to imitate
     return(observations[sample(.N, sum(runif(.N)<ti$prob_m), prob=1/weight)][!is.na(imitation)]$observer)
