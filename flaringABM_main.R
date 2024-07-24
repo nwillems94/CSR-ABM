@@ -25,13 +25,16 @@ flaringABM_main <- function(Params, jobID, Run) {
         with(environment(demand$new_schedule),
             formals(new_schedule) <-  c(alist(prop_green=, sample_set=list()), Params[c("p_low", "p_high")]))
         firms <- fread(sprintf("./outputs/agent_states_%s-%s.csv", Params$refID, Run),
-                        colClasses=list(numeric=c("sPressure", "grey_gas_sold"), character="activity"))[
+                        colClasses=list(numeric=c("sPressure", "grey_gas_sold", "green_gas_sold"), character="activity"))[
                     time==Params$t0 - 1]
         setkey(firms, firmID)
 
         leases <- fread(sprintf("./outputs/lease_states_%s-%s.csv", Params$refID, Run),
                         colClasses= list(integer="t_switch", numeric="cost_csgd"))[
                     time<Params$t0][!duplicated(leaseID, fromLast=TRUE)]
+        leases[(class!="developed") |
+                (status!="producing") |
+                (gas_MCF==0 & csgd_MCF==0), "market":= NA_character_]
         leases[, "time":= Params$t0 - 1]
         setkey(leases, leaseID)
 

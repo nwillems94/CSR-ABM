@@ -473,3 +473,170 @@ demand_sample <- function(prop_green, sample_set, p_low, p_high) {
                                     "p_green"= if (prop_green==0) 0 else p_green))
     })
 }###--------------------      END OF FUNCTION demand_sample         --------------------###
+
+
+
+#*
+#*** UTILITIES ***#
+#*
+recover_outputs <- function(refID) {
+    # recreate CSV outputs from database file
+
+    file_paths <- c(sprintf("%s/CSR-ABM/outputs/processed/all_states_%s.sqlite",
+                                Sys.getenv("WORK"),  refID),
+                    sprintf("./logs/param_log_%s-%%s.csv", refID),
+                    sprintf("./outputs/%1$s_states_%2$s-%%s.csv",
+                        c("agent", "lease", "market"), refID),
+                    sprintf("./outputs/demand_function_%s-%%s.rds", refID))
+
+    # check if all files exist or need to be recovered from DB
+    inputs_exists <- lapply(file_paths[2:5], function(x)
+                list.files(path=dirname(x), gsub("%s", ".*", basename(x))))
+    if (all(lengths(inputs_exists)>0)) {
+        print("Input files found")
+        return()
+    }
+
+    # exit with error if db does not exist
+    if (!file.exists(file_paths[1])) {
+        print("No input files found")
+        q()
+    }
+
+    # setup DB connection
+    db <- DBI::dbConnect(RSQLite::SQLite(), file_paths[1])
+
+    lookup_col <- function(db, s_key, i_key) {
+        data_sql <- "SELECT string_key FROM string_lookup
+                    WHERE column_name='%s' AND integer_key=%s"
+        return(DBI::dbGetQuery(db, sprintf(data_sql, s_key, i_key)))
+    }
+
+
+    # MODEL PARAMETERS
+    ref_params <- DBI::dbGetQuery(db, "SELECT * FROM params WHERE model=1")
+    setDT(ref_params)
+    ref_params[, "RunID_dummy":= RunID]
+    ref_params[, fwrite(.SD, sprintf(file_paths[2], .BY)), by=RunID_dummy]
+
+
+    # FIRMS
+    data_sql <- "SELECT * FROM %2$s 
+                LEFT JOIN %1$s ON %1$s.firmID=%2$s.firmID 
+                        AND %1$s.RunID=%2$s.RunID 
+                        AND %1$s.model=%2$s.model 
+                    WHERE %2$s.model=1 
+                        AND %2$s.time IN (%3$d, %3$d-1, (SELECT MIN(t0) FROM params WHERE model=1)-1)"
+    firms <- DBI::dbGetQuery(db, sprintf(data_sql,
+                                        "agent_info",
+                                        "agent_states",
+                                        0))
+    setDT(firms)
+
+    # format columns
+    firms[, which(duplicated(names(firms))) := NULL]
+    firms[, c("model", "gas_flared_calc", "oil_prod", "gas_prod"):= NULL]
+    for (col in c("behavior", "activity")) {
+        firms[, c(col):= as.character(get(col))]
+        firms[, c(col):= as.character(lookup_col(db, col, .BY)),
+            by=get(col)]
+    }
+    rm(data_sql)
+    firms[, "RunID_dummy":= RunID]
+    firms[, fwrite(.SD, sprintf(file_paths[3], .BY)), by=RunID_dummy]
+
+
+    # LEASES
+    ## include changed leases needed to rebuild initial portfolio_options
+    data_sql <- "SELECT * FROM (
+                    SELECT *, 
+                        ROW_NUMBER() OVER 
+                            (PARTITION BY RunID, leaseID ORDER BY time DESC) 
+                            AS row_num
+                    FROM %2$s
+                    WHERE model=1 AND time<=%3$s) AS st
+                LEFT JOIN %1$s ON %1$s.leaseID=st.leaseID 
+                        AND %1$s.RunID=st.RunID 
+                        AND %1$s.model=st.model 
+                    WHERE st.row_num<=2
+                        OR st.time < (SELECT MIN(t0) FROM params WHERE model=1)"
+
+    leases <- DBI::dbGetQuery(db, sprintf(data_sql, "lease_info",
+                                                    "lease_states",
+                                                    0))
+    setDT(leases)
+
+    # format columns
+    leases[, which(duplicated(names(leases))) := NULL]
+    leases[, c("model","dw","net_dw","t_last","row_num"):= NULL]
+    for (col in c("area", "market", "status", "class")) {
+        leases[, c(col):= as.character(get(col))]
+        leases[, c(col):= as.character(lookup_col(db, col, .BY)),
+                by=get(col)]
+    }
+    leases[class!="developed", "t_switch":= NA_integer_]
+    leases[t_found>time, c("t_found","firmID"):= NA_integer_]
+    leases[(class!="developed") |
+            (status!="producing") |
+            (gas_MCF==0 & csgd_MCF==0), "market":= NA_character_]
+    rm(data_sql)
+
+    setorder(leases, RunID, leaseID, time)
+
+    leases[, "RunID_dummy":= RunID]
+    leases[, fwrite(.SD, sprintf(file_paths[4], .BY)), by=RunID_dummy]
+
+
+    # MARKET HISTORY
+    ## recover market states from DB
+    market_history <- DBI::dbGetQuery(db, "SELECT * FROM market_states WHERE model=1")
+    setDT(market_history)
+    market_history[, c("model", "q_stored", "frac"):= NULL]
+
+    market_history[, "RunID_dummy":= RunID]
+    market_history[, fwrite(.SD, sprintf(file_paths[5], .BY)), by=RunID_dummy]
+
+
+    # DEMAND FUNCTION
+    market_shares <- fread("./inputs/processed/firm_market_shares.csv")
+
+    historical_market_data <- fread("./inputs/processed/historical_NG_demand.csv",
+                                integer64="numeric")
+
+    for (i in leases[, unique(RunID)]) {
+        historical_market_data[
+            market_shares[, sum(OPER_GAS_PROD_VOL+OPER_CSGD_PROD_VOL),
+                    by=.("year"=CYCLE_YEAR, "month"=month.abb[CYCLE_MONTH])],
+                on=c("year","month"),
+            "frac":= leases[(time==min(time)) & !is.na(firmID) & (RunID==i),
+                        6*sum(BOE_emp - oil_BBL - cond_BBL)] / V1]
+
+        # recreate a demand schedule
+        demand <-
+            setRefClass("demand_function",
+                fields =  list(historical_market= "data.table"),
+                methods = list(new_schedule= demand_sample)
+            )$new(historical_market=
+                na.omit(historical_market_data[, .SD, keyby=.(year, month)]))
+
+        # set default function arguments
+        assign("prices",
+            c(ref_params[RunID==i, .(p_low, p_high)][1]),
+            envir=demand)
+        with(environment(demand$new_schedule),
+            formals(new_schedule) <- c(alist(prop_green=, sample_set=list()), prices))
+        rm("prices", envir=demand)
+
+        saveRDS(demand, sprintf(file_paths[6], i))
+        historical_market_data[, "frac":= NULL]
+        rm(demand)
+    }
+
+
+    # CLEAN UP
+    # terminate connection and optimize future queries
+    DBI::dbExecute(db, "PRAGMA analysis_limit=1000;")
+    DBI::dbExecute(db, "PRAGMA optimize;")
+    DBI::dbDisconnect(db)
+
+}###--------------------     END OF FUNCTION recover_outputs        --------------------###
