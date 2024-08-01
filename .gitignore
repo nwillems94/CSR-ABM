@@ -1,0 +1,5 @@
+# ignore all subdirectories except inputs and scripts
+/*/
+!/scripts/
+/scripts/**/*.out
+!/inputs/
