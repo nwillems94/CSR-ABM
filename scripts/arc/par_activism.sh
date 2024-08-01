@@ -1,10 +1,10 @@
 #!/bin/bash
-#SBATCH -J flareRep
+#SBATCH -J flareAct
 #SBATCH -o LOG_%j.out
 #SBATCH -p skx-normal
 #SBATCH -n 1
 #SBATCH -N 1
-#SBATCH -t 01:59:00
+#SBATCH -t 00:59:00
 #SBATCH -A *
 #SBATCH --mail-type=all
 #SBATCH --mail-user=*
@@ -33,20 +33,20 @@ cd $SCRATCH/flaringABM_10629585
 file=`basename ./outputs/processed/agent_states_* .csv.gz`
 JOBID_0=${file/agent_states_/}
 
-# start comparitive runs simultaneously 
-echo -e "\nStarting alternative market scenarios" 
+# start comparitive runs simultaneously
+echo -e "\nStarting alternative runs"
 
+# activist strategy 1
+{ echo "targetting evenly";
+Rscript flaringABM_exe.R --parallel=48 nruns=$nruns refID=$JOBID_0 t0=0 strategy='even' >> ./logs/run_log_${SLURM_JOBID}_1.txt; } &
 
-# assume flared casinghead gas is misreported
-{ echo "running with mis-reported casinghead gas";
-Rscript flaringABM_exe.R --parallel=48 nruns=$nruns refID=$JOBID_0 reporting='misreported' >> ./logs/run_log_${SLURM_JOBID}_1.txt; } &
-
-# assume flared casinghead gas is underreported
-{ sleep 60; # pause to ensure unique jobIDs
-echo "running with under-reported casinghead gas";
-Rscript flaringABM_exe.R --parallel=48 nruns=$nruns refID=$JOBID_0 reporting='underreported' >> ./logs/run_log_${SLURM_JOBID}_2.txt; } &
+# activist strategy 2
+{ sleep 61; # pause to ensure unique jobIDs
+echo "targetting top";
+Rscript flaringABM_exe.R --parallel=48 nruns=$nruns refID=$JOBID_0 t0=0 strategy='top' >> ./logs/run_log_${SLURM_JOBID}_2.txt; } &
 
 wait
+
 
 echo -e "\nPost processing" 
 
@@ -64,10 +64,11 @@ concat_runs "log" $JOBID_2 & concat_runs "market" $JOBID_2 & concat_runs "agent"
 wait 
 
 
-# process outputs into singular compact files 
-Rscript flaringABM_postproc.R "refID"=$JOBID_0 "mis-reported"=$JOBID_1 "under-reported"=$JOBID_2
+# process outputs into singular compact files
+Rscript flaringABM_postproc.R "refID"=$JOBID_0 "target even"=$JOBID_1 "target top"=$JOBID_2
 
 
 echo -e "\nCompleted jobs: ${JOBID_1}, ${JOBID_2}" 
 
 exit 0 
+

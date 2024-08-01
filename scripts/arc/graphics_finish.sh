@@ -25,8 +25,9 @@ Rscript flaringABM_graphics.R "refID"=$JOBID_0
 
 echo -e "\nCompleted grapihcs: ${JOBID_0}" 
 
-# copy processed outputs to WORK directory 
-gzip -c ./outputs/processed/all_states_${JOBID_0}.sqlite > $WORK/flaringABM/outputs/processed/all_states_${JOBID_0}.sqlite.gz 
+# copy processed outputs to WORK directory
+xz -c ./outputs/processed/all_states_${JOBID_0}.sqlite >\
+    $WORK/flaringABM/outputs/processed/all_states_${JOBID_0}.sqlite.xz 
 
 exit 0 
 

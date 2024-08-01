@@ -65,7 +65,7 @@ echo "  ...allowing time to sync files..."
 sleep 120 
 
 
-# start comparitive runs simultaneously 
+# start comparitive runs simultaneously
 echo -e "\nStarting comparative runs"
 
 # no imitation
@@ -73,7 +73,7 @@ echo -e "\nStarting comparative runs"
 Rscript flaringABM_exe.R --parallel=32 nruns=$nruns refID=$JOBID_0 prob_m=0 t0=0 >> ./logs/run_log_${SLURM_JOBID}_1.txt; } & 
 
 # no differentiation
-{ sleep 60; # pause to ensure unique jobIDs 
+{ sleep 61; # pause to ensure unique jobIDs
 echo "running without differentiation ... "; 
 Rscript flaringABM_exe.R --parallel=32 nruns=$nruns refID=$JOBID_0 market_prop_green=0 t0=0 >> ./logs/run_log_${SLURM_JOBID}_2.txt; } & 
 
@@ -101,7 +101,7 @@ wait
 Rscript flaringABM_exe.R --parallel=32 nruns=$nruns refID=$JOBID_0 Activism=0 t0=0 >> ./logs/run_log_${SLURM_JOBID}_3.txt; } & 
 
 # no shareholder valuation
-{ sleep 60; # pause to ensure unique jobIDs 
+{ sleep 61; # pause to ensure unique jobIDs
 echo "running without shareholder valuation ... "; 
 Rscript flaringABM_exe.R --parallel=32 nruns=$nruns refID=$JOBID_0 SRoR=0 t0=0 >> ./logs/run_log_${SLURM_JOBID}_4.txt; } & 
 
@@ -125,7 +125,7 @@ concat_runs "log" $JOBID_4 & concat_runs "market" $JOBID_4 & concat_runs "agent"
 wait 
 
 
-# process outputs into singular compact files 
+# process outputs into singular compact files
 { echo -e "\nPost processing: ${JOBID_3}";
 Rscript flaringABM_postproc.R --parallel=48 "refID"=$JOBID_0 "no stakeholder\nactivism"=$JOBID_3; } & 
 
