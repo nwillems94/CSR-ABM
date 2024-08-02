@@ -501,7 +501,8 @@ recover_outputs <- function(refID) {
     # recreate CSV outputs from database file
 
     file_paths <- c(sprintf("%s/CSR-ABM/outputs/processed/all_states_%s.sqlite",
-                                Sys.getenv("WORK"),  refID),
+                        fcoalesce(Sys.getenv("WORK", unset=NA), ".."),
+                        refID),
                     sprintf("./logs/param_log_%s-%%s.csv", refID),
                     sprintf("./outputs/%1$s_states_%2$s-%%s.csv",
                         c("agent", "lease", "market"), refID),

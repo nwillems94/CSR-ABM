@@ -143,19 +143,16 @@ jobIDs <- lapply(strsplit(args, "="), `[[`, 2)
 names(jobIDs) <- gsub("\\n", "\n", sapply(strsplit(args, "="), `[[`, 1), fixed=TRUE)
 print(jobIDs)
 
-if("refID" %in% names(jobIDs)) {
-    file_name <- gsub("^all_states_(.*).sqlite$", "\\1",
-                    list.files(path="./outputs/processed/", pattern=sprintf("^all_states_%s.*.sqlite$", jobIDs$refID)))
-} else {
-    file_name <- paste(jobIDs, collapse="-")
+if(!("refID" %in% names(jobIDs))) {
     jobIDs <- c(jobIDs, "refID"=NA)
 }
-if(length(file_name)>1) {
-    print("Error with database name")
-    q()
-}
 
-all_states <- dbConnect(RSQLite::SQLite(), sprintf("./outputs/processed/all_states_%s.sqlite", file_name))
+all_states <- dbConnect(RSQLite::SQLite(),
+                sprintf("%s/CSR-ABM/outputs/processed/all_states_%s.sqlite",
+	                fcoalesce(Sys.getenv("WORK", unset=NA), ".."),
+                    fcoalesce(jobIDs$refID,
+                        paste(na.omit(jobIDs), collapse="-"))))
+
 # turn off safety measures since all data is backed up in CSVs
 dbExecute(all_states, "PRAGMA journal_mode = OFF;")
 dbExecute(all_states, "PRAGMA synchronous = OFF;")

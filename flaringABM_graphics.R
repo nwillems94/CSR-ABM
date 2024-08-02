@@ -11,7 +11,8 @@ jobIDs <- lapply(strsplit(args, "="), `[[`, 2)
 names(jobIDs) <- gsub("\\n", "\n", sapply(strsplit(args, "="), `[[`, 1), fixed=TRUE)
 print(jobIDs)
 
-db <- dbConnect(RSQLite::SQLite(), list.files(path="./outputs/processed/", pattern=sprintf("^all_states_%s.*.sqlite$", jobIDs$refID), full.names=TRUE))
+db <- dbConnect(RSQLite::SQLite(),
+    sprintf("./outputs/processed/all_states_%s.sqlite", jobIDs$refID))
 
 lookup_sql <- "SELECT %s FROM string_lookup WHERE column_name='%s' AND %s"
 

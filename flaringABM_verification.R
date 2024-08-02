@@ -58,11 +58,14 @@ if (market_history[p_green>0][p_grey > p_green, .N>0]) {
 }
 
 
-rmarkdown::render("flaringABM_validation.Rmd", output_format="html_document",
-                output_file=sprintf("%s/outputs/validation/%s.html",
-                        ifelse(Sys.getenv("WORK")=="", ".", paste0(Sys.getenv("WORK"),"/flaringABM")),
-                        paste(jobIDs, collapse="-")),
-                intermediates_dir=sprintf("./outputs/validation/%s", paste(jobIDs, collapse="-")), quiet=TRUE)
+rmarkdown::render("flaringABM_validation.Rmd",
+    output_format="html_document",
+    output_file=sprintf("%s/CSR-ABM/outputs/validation/%s.html",
+        fcoalesce(Sys.getenv("WORK", unset=NA), ".."),
+            paste(jobIDs, collapse="-")),
+    intermediates_dir=sprintf("./outputs/validation/%s",
+        paste(jobIDs, collapse="-")),
+    quiet=TRUE)
 
 # optimize later queries
 dbExecute(db, "PRAGMA analysis_limit=1000;")

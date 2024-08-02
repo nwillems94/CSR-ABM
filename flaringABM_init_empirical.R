@@ -355,10 +355,13 @@ with(environment(demand$new_schedule),
 
 # generate validation report for this initialization
 cat("Writing validation report\n")
-rmarkdown::render("flaringABM_validation_init.Rmd", output_format="html_document",
-                output_file=sprintf("%s/outputs/validation/init_%s_%s.html",
-                        ifelse(Sys.getenv("WORK")=="", ".", paste0(Sys.getenv("WORK"),"/flaringABM")), jobID, Run),
-                intermediates_dir=sprintf("./outputs/validation/init_%s_%s", jobID, Run), quiet=TRUE)
+rmarkdown::render("flaringABM_validation_init.Rmd",
+    output_format="html_document",
+    output_file=sprintf("%s/CSR-ABM/outputs/validation/init_%s_%s.html",
+        fcoalesce(Sys.getenv("WORK", unset=NA), ".."), jobID, Run),
+    intermediates_dir=sprintf("./outputs/validation/init_%s_%s", jobID, Run),
+    quiet=TRUE
+)
 unlink(sprintf("./outputs/validation/init_%s_%s", jobID, Run), recursive=TRUE)
 
 # done

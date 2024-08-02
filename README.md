@@ -79,7 +79,7 @@ The example `bash` `SLURM` scripts assume the following commands (standard Unix 
 - `gzip`
 
 ## Download code
-You're already here. You can download the code and input data from [GitHub](https://github.com/nwillems94/FlaringABM/).
+You're already here. You can download the code and input data from [GitHub](https://github.com/nwillems94/CSR-ABM/).
 
 # Running the model  
 ## Data  
