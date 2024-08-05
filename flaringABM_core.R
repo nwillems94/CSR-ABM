@@ -658,3 +658,32 @@ recover_outputs <- function(refID) {
     DBI::dbDisconnect(db)
 
 }###--------------------     END OF FUNCTION recover_outputs        --------------------###
+
+reset_db <- function(refID) {
+    # reset database after rerunning a baseline
+    db <- DBI::dbConnect(RSQLite::SQLite(),
+        sprintf("%s/CSR-ABM/outputs/processed/all_states_%s.sqlite",
+            fcoalesce(Sys.getenv("WORK", unset=NA), ".."), refID))
+
+    # remove old original outputs
+    for (i in c("params", "agent_states", "agent_info", "lease_info", "lease_states", "market_states")) {
+
+        DBI::dbExecute(db, sprintf("DELETE FROM %s WHERE model=1;", i))
+        DBI::dbExecute(db, sprintf("UPDATE %s SET model=model-1 WHERE model>1;", i))
+
+        DBI::dbExecute(db, "VACUUM;")
+
+        print(i)
+    }
+
+    # reset lookup table
+    DBI::dbExecute(db, "DELETE FROM string_lookup WHERE 
+                        column_name IN ('model','jobID') AND integer_key=2;")
+
+    # terminate connection and optimize future queries
+    DBI::dbExecute(db, "VACUUM;")
+    DBI::dbExecute(db, "PRAGMA analysis_limit=1000;")
+    DBI::dbExecute(db, "PRAGMA optimize;")
+    DBI::dbDisconnect(db)
+
+}###--------------------         END OF FUNCTION reset_db           --------------------###
