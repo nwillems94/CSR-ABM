@@ -76,6 +76,8 @@ write_outputs <- function(db, ID, append_file) {
     # convert string columns to integers
     dbExecute(db, "INSERT INTO string_lookup (column_name, string_key, integer_key) VALUES (?, ?, ?);",
                    list("model", names(ID), as.integer(model_num)))
+    dbExecute(db, "INSERT INTO string_lookup (column_name, string_key, integer_key) VALUES (?, ?, ?);",
+                   list("jobID", ID[[1]], as.integer(model_num)))
 
     for (dt in c("agent_states", "lease_states", "market_states", "params")) {
         get(dt)[, "model":= NULL]
