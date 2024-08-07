@@ -137,6 +137,22 @@ write_outputs <- function(db, ID, append_file) {
         dbExecute(db, paste0("INSERT INTO ", dt, " VALUES(:", paste(names(get(dt)), collapse=", :"), ")"), get(dt))
         rm(dt)
     }
+    if (!("demand_functions" %in% dbListTables(db))) {
+        # store demand functions as blobs
+        dbExecute(db, "CREATE TABLE demand_functions 
+                        (
+                          RunID INTEGER, 
+                          fun_bin BLOB, 
+                          PRIMARY KEY (RunID)
+                        ) WITHOUT ROWID;")
+        demand_funs <- sapply(list.files(dirname(demand_file),
+                            gsub("%s.*", "*", basename(demand_file)),
+                            full.names=TRUE), readRDS)
+        names(demand_funs) <- gsub(".*-(.*).rds", "\\1", names(demand_funs))
+        dbExecute(db,
+            "INSERT INTO demand_functions (RunID, fun_bin) VALUES (?, ?);",
+            list(names(demand_funs), lapply(demand_funs, serialize, NULL)))
+    }
     dbCommit(db)
 }
 

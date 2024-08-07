@@ -617,39 +617,12 @@ recover_outputs <- function(refID) {
 
 
     # DEMAND FUNCTION
-    market_shares <- fread("./inputs/processed/firm_market_shares.csv")
-
-    historical_market_data <- fread("./inputs/processed/historical_NG_demand.csv",
-                                integer64="numeric")
-
-    for (i in leases[, unique(RunID)]) {
-        historical_market_data[
-            market_shares[, sum(OPER_GAS_PROD_VOL+OPER_CSGD_PROD_VOL),
-                    by=.("year"=CYCLE_YEAR, "month"=month.abb[CYCLE_MONTH])],
-                on=c("year","month"),
-            "frac":= leases[(time==min(time)) & !is.na(firmID) & (RunID==i),
-                        6*sum(BOE_emp - oil_BBL - cond_BBL)] / V1]
-
-        # recreate a demand schedule
-        demand <-
-            setRefClass("demand_function",
-                fields =  list(historical_market= "data.table"),
-                methods = list(new_schedule= demand_sample)
-            )$new(historical_market=
-                na.omit(historical_market_data[, .SD, keyby=.(year, month)]))
-
-        # set default function arguments
-        assign("prices",
-            c(ref_params[RunID==i, .(p_low, p_high)][1]),
-            envir=demand)
-        with(environment(demand$new_schedule),
-            formals(new_schedule) <- c(alist(prop_green=, sample_set=list()), prices))
-        rm("prices", envir=demand)
-
-        saveRDS(demand, sprintf(file_paths[6], i))
-        historical_market_data[, "frac":= NULL]
-        rm(demand)
+    demand_funs <- DBI::dbGetQuery(db, "SELECT * FROM demand_functions")
+    for (i in demand_funs$RunID) {
+        saveRDS(unserialize(demand_funs$fun_bin[[i]]),
+            sprintf(file_paths[6], i))
     }
+    rm(demand_funs)
 
 
     # CLEAN UP

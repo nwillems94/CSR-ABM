@@ -286,7 +286,8 @@ gas_supply[, "market":= as.character(dbGetQuery(db, sprintf(lookup_sql,
 gas_supply[, "q_sup":= cumsum(gas_MCF+csgd_MCF), by=.(model, RunID, market)]
 gas_supply[market_history, on=c("model","RunID"), "max_prop_green":= market_prop_green]
 
-gas_demand <- readRDS(sprintf("./outputs/demand_function_%s-%s.rds", jobIDs, 1))
+gas_demand <- unserialize(dbGetQuery(db,
+        "SELECT * FROM demand_functions ORDER BY RANDOM()")$fun_bin[[1]])
 
 gas_supply[, c("p_grey","p_green"):= gas_demand$new_schedule(first(max_prop_green))(q_sup)[, .(p_grey,p_green)], by=model]
 ```
