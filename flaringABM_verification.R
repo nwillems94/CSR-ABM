@@ -10,7 +10,7 @@ jobIDs <- lapply(strsplit(args, "="), `[[`, 2)
 names(jobIDs) <- gsub("\\n", "\n", sapply(strsplit(args, "="), `[[`, 1), fixed=TRUE)
 print(jobIDs)
 
-if(!("refID" %in% names(jobIDs))) {
+if (!("refID" %in% names(jobIDs))) {
     jobIDs <- c(jobIDs, "refID"=NA)
 }
 
@@ -65,45 +65,73 @@ market_history[,
 ]
 
 ## Market value
-if (agent_states[is.na(market_value) & (time>min(time)), .N] > 0) {
+if (agent_states[is.na(market_value) & (time > min(time)), .N] > 0) {
     print("Missing market values")
-    print(agent_states[is.na(market_value) & (time>min(time))])
+    print(agent_states[is.na(market_value) & (time > min(time))])
 } else {
     print("Market values")
     print(agent_states[!is.na(market_value), summary(market_value)])
 }
 print("Percent of agents who lose money over model run")
-print(agent_states[time==max(time), as.list(summary(.SD[, sum(profit<0) / .N, by=RunID]$V1)), by=model])
-print(agent_states[time==max(time), as.list(summary(.SD[, sum(profit<0) / .N, by=RunID]$V1)), by=.(model,behavior)])
+print(agent_states[
+    time == max(time),
+    as.list(summary(.SD[, sum(profit < 0) / .N, by=RunID]$V1)),
+    by=model
+])
+print(agent_states[
+    time == max(time),
+    as.list(summary(.SD[, sum(profit < 0) / .N, by=RunID]$V1)),
+    by=.(model,behavior)
+])
 
 print("Percent of oil and gas production from bankrupt agents")
-print(agent_states[time==max(time), as.list(summary(.SD[, sum(oil_output[profit<0]) / sum(oil_output), by=RunID]$V1)), by=model])
-print(agent_states[time==max(time), as.list(summary(.SD[, sum(gas_output[profit<0]) / sum(gas_output), by=RunID]$V1)), by=model])
+print(agent_states[
+    time == max(time),
+    as.list(summary(.SD[,
+        sum(oil_output[profit < 0]) / sum(oil_output),
+        by=RunID
+    ]$V1)),
+    by=model
+])
+print(agent_states[
+    time == max(time),
+    as.list(summary(.SD[,
+        sum(gas_output[profit < 0]) / sum(gas_output),
+        by=RunID
+    ]$V1)),
+    by=model
+])
 
 
 ## Check for flarers who are selling green gas
-if (agent_states[behavior=="flaring" & green_gas_sold!=0, .N] > 0) {
+if (agent_states[(behavior == "flaring") & (green_gas_sold != 0), .N] > 0) {
     print("Agents who are flaring are still participating in the green market")
-    print(agent_states[behavior=="flaring" & green_gas_sold!=0])
+    print(agent_states[(behavior == "flaring") & (green_gas_sold != 0)])
 }
 
 ## Agents mitigating before social pressure starts
-if (agent_states[!(behavior %in% c("flaring", "economizing", "imitating")) & time<0, .N>0]) {
+if (agent_states[!(behavior %in% c("flaring", "economizing", "imitating")) & time < 0, .N > 0]) {
     print("Agents who are not economizing are mitigating before social pressure starts")
-    print(agent_states[!(behavior %in% c("flaring", "economizing", "imitating")) & time<0])
+    print(agent_states[
+        !(behavior %in% c("flaring", "economizing", "imitating")) & (time < 0)
+    ])
 }
 
 ## Model and calculated flaring intensity that dont match
-if (agent_states[abs(gas_flared-gas_flared_calc) > 0.01, .N>0]) {
+if (agent_states[abs(gas_flared-gas_flared_calc) > 0.01, .N > 0]) {
     print("Model gas flared does not match calculated value")
-    print(agent_states[gas_flared!=gas_flared_calc, as.list(summary(gas_flared/gas_flared_calc)), by=model])
-    print(agent_states[gas_flared!=gas_flared_calc])
+    print(agent_states[
+        gas_flared != gas_flared_calc,
+        as.list(summary(gas_flared / gas_flared_calc)),
+        by=model
+    ])
+    print(agent_states[gas_flared != gas_flared_calc])
 }
 
 ## Green price below grey price
-if (market_history[p_green>0][p_grey > p_green, .N>0]) {
+if (market_history[p_green > 0][p_grey > p_green, .N > 0]) {
     print("Grey price is higher than green price")
-    print(market_history[p_green>0][p_grey > p_green])
+    print(market_history[p_green > 0][p_grey > p_green])
 }
 
 

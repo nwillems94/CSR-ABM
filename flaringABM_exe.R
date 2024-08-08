@@ -1,5 +1,5 @@
 args <- commandArgs(trailingOnly=TRUE)
-args <- args[substr(args, 1, 2)!="--"]
+args <- args[substr(args, 1, 2) != "--"]
 options(warn=1) # elevate all warnings to errors
 
 
@@ -22,28 +22,33 @@ cat("jobID:", jobID, "\n")
 
 ## Set model parameters and interpret command line arguments
 Params <<- list(
-    "refID" = NA,
-    "nruns" = NA_real_,
-    # TxRRC data shows about 2000 firms producing gas alongside oil operating in any given year since 2010
-    "nagents" = 2000,
-    "t0" = -60,
-    "tf" = 60,
-    # Environmental Variables
-    "Activism" = 5.5e5,
-    "strategy" = "oil_output",
-    # Market conditions
-    "SRoR" = 0.5,   # social rate of return:
+    "refID"= NA,
+    "nruns"= NA_real_,
+    # TxRRC data shows about 2000 firms producing gas alongside oil
+    #    operating in any given year since 2010
+    "nagents"= 2000,
+    "t0"= -60,
+    "tf"= 60,
+    ## Environmental Variables ##
+    "Activism"= 5.5e5,
+    "strategy"= "oil_output",
+    ## Market conditions ##
+    "SRoR"= 0.5,   # social rate of return:
                     #     0: no social satisfaction from holding shares
                     #     1: shareholding is a perfect substitutes for activist contributions
-    "threshold" = 0.05, # max units of gas "green" firms can flare per unit of oil produced
+    # max units of gas "green" firms can flare per unit of oil produced
+    "threshold"= 0.05,
     # New York City residential gas consumption is about ~0.75% of national
-    "market_prop_green" = 0.0075,
+    "market_prop_green"= 0.0075,
     # green electricity consumers pay a premium of [7-30%](./inputs/market_history.html)
-    "p_low"=1.07, "p_high"=1.3,
-    # Activities
-    "prop_e" = 11/12, # what proportion of firms engage in exploration activities in a given time step
-    "prob_m" = 0.25,  # probability that a follower will mimic a leader if they observe them mitigating
-    "reporting" = "accurate" # are reported empirical flared volumes accurate
+    "p_low"= 1.07, "p_high"= 1.3,
+    ## Activities ##
+    # what proportion of firms engage in exploration activities in a given time step
+    "prop_e"= 11 / 12,
+    # probability that a follower will mimic a leader if they observe them mitigating
+    "prob_m"= 0.25,
+    # are reported empirical flared volumes accurate
+    "reporting"= "accurate"
 )
 
 # update parameters from command-line arguments
@@ -67,15 +72,16 @@ for (update_arg in strsplit(args, "=")) {
 Params$Activism <- c(rep(0, -Params$t0), rep(Params$Activism, Params$tf + 1))
 Params$SRoR <- c(rep(0, -Params$t0), rep(Params$SRoR, Params$tf + 1))
 Params$prob_m <- c(rep(0, -Params$t0), rep(Params$prob_m, Params$tf + 1))
-# from OShaughnessy et al. 3% of electricity sales green zotero://select/items/0_HW2MXA38
-Params$market_prop_green <- with(Params, c(rep(0, -t0),
-                                        seq(from=0, to=1, length.out= 1 + (tf %/% 2)),
-                                        rep(1, tf - (tf %/% 2))) * market_prop_green)
+
+Params$market_prop_green <- with(Params,
+    c(rep(0, -t0),
+        seq(from=0, to=1, length.out=1 + (tf %/% 2)),
+        rep(1, tf - (tf %/% 2))) * market_prop_green)
 
 # Oil price multiplier based on historical distribution
 daily_prices <- fread("./inputs/processed/daily_prices.csv")
-Params$oil_price_mean <- daily_prices[year>2010, mean(log(ratio_BBLpMCF))]
-Params$oil_price_sd   <- daily_prices[year>2010,   sd(log(ratio_BBLpMCF))]
+Params$oil_price_mean <- daily_prices[year > 2010, mean(log(ratio_BBLpMCF))]
+Params$oil_price_sd   <- daily_prices[year > 2010,   sd(log(ratio_BBLpMCF))]
 
 rm(args, update_arg, daily_prices)
 
@@ -88,6 +94,9 @@ future_lapply(1:Params$nruns, function(Run) {
     on.exit(sink())
     flaringABM_main(Params, jobID, Run)
 })
-cat("\n", gsub("Time difference of", "All runs complete in", capture.output(Sys.time() - run_time)), "\n")
+cat("\n",
+    gsub("Time difference of", "All runs complete in",
+        capture.output(Sys.time() - run_time)),
+    "\n")
 print(warnings())
 
