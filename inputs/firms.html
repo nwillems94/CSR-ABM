@@ -949,7 +949,7 @@ ggplot(CCM_og[, .(&quot;Number of firms&quot;=uniqueN(LPERMCO)), by=fyear]) +
 </table>
 <div id="calculate-characteristics-using-firm-data" class="section level3">
 <h3>Calculate characteristics using firm data</h3>
-<p>Described in <a href="zotero://select/items/0_2I87I24H">Leary &amp; Roberts 2014</a></p>
+<p>Described in <a href="10.1111/jofi.12094">Leary &amp; Roberts 2014</a></p>
 <pre class="r"><code>CCM_og[, &quot;market_share&quot;:= sale / sum(sale), by=fyear] # compare to market share
 # market value
 CCM_og[, &quot;market_value&quot;:= mkvalt] # compare to market value

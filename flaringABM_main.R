@@ -281,7 +281,7 @@ flaringABM_main <- function(Params, jobID, Run) {
 
 
         # calculate market value (exponential moving average)
-        #   based on [Baron's formulation](zotero://select/items/0_I7NL6RPA)
+        #   based on [Baron's formulation](10.1111/j.1530-9134.2009.00206.x)
         #   market_value = profit + dprofit - Ai - cost*xi + cost*xi*SRoR
         firms[,
             "market_value":= (market_value / 2) +

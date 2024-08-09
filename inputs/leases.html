@@ -226,7 +226,7 @@ summary {
 4. DISTANCE FROM INFRASTRUCTURE<br />
 - Crude pipelines<br />
 - Gas processing facilities</p>
-<p>Well data is used to find approximate lease locations and to calculate capital expenditures based on well depth(s). Cost parameters are derived during initialization by matching leases to areas and sampling data from: <a href="zotero://select/items/0_EJYISQT4">US EIA. (2016)</a>.</p>
+<p>Well data is used to find approximate lease locations and to calculate capital expenditures based on well depth(s). Cost parameters are derived during initialization by matching leases to areas and sampling data from: <a href="https://www.eia.gov/analysis/studies/drilling/">US EIA. (2016)</a>.</p>
 <pre class="r"><code>library(readxl)
 library(data.table)
 library(sf)
@@ -468,7 +468,7 @@ rm(well_permits)</code></pre>
 <pre class="r"><code>wellbore_data[lat==0 | lon==0, c(&quot;lat&quot;,&quot;lon&quot;):= NA]
 wellbore_data[depth==0 | !(depth %between% quantile(depth[depth&gt;0], c(0.01, 0.99))), &quot;depth&quot;:= NA]
 wellbore_data[!between(start, 196301, 201909), c(&quot;lat&quot;,&quot;lon&quot;,&quot;depth&quot;):= NA]</code></pre>
-<p>Estimate completion cost based on wellbore depth in meters (<a href="zotero://select/items/0_KHRCUE96">Lukawski et al. 2014</a>)</p>
+<p>Estimate completion cost based on wellbore depth in meters (<a href="10.1016/j.petrol.2014.03.012">Lukawski et al. 2014</a>)</p>
 <pre class="r"><code># NOT RUN
 wellbore_data[, &quot;DC_cost&quot;:= (1.65e-5)*(depth/3.28084)^1.607]</code></pre>
 <p>Merge locations &amp; depth information into full well record</p>
@@ -511,7 +511,7 @@ OG_WELL[!is.na(area) &amp; is.na(stacked),
         by=.(trunc(lat*10^5)/10^5, trunc(lon*10^5)/10^5, OIL_GAS_CODE)]
 cat(&quot;Identified&quot;,  OG_WELL[, 100 * sum(!is.na(stacked)) / .N], &quot;% of wells which are actually stacked multilaterals&quot;)</code></pre>
 <pre><code>## Identified 0.05750743 % of wells which are actually stacked multilaterals</code></pre>
-<p>Identify wells which are close enough together to share a wellpad <a href="zotero://select/items/0_EJYISQT4">~1320 ft</a></p>
+<p>Identify wells which are close enough together to share a wellpad <a href="https://www.eia.gov/analysis/studies/drilling/">~1320 ft</a></p>
 <pre class="r"><code>OG_WELL[!is.na(area) &amp; !duplicated(API_NO),
         # find clusters, approximating distance by treating earth as a sphere with radius 40,075 km
         &quot;shared&quot;:= cutree(hclust(dist((40075/360)*.SD[, .(lat, lon*cos(lat*pi/180))]),

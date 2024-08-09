@@ -10,9 +10,9 @@
 #       - Gas: per thousand cubic feet of gas (`opEx_pMCF`)
 #
 # Production volumes are estimated using EIA production
-# [decline curves](zotero://select/items/0_BS9HFHYN).
+# [decline curves](https://www.eia.gov/analysis/drilling/curve_analysis/2020/).
 # Cost parameters are assigned by matching leases to areas and sampling data from:
-# [US EIA. (2016)](zotero://select/items/0_EJYISQT4).
+# [US EIA. (2016)](https://www.eia.gov/analysis/studies/drilling/).
 
 init_time <- Sys.time()
 
@@ -189,8 +189,8 @@ wells[
     "capExMM":= sort(rlnorm(.N, log(2.5), sqrt(log(1 + 0.2^2))))
 ]
 
-# only horizontal wells are included in the EIA/IHS cost analysis
-#   they are 1.5-2.5 times [more expensive](zotero://select/items/0_S6BJL4ZG) than vertical wells
+# only horizontal wells are included in the EIA/IHS cost analysis they are
+#   1.5-2.5 times [more expensive](10.2118/83621-MS) than vertical wells
 wells[
     (horizontal == FALSE) & (area != "Spraberry"),
     "capExMM":= capExMM / runif(.N, 1.5, 2.5)
@@ -238,7 +238,7 @@ leases_emp[,
 ]
 
 # cost to install $31,250 compressor with 5,475 MCF/month capacity
-#    [USA EPA, 2016](zotero://select/items/0_VD6GIMT4)
+#    [USA EPA, 2016](https://www.epa.gov/natural-gas-star-program/install-compressors-capture-casinghead-gas)
 leases_emp[
     model_csgd_MCF > 0,
     "capEx_csgd":= 31250 * ceiling(flared_MCF / 5475)
@@ -248,8 +248,8 @@ leases_emp[
 # Estimate operating expenses by lease (excludes natural gas liquids)
 # base (pBOE):  Water, General & Administrative, Lease Operating Expenses,
 #    (ordered by productivity) values estimated from
-#    [US EIA, 2016](zotero://select/items/0_EJYISQT4)
-#    using [Webplotdigitizer](zotero://select/items/0_UW7H7HAP)
+#    [US EIA, 2016](https://www.eia.gov/analysis/studies/drilling/)
+#    using [Webplotdigitizer](https://automeris.io/WebPlotDigitizer)
 cat("\tAssigning lease operating expenses per barrel of oil equivalent\n\t")
 leases_emp[, "BOE":= oil_avg + cond_avg +
                 (gas_avg + csgd_avg - flared_MCF_avg) / 6]

@@ -53,7 +53,7 @@ library(ggplot2)
 ```
 
 # Upstream cost index  
-[MIT: The future of geothermal energy](zotero://select/items/0_FHEHLW9V) (pg 6-13 & 6-34) 
+[MIT: The future of geothermal energy](10.2172/1220063) (pg 6-13 & 6-34) 
 presents an oil & gas well cost index that only includes onshore wells. 
 [EIA](https://www.eia.gov/dnav/ng/NG_ENR_WELLCOST_S1_A.htm) presents a cost index with more historical data, 
 but it is not clear whether offshore wells are also included. 
@@ -95,7 +95,7 @@ well_cost_index[, "real_index_2005":= real_index_1977 / real_index_1977[year==20
 
 [IEA](https://www.iea.org/data-and-statistics/charts/iea-us-shale-upstream-cost-index-2005-2020)
 have a third upstream cost index for US shale.  
-[US EIA](zotero://select/items/0_EJYISQT4) & [IEA](zotero://select/items/0_RAVQRI9Y)
+[US EIA](https://www.eia.gov/analysis/studies/drilling/) & [IEA](https://www.iea.org/data-and-statistics/charts/iea-us-shale-upstream-cost-index-2005-2020)
 draw similar conclusions about historical cost data (e.g., 2015 costs were ~30% lower than 2012 values).
 ```{r}
 IEA_index <- fread(text=   "year, real_index_2005
@@ -224,7 +224,7 @@ daily_prices[year>2010, {hist(ratio_BBLpMCF, freq=FALSE, breaks="scott", main=""
 ```
 
 
-[Kitzmueller & Shimshack 2012](zotero://select/items/0_PGHV5RK7) cite that consumers paid a premium of about 16% for green power products 
+[Kitzmueller & Shimshack 2012](10.1257/jel.50.1.51) cite that consumers paid a premium of about 16% for green power products 
 and furthermore that they are willing to pay a premium of 5-20% for renewable electricity.
 ```{r}
 # Lower bound

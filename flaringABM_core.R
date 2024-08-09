@@ -72,7 +72,7 @@ dist_social_pressure <- function(dt_f, ti, focus=1) {
     }
 
     # the effect on market value can be up to 20%
-    #    [King and Soule, 2007](zotero://select/items/0_TWS6EB4J)
+    #    [King and Soule, 2007](10.2189/asqu.52.3.413)
     dt_f[, "sPressure":= pmin(sPressure, market_value * 0.2, na.rm=TRUE)]
 
 }###---------------    END OF FUNCTION dist_social_pressure   ---------------###
@@ -798,7 +798,7 @@ demand_sample <- function(prop_green, sample_set, p_low, p_high) {
     q_int_grey <- -(b / m) * (1 - prop_green)
 
     # green demand represents a rotation of the demand curve
-    #    about the quantity intercept [Sedjo & Swallow 2002](zotero://select/items/0_GGH3Y8UX)
+    #    about the quantity intercept [Sedjo & Swallow 2002](10.2307/3147273)
     # green electricity consumers pay a premium of
     #    [7-30%](./inputs/market_history.html)
     premium <- runif(1, p_low, p_high) *

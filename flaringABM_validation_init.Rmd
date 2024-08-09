@@ -18,7 +18,7 @@ Gas leases should have only one well
 print(leases_emp[OIL_GAS_CODE=="G", summary(N)])
 ```
 
-Expect a capital expenditures to be about [$7/BOE](zotero://select/items/0_BSNIWDAF)
+Expect a capital expenditures to be about [$7/BOE](http://graphics.wsj.com/oil-barrel-breakdown/)
 ```{r}
 leases[, cat("All leases:", sum(capEx) / sum(EUR), "\t Assigned leases:", .SD[!is.na(firmID), sum(capEx) / sum(EUR)])]
 ```

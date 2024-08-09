@@ -257,7 +257,7 @@ CCM_og[fyear>2010, .("Number of firms"=uniqueN(LPERMCO)), by=fyear]
 ```
 
 ### Calculate characteristics using firm data
-Described in [Leary & Roberts 2014](zotero://select/items/0_2I87I24H)
+Described in [Leary & Roberts 2014](10.1111/jofi.12094)
 ```{r}
 CCM_og[, "market_share":= sale / sum(sale), by=fyear] # compare to market share
 # market value

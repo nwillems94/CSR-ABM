@@ -412,7 +412,7 @@ agent_states[(cost_M>0) & (time>0) & (model!="no shareholder\nvaluation"),
 
 Shareholder valuation ($\theta$) of CSR spending ($C$) should increase market value ($MV$) proportional to CSR rating ($R \in [1-10]$)  
 $$ MV_0 (1 + \alpha R) \simeq MV_0 + \theta C$$  
-[Luo and Bhattacharya, 2006](zotero://select/items/0_LGPMEVGF)  
+[Luo and Bhattacharya, 2006](10.1509/jmkg.70.4.001)  
 ```{r}
 ggplot(agent_states[model!="no shareholder\nvaluation",
                     cbind(.SD, "Ci" = cost_M*SRoR)][

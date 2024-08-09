@@ -65,7 +65,7 @@ EACH LEASE HAS THE FOLLOWING PROPERTIES
 
   Well data is used to find approximate lease locations and to calculate capital expenditures based on well depth(s). 
   Cost parameters are derived during initialization by matching leases to areas and sampling data from: 
-  [US EIA. (2016)](zotero://select/items/0_EJYISQT4).  
+  [US EIA. (2016)](https://www.eia.gov/analysis/studies/drilling/).  
 
 ```{r}
 library(readxl)
@@ -257,7 +257,7 @@ wellbore_data[depth==0 | !(depth %between% quantile(depth[depth>0], c(0.01, 0.99
 wellbore_data[!between(start, 196301, 201909), c("lat","lon","depth"):= NA]
 ```
 
-Estimate completion cost based on wellbore depth in meters ([Lukawski et al. 2014](zotero://select/items/0_KHRCUE96))
+Estimate completion cost based on wellbore depth in meters ([Lukawski et al. 2014](10.1016/j.petrol.2014.03.012))
 ```{r, eval=FALSE}
 # NOT RUN
 wellbore_data[, "DC_cost":= (1.65e-5)*(depth/3.28084)^1.607]
@@ -304,7 +304,7 @@ OG_WELL[!is.na(area) & is.na(stacked),
 cat("Identified",  OG_WELL[, 100 * sum(!is.na(stacked)) / .N], "% of wells which are actually stacked multilaterals")
 ```
 
-Identify wells which are close enough together to share a wellpad [~1320 ft](zotero://select/items/0_EJYISQT4)
+Identify wells which are close enough together to share a wellpad [~1320 ft](https://www.eia.gov/analysis/studies/drilling/)
 ```{r}
 OG_WELL[!is.na(area) & !duplicated(API_NO),
         # find clusters, approximating distance by treating earth as a sphere with radius 40,075 km
