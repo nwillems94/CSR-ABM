@@ -415,10 +415,10 @@ $$ MV_0 (1 + \alpha R) \simeq MV_0 + \theta C$$
 [Luo and Bhattacharya, 2006](zotero://select/items/0_LGPMEVGF)  
 ```{r}
 ggplot(agent_states[model!="no shareholder\nvaluation",
-                    cbind(.SD, "Ci" = cost_M*SRoR / (time - min(time)))][
-                    (cost_M>0) & (time>0) & (market_value>0),
-                            {"MV0i" = pmax(market_value - Ci, 1e-10);
-                            Ci / MV0i / cut(Ci/SRoR/MV0i, 10, labels=FALSE)}, by=.(RunID, time)]) +
+                    cbind(.SD, "Ci" = cost_M*SRoR)][
+                    (cost_M>0) & (time>0) & (market_value>Ci),
+                            {"MV0i" = market_value - Ci;
+                            Ci / MV0i / cut(cost_M/MV0i, 10, labels=FALSE)}, by=.(RunID, time)]) +
     geom_boxplot(aes(x=as.factor(RunID), y=V1, color=as.factor(RunID)), outlier.shape=NA, show.legend=FALSE) +
     geom_hline(yintercept=0.18*0.19, lty=2) +
     geom_hline(yintercept=0.11+(0.18*0.19), lty=2) +

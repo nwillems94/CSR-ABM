@@ -10,10 +10,59 @@ jobIDs <- lapply(strsplit(args, "="), `[[`, 2)
 names(jobIDs) <- gsub("\\n", "\n", sapply(strsplit(args, "="), `[[`, 1), fixed=TRUE)
 print(jobIDs)
 
-params <- fread(sprintf("./logs/params_%s.csv.gz", paste(jobIDs, collapse="-")))
-market_history <- fread(sprintf("./outputs/processed/market_states_%s.csv.gz", paste(jobIDs, collapse="-")))
-agent_states <- fread(sprintf("./outputs/processed/agent_states_%s.csv.gz", paste(jobIDs, collapse="-")))
-db <- dbConnect(RSQLite::SQLite(), sprintf("./outputs/processed/all_states_%s.sqlite", paste(jobIDs, collapse="-")))
+if(!("refID" %in% names(jobIDs))) {
+    jobIDs <- c(jobIDs, "refID"=NA)
+}
+
+db <- dbConnect(RSQLite::SQLite(),
+    sprintf("./outputs/processed/all_states_%s.sqlite",
+        fcoalesce(jobIDs$refID,
+            paste(na.omit(jobIDs), collapse="-"))))
+
+lookup_sql <- "SELECT string_key FROM string_lookup 
+                WHERE column_name='%s' AND integer_key=%s"
+
+# recover outputs from database
+sql <- "SELECT * FROM %2$s 
+        LEFT JOIN %1$s ON %2$s.firmID=%1$s.firmID 
+            AND %1$s.RunID=%2$s.RunID 
+            AND %1$s.model=%2$s.model"
+
+agent_states <- dbGetQuery(db, sprintf(sql, "agent_info", "agent_states"))
+
+setDT(agent_states)
+agent_states[, which(duplicated(names(agent_states))):= NULL]
+
+for (col in c("model", "behavior", "activity")) {
+    agent_states[, c(col):= as.character(get(col))]
+    agent_states[,
+        c(col):= as.character(dbGetQuery(db,
+            sprintf(lookup_sql, col, .BY))),
+        by=get(col)
+    ]
+}
+
+params <- dbGetQuery(db, "SELECT * FROM params")
+
+setDT(params)
+for (col in c("model", "strategy", "reporting")) {
+    params[, c(col):= as.character(get(col))]
+    params[,
+        c(col):= as.character(dbGetQuery(db,
+            sprintf(lookup_sql, col, .BY))),
+        by=get(col)
+    ]
+}
+
+market_history <- dbGetQuery(db, "SELECT * FROM market_states")
+
+setDT(market_history)
+market_history[, "model":= as.character(model)]
+market_history[,
+    "model":= as.character(dbGetQuery(db,
+        sprintf(lookup_sql, "model", .BY))),
+    by=model
+]
 
 ## Market value
 if (agent_states[is.na(market_value) & (time>min(time)), .N] > 0) {

@@ -60,6 +60,7 @@ Packages to run the model:
 - `future.apply`
 - `ggplot2` (for validation scripts)
 - `rmarkdown` (for validation scripts)
+- `Cairo` (may be needed to run validation scripts if X11 is not available)
 
 Packages to post-process results & generate graphics:  
 - `DBI`
