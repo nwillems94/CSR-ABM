@@ -3,8 +3,8 @@ The Corporate Social Responsibility Agent-Based Model (CSR-ABM)
 
 #### Author 
 [Nick Willems](mailto:nwillems@utexas.edu)
-#### Preferred Citation
-...
+#### Preferred Model Citation
+Nicholas Willems. (2024). nwillems94/CSR-ABM. Zenodo. https://doi.org/10.5281/zenodo.13363075
 
 -----------------------------------------------------
 
